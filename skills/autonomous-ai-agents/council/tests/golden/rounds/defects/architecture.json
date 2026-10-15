@@ -1,0 +1,23 @@
+{
+  "beta_note": "fixture",
+  "dimension": "architecture",
+  "findings": [
+    {
+      "claim": "module not split by concern",
+      "dimension": "architecture",
+      "falsifiable_check": "see the claim",
+      "id": "ARC-0001",
+      "location": {
+        "line_range": "6",
+        "path": "flake.nix"
+      },
+      "severity": "high",
+      "status": "open"
+    }
+  ],
+  "rationale": "fixture: defective round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 72.0,
+  "tools_run": []
+}

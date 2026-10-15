@@ -1,0 +1,41 @@
+{
+  "beta_note": "fixture",
+  "dimension": "security",
+  "findings": [
+    {
+      "claim": "input pinned to a moving branch",
+      "dimension": "security",
+      "falsifiable_check": "see the claim",
+      "id": "SEC-0001",
+      "location": {
+        "line_range": "8",
+        "path": "flake.nix"
+      },
+      "severity": "critical",
+      "status": "open"
+    },
+    {
+      "claim": "ssh password auth left configurable",
+      "dimension": "security",
+      "falsifiable_check": "see the claim",
+      "id": "SEC-0001",
+      "location": {
+        "line_range": "15",
+        "path": "modules/base.nix"
+      },
+      "severity": "high",
+      "status": "open"
+    }
+  ],
+  "rationale": "fixture: defective round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 72.0,
+  "tools_run": [
+    {
+      "cmd": "statix check .",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

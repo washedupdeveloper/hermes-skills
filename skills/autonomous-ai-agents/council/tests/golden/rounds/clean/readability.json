@@ -1,0 +1,26 @@
+{
+  "beta_note": "fixture",
+  "dimension": "readability",
+  "findings": [],
+  "rationale": "fixture: clean round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 100.0,
+  "tools_run": [
+    {
+      "cmd": "nixfmt --check .",
+      "parsed": true,
+      "ran": true
+    },
+    {
+      "cmd": "statix check .",
+      "parsed": true,
+      "ran": true
+    },
+    {
+      "cmd": "deadnix .",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

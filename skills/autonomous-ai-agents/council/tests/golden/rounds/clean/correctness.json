@@ -1,0 +1,21 @@
+{
+  "beta_note": "fixture",
+  "dimension": "correctness",
+  "findings": [],
+  "rationale": "fixture: clean round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 100.0,
+  "tools_run": [
+    {
+      "cmd": "nix flake check --no-build --keep-going",
+      "parsed": true,
+      "ran": true
+    },
+    {
+      "cmd": "nix-instantiate --parse flake.nix",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

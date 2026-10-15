@@ -1,0 +1,46 @@
+schema_version: "review.bot/v1"
+name: council-orchestrator
+title: Council Orchestrator
+role: orchestrator
+dimension: null
+description: >-
+  Orchestrator of the review-council. Sets one goal per dimension for the harness to hand the
+  reviewer, then reviews the round against those goals. The harness owns the convening, the
+  scoring, the gate and the fixes; the orchestrator does not.
+
+hermes:
+  profile: council-orchestrator
+  # model/provider are NOT declared here. They are the user's choice, set in
+  # review-council.yaml (or with `hermes -p council-orchestrator model`) and
+  # applied by `council setup bots`. This file used to name one machine's private
+  # provider, which shipped publicly and overrode nothing anyway — nothing reads
+  # this file's capabilities; the config does. See scripts/council_config.py.
+
+# The defaults for this member, as SHIPPED. The effective values are whatever
+# review-council.yaml says; `council setup bots` reads that, not this.
+capabilities:
+  toolsets:
+    - file
+    - terminal
+    - code_execution
+    - skills
+    - web
+    - todo
+    - memory
+    - session_search
+    - clarify
+    - kanban
+    - cronjob
+  languages: [nix]
+  checks: [goals, goal-review, evidence-matrix]
+  produces: [goals, control]
+  consumes: [findings]
+  # ONE reviewer profile, not five. M8.5 measured five per-dimension profiles against
+  # one generalist sampled N times, at equal cost, and the generalist won (22/22 injected
+  # defects against 13/22), so the five were deleted. This used to name all five.
+  sets_goals_for: [council-generalist]
+  autonomy_modes: [full, semi, advisory]
+  default_autonomy: advisory
+
+rubric: skills/review-council-orchestrator/SKILL.md
+soul: bots/council-orchestrator/SOUL.md

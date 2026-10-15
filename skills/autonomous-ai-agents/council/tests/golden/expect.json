@@ -1,0 +1,183 @@
+{
+  "inputs": {
+    "merges/two-samples/probes.json": "0511194a7eb33f05",
+    "merges/two-samples/sample-1.json": "94cc1a42a62047af",
+    "merges/two-samples/sample-2.json": "444f281497cfeb8b",
+    "rounds/clean/architecture.json": "9ac052add0602de6",
+    "rounds/clean/correctness.json": "e640c74da34c6278",
+    "rounds/clean/meta.json": "79193e27e60e5661",
+    "rounds/clean/performance.json": "05a472e9ac479382",
+    "rounds/clean/readability.json": "10d504706012a115",
+    "rounds/clean/security.json": "0be2ccc2a2cb2b40",
+    "rounds/defects/architecture.json": "9113cc05a12604fb",
+    "rounds/defects/correctness.json": "9ebb3a03b31c29b3",
+    "rounds/defects/meta.json": "79193e27e60e5661",
+    "rounds/defects/performance.json": "f842d6ccbb03eb41",
+    "rounds/defects/readability.json": "da7e8718d8ec9d58",
+    "rounds/defects/security.json": "30ed9ffd46ebe09a",
+    "target/README.md": "c569434807ca391f",
+    "target/flake.nix": "5b208c5b8920fed5",
+    "target/modules/base.nix": "27ef43a11087296b",
+    "target/scripts/tool.py": "55be65b3c41fcf65"
+  },
+  "merges": {
+    "two-samples": {
+      "dropped": 0,
+      "per_dimension": {
+        "architecture": {
+          "beta": 1.0,
+          "findings": 0,
+          "score": 95.0,
+          "tools_run": [
+            "declared-rules",
+            "dep-graph",
+            "nix flake check --no-build --keep-going",
+            "nix-eval-time",
+            "secret-grep",
+            "statix check ."
+          ]
+        },
+        "correctness": {
+          "beta": 0.5,
+          "findings": 1,
+          "score": 90.0,
+          "tools_run": [
+            "declared-rules",
+            "dep-graph",
+            "nix flake check --no-build --keep-going",
+            "nix-eval-time",
+            "secret-grep",
+            "statix check ."
+          ]
+        },
+        "performance": {
+          "beta": 1.0,
+          "findings": 0,
+          "score": 95.0,
+          "tools_run": [
+            "declared-rules",
+            "dep-graph",
+            "nix flake check --no-build --keep-going",
+            "nix-eval-time",
+            "secret-grep",
+            "statix check ."
+          ]
+        },
+        "readability": {
+          "beta": 0.333333,
+          "findings": 1,
+          "score": 95.0,
+          "tools_run": [
+            "declared-rules",
+            "dep-graph",
+            "nix flake check --no-build --keep-going",
+            "nix-eval-time",
+            "secret-grep",
+            "statix check ."
+          ]
+        },
+        "security": {
+          "beta": 1.0,
+          "findings": 1,
+          "score": 85.0,
+          "tools_run": [
+            "declared-rules",
+            "dep-graph",
+            "nix flake check --no-build --keep-going",
+            "nix-eval-time",
+            "secret-grep",
+            "statix check ."
+          ]
+        }
+      },
+      "samples": 2
+    }
+  },
+  "note": "Pinned by scripts/golden.py. Every number here is recomputed from tests/golden/ by `--check`. Do not edit by hand: run `--update`, read the diff, and say why in the commit.",
+  "rounds": {
+    "clean": {
+      "aggregate": 100.0,
+      "blocking": 0,
+      "per_dimension": {
+        "architecture": {
+          "beta": 1.0,
+          "det": 100.0,
+          "llm": 100.0,
+          "score": 100.0
+        },
+        "correctness": {
+          "beta": 1.0,
+          "det": 100.0,
+          "llm": 100.0,
+          "score": 100.0
+        },
+        "performance": {
+          "beta": 1.0,
+          "det": 100.0,
+          "llm": 100.0,
+          "score": 100.0
+        },
+        "readability": {
+          "beta": 1.0,
+          "det": 100.0,
+          "llm": 100.0,
+          "score": 100.0
+        },
+        "security": {
+          "beta": 1.0,
+          "det": 100.0,
+          "llm": 100.0,
+          "score": 100.0
+        }
+      },
+      "size_kloc": 0.06,
+      "stacks": [
+        "nix"
+      ],
+      "status": "satisfied"
+    },
+    "defects": {
+      "aggregate": 52.69,
+      "blocking": 3,
+      "per_dimension": {
+        "architecture": {
+          "beta": 0.0,
+          "det": 1.93,
+          "llm": 72.0,
+          "score": 72.0
+        },
+        "correctness": {
+          "beta": 0.5,
+          "det": 35.27,
+          "llm": 72.0,
+          "score": 53.63
+        },
+        "performance": {
+          "beta": 1.0,
+          "det": 35.27,
+          "llm": 72.0,
+          "score": 35.27
+        },
+        "readability": {
+          "beta": 0.6667,
+          "det": 44.73,
+          "llm": 72.0,
+          "score": 53.82
+        },
+        "security": {
+          "beta": 0.5,
+          "det": 22.63,
+          "llm": 72.0,
+          "score": 47.31
+        }
+      },
+      "size_kloc": 0.06,
+      "stacks": [
+        "nix"
+      ],
+      "status": "not_satisfied"
+    }
+  },
+  "threshold": 87.1141,
+  "tolerance": 1e-06
+}

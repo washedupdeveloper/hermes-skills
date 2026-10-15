@@ -1,0 +1,7 @@
+{
+  "mode": "whole-repo",
+  "round": 1,
+  "stacks": [
+    "nix"
+  ]
+}

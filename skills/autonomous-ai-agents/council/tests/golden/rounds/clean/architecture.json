@@ -1,0 +1,21 @@
+{
+  "beta_note": "fixture",
+  "dimension": "architecture",
+  "findings": [],
+  "rationale": "fixture: clean round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 100.0,
+  "tools_run": [
+    {
+      "cmd": "dep-graph",
+      "parsed": true,
+      "ran": true
+    },
+    {
+      "cmd": "declared-rules",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

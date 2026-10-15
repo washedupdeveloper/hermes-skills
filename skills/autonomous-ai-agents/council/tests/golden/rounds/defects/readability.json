@@ -1,0 +1,46 @@
+{
+  "beta_note": "fixture",
+  "dimension": "readability",
+  "findings": [
+    {
+      "claim": "missing docstring",
+      "dimension": "readability",
+      "falsifiable_check": "see the claim",
+      "id": "REA-0001",
+      "location": {
+        "line_range": "9",
+        "path": "scripts/tool.py"
+      },
+      "severity": "low",
+      "status": "open"
+    },
+    {
+      "claim": "verified: formatting clean",
+      "dimension": "readability",
+      "falsifiable_check": "see the claim",
+      "id": "REA-0001",
+      "location": {
+        "line_range": "3",
+        "path": "modules/base.nix"
+      },
+      "severity": "info",
+      "status": "open"
+    }
+  ],
+  "rationale": "fixture: defective round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 72.0,
+  "tools_run": [
+    {
+      "cmd": "nixfmt --check .",
+      "parsed": true,
+      "ran": true
+    },
+    {
+      "cmd": "statix check .",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

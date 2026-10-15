@@ -1,0 +1,498 @@
+"""Fit the framework's free parameters (d*, k, alpha, beta) from measured baselines.
+
+    council calibrate --good <dir> --bad <dir> [--out calibration.json]
+    council calibrate --build-eval <dir> --base <dir>
+
+See docs/CALIBRATION.md.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
+PROBES = HERE / "probes.py"
+
+# Below this, a tool's findings density is indistinguishable from zero and using
+# it as d* would make the Hill curve collapse to a step function at x=0.
+DENSITY_FLOOR = 0.05   # findings per KLOC
+
+SOURCE_SUFFIXES = {".py", ".nix", ".sh", ".bash", ".js", ".ts", ".go", ".rs", ".c", ".h"}
+
+
+# --- measuring --------------------------------------------------------------
+
+def kloc(root: Path) -> float:
+    """Thousands of source lines — the denominator for findings density."""
+    total = 0
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix not in SOURCE_SUFFIXES:
+            continue
+        if any(part in {".git", ".review-council", "node_modules", "result"}
+               for part in path.parts):
+            continue
+        try:
+            total += sum(1 for _ in path.open("r", encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+    return max(total / 1000.0, 0.001)
+
+
+def run_probes(root: Path, timeout: int = 900) -> List[Dict[str, Any]]:
+    """Run every probe against *root* and return their raw JSON objects."""
+    proc = subprocess.run(
+        [sys.executable, str(PROBES), "--all", "--repo", str(root)],
+        capture_output=True, text=True, timeout=timeout,
+    )
+    if not proc.stdout.strip():
+        return []
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return []
+
+
+def probe_density(results: List[Dict[str, Any]], root: Path) -> Dict[str, float]:
+    """Findings per KLOC, per probe that actually ran.
+
+    A probe that did not run contributes NO key, rather than 0.0 — treating an
+    unrun analyzer as "clean" is the failure mode that makes a missing tool look
+    like a passing grade.
+    """
+    size = kloc(root)
+    out: Dict[str, float] = {}
+    for r in results:
+        if not r.get("ran"):
+            continue
+        out[r["tool"]] = len(r.get("findings") or []) / size
+    return out
+
+
+# --- seeding defects (for building a graded eval ladder) ---------------------
+
+def _seed_secret(rng: random.Random) -> str:
+    body = "".join(rng.choice("0123456789abcdef") for _ in range(32))
+    return f'API_KEY = "sk_live_{body}"\n'
+
+
+def _seed_syntax(rng: random.Random) -> str:
+    return "def broken_%d(:\n    return 1\n" % rng.randint(1000, 9999)
+
+
+def _seed_complexity(rng: random.Random) -> str:
+    name = f"tangled_{rng.randint(1000, 9999)}"
+    lines = [f"def {name}(x):"]
+    lines += [f"    if x == {i}:\n        x += {i}" for i in range(20)]
+    lines.append("    return x")
+    return "\n".join(lines) + "\n"
+
+
+def _seed_nix_lint(rng: random.Random) -> str:
+    name = f"stale_{rng.randint(1000, 9999)}"
+    return (
+        f"{{ pkgs ? import <nixpkgs> {{}} }}:\n"
+        f"let\n"
+        f"  unusedBinding = pkgs.hello;\n"
+        f"  {name} = x: y: x;\n"
+        f"in\n"
+        f"if pkgs.hello != null then pkgs.hello else pkgs.hello\n"
+    )
+
+
+SEEDERS = {
+    "secret": (_seed_secret, ".py"),
+    "syntax": (_seed_syntax, ".py"),
+    "complexity": (_seed_complexity, ".py"),
+    "nix-lint": (_seed_nix_lint, ".nix"),
+}
+
+
+def seed_defects(root: Path, count: int, rng: random.Random,
+                 kinds: Optional[List[str]] = None) -> List[str]:
+    """Write *count* defective files into *root*. Deterministic for a given rng."""
+    kinds = kinds or list(SEEDERS)
+    src = root / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    written: List[str] = []
+    for i in range(count):
+        kind = kinds[i % len(kinds)]
+        maker, suffix = SEEDERS[kind]
+        path = src / f"seeded_{kind}_{i}{suffix}"
+        # newline="\n" so the seeded corpus is byte-identical on every platform.
+        # write_text would emit CRLF on Windows, and the probes then measure a
+        # different corpus than the one a Linux run calibrates against.
+        path.write_text(maker(rng), encoding="utf-8", newline="\n")
+        written.append(str(path.relative_to(root)))
+    return written
+
+
+def build_eval_ladder(base: Path, dest: Path, levels: Tuple[int, ...],
+                      seed: int = 20261006) -> List[Dict[str, Any]]:
+    """Materialise *base* at several defect levels, as a labeled eval set.
+
+    Level 0 is the known-good control — the base copied untouched. Each higher
+    level seeds a known number of defects, so the ground truth is known by
+    construction rather than by inspection.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    manifest: List[Dict[str, Any]] = []
+    for level in levels:
+        target = dest / f"level-{level}"
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(
+            base, target,
+            ignore=shutil.ignore_patterns(".git", ".review-council", "__pycache__",
+                                          "result", "result-*", "node_modules"),
+        )
+        rng = random.Random(seed + level)
+        written = seed_defects(target, level, rng) if level else []
+        manifest.append({
+            "level": level,
+            "path": str(target),
+            "label": "good" if level == 0 else "bad",
+            "defects_seeded": level,
+            "files": written,
+        })
+    return manifest
+
+
+# --- calibrating ------------------------------------------------------------
+
+def derive_d_star(good: Dict[str, float], bad: Dict[str, float]) -> Dict[str, Dict[str, Any]]:
+    """d* per tool = the density seen on the known-good baseline (§7 step 2).
+
+    With `raw = d*` the Hill curve returns 50 by construction, so a tool sitting
+    at known-good density lands mid-scale and known-bad lands below it.
+    """
+    out: Dict[str, Dict[str, Any]] = {}
+    for tool in sorted(set(good) | set(bad)):
+        g = good.get(tool)
+        b = bad.get(tool)
+        if g is None:
+            continue
+        out[tool] = {
+            "d_star": round(max(g, DENSITY_FLOOR), 4),
+            "good_density": round(g, 4),
+            "bad_density": round(b, 4) if b is not None else None,
+            "floored": g < DENSITY_FLOOR,
+        }
+    return out
+
+
+def hill(density: float, d_star: float, k: float = 1.2) -> float:
+    """100 / (1 + (raw/d*)^k) — the §7 formula, with the calibrated d*."""
+    if density <= 0:
+        return 100.0
+    return 100.0 / (1.0 + (density / max(d_star, 1e-9)) ** k)
+
+
+def score_from_densities(dens: Dict[str, float],
+                         d_star: Dict[str, Dict[str, float]],
+                         k: float = 1.2) -> Optional[float]:
+    """Geometric mean of per-tool Hill scores. None when nothing ran."""
+    scores = [hill(d, d_star[t]["d_star"], k) for t, d in dens.items() if t in d_star]
+    if not scores:
+        return None
+    product = 1.0
+    for s in scores:
+        product *= max(s, 1e-6)
+    return product ** (1.0 / len(scores))
+
+
+def sweep_threshold(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Precision / recall / F1 / Youden's J at every candidate threshold.
+
+    "bad" is the positive class: the calibration question is "does this
+    threshold catch defective code without crying wolf on clean code".
+    """
+    scored = [p for p in points if p.get("score") is not None]
+    if not scored:
+        return []
+    n_bad = sum(1 for p in scored if p["label"] == "bad")
+    n_good = sum(1 for p in scored if p["label"] == "good")
+    if not n_bad or not n_good:
+        return []
+
+    candidates = sorted({round(p["score"], 3) for p in scored})
+    rows: List[Dict[str, Any]] = []
+    for t in candidates:
+        tp = sum(1 for p in scored if p["score"] < t and p["label"] == "bad")
+        fp = sum(1 for p in scored if p["score"] < t and p["label"] == "good")
+        fn = n_bad - tp
+        tn = n_good - fp
+        precision = tp / (tp + fp) if (tp + fp) else 0.0
+        recall = tp / n_bad if n_bad else 0.0
+        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+        j = (recall + (tn / n_good) - 1.0) if n_good else 0.0   # Youden's J
+        rows.append({
+            "threshold": t, "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+            "precision": round(precision, 4), "recall": round(recall, 4),
+            "f1": round(f1, 4), "youden_j": round(j, 4),
+        })
+    return rows
+
+
+def choose_threshold(points: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The max-margin threshold separating good from bad, derived from LABELS.
+
+    For a 1-D threshold classifier the perfectly-separating interval is
+    `(best_bad, worst_good]` — every threshold in it classifies every labelled
+    point correctly. The midpoint maximizes the margin to both classes, which is
+    what generalises to unseen repos.
+
+    This deliberately does NOT read the plateau off `sweep_threshold`: that
+    sweep only evaluates thresholds AT observed scores, so it cannot see the
+    interior of the gap at all. Reading it that way makes the plateau an
+    artifact of how a candidate happened to round (a score of 79.8399 becomes a
+    candidate 79.84 and thereby appears on the "bad" side of itself), and
+    collapses to a single point whenever no observed score lands in the gap.
+    """
+    scored = [p for p in points if p.get("score") is not None]
+    bad = [p["score"] for p in scored if p.get("label") == "bad"]
+    good = [p["score"] for p in scored if p.get("label") == "good"]
+    if not bad or not good:
+        return None
+
+    best_bad = max(bad)
+    worst_good = min(good)
+    n_bad, n_good = len(bad), len(good)
+
+    if best_bad >= worst_good:
+        # The classes overlap: no threshold separates them. Report the point
+        # that minimizes misclassification instead of pretending to a clean cut.
+        candidates = sorted(set(bad + good))
+        def errors(t: float) -> Tuple[int, int]:
+            return (sum(1 for s in bad if s >= t), sum(1 for s in good if s < t))
+        best = min(candidates, key=lambda t: sum(errors(t)))
+        tp = sum(1 for s in bad if s < best)
+        fp = sum(1 for s in good if s < best)
+        return {
+            "threshold": round(best, 4), "tp": tp, "fp": fp,
+            "fn": n_bad - tp, "tn": n_good - fp,
+            "precision": round(tp / (tp + fp), 4) if (tp + fp) else 0.0,
+            "recall": round(tp / n_bad, 4),
+            "f1": 0.0, "youden_j": 0.0,
+            "separable": False,
+            "note": "classes overlap; this threshold minimizes misclassification",
+        }
+
+    midpoint = round((best_bad + worst_good) / 2.0, 4)
+    tp, fp = n_bad, 0          # perfect separation by construction
+    return {
+        "threshold": midpoint, "tp": tp, "fp": fp, "fn": 0, "tn": n_good,
+        "precision": 1.0, "recall": 1.0, "f1": 1.0, "youden_j": 1.0,
+        "separable": True,
+        "plateau": [round(best_bad, 4), round(worst_good, 4)],
+        "margin": round((worst_good - best_bad) / 2.0, 4),
+    }
+
+
+def pick_threshold(sweep: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Sweep-based threshold selection, used only when labels are unavailable.
+
+    Prefer choose_threshold(), which works from the labels and can therefore see
+    the full separating interval rather than only its endpoints.
+    """
+    if not sweep:
+        return None
+    best_j = max(r["youden_j"] for r in sweep)
+    plateau = [r for r in sweep if r["youden_j"] == best_j]
+    if len(plateau) == 1:
+        return plateau[0]
+    low = min(r["threshold"] for r in plateau)
+    high = max(r["threshold"] for r in plateau)
+    midpoint = (low + high) / 2.0
+    # The threshold is a FREE PARAMETER — it need not coincide with an observed
+    # score. Snapping to the nearest observed score makes the choice a coin flip
+    # when the plateau holds exactly two points (the distances are equal), and
+    # the float rounding decides.
+    return {**plateau[0], "threshold": round(midpoint, 4),
+            "plateau": [low, high], "margin": round((high - low) / 2.0, 4)}
+
+
+def recalibrate(measured: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, Any]:
+    """Re-derive d*, the sweep and the threshold from ALREADY-measured points.
+
+    Measurement is the expensive half (every probe against every rung), so it is
+    separated from the arithmetic: k, the tie-break rule or the score model can
+    be re-tuned without re-running the toolchain.
+    """
+    clean = [m for m in measured if m.get("label") == "good"]
+    dirty = [m for m in measured if m.get("label") != "good"]
+
+    good_union: Dict[str, float] = {}
+    for m in clean:
+        for tool, d in (m.get("density") or {}).items():
+            good_union[tool] = max(good_union.get(tool, 0.0), d)
+    bad_union: Dict[str, float] = {}
+    for m in dirty:
+        for tool, d in (m.get("density") or {}).items():
+            bad_union[tool] = max(bad_union.get(tool, 0.0), d)
+
+    d_star = derive_d_star(good_union, bad_union)
+    points = [{
+        "label": m.get("label"), "level": m.get("level"), "path": m.get("path"),
+        "defects": m.get("defects_seeded"), "kloc": m.get("kloc"),
+        "score": score_from_densities(m.get("density") or {}, d_star, k),
+    } for m in measured]
+
+    sweep = sweep_threshold(points)
+    return {
+        "method": "research/deterministic-quality-tooling.md §7",
+        "halflife_k": k,
+        "d_star": d_star,
+        "points": points,
+        "sweep": sweep,
+        "recommended_threshold": choose_threshold(points),
+    }
+
+
+def calibrate(good: Path, bad: Path, seed: int = 20261006) -> Dict[str, Any]:
+    """Full §7 calibration from a known-good and a known-bad baseline."""
+    good_dens = probe_density(run_probes(good), good)
+    bad_dens = probe_density(run_probes(bad), bad)
+    d_star = derive_d_star(good_dens, bad_dens)
+
+    good_score = score_from_densities(good_dens, d_star)
+    bad_score = score_from_densities(bad_dens, d_star)
+
+    # Annotated because the two entries disagree on `defects` (0 vs None), which
+    # makes an unannotated literal infer `list[dict[str, object]]` — narrower than
+    # what sweep_threshold/choose_threshold accept.
+    points: List[Dict[str, Any]] = [
+        {"label": "good", "path": str(good), "defects": 0, "score": good_score,
+         "kloc": round(kloc(good), 4)},
+        {"label": "bad", "path": str(bad), "defects": None, "score": bad_score,
+         "kloc": round(kloc(bad), 4)},
+    ]
+    return {
+        "method": "research/deterministic-quality-tooling.md §7",
+        "seed": seed,
+        "baselines": {"good": str(good), "bad": str(bad)},
+        "halflife_k": 1.2,
+        "d_star": d_star,
+        "measured": {"good_score": good_score, "bad_score": bad_score},
+        "points": points,
+        "sweep": sweep_threshold(points),
+        "recommended_threshold": choose_threshold(points),
+    }
+
+
+def calibrate_ladder(ladder: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, Any]:
+    """Calibrate against a graded eval ladder (defect levels 0..N).
+
+    Richer than a two-point scan: the sweep gets a real spread of scores, so the
+    recommended threshold is chosen from a curve rather than from the midpoint
+    between two numbers.
+    """
+    measured: List[Dict[str, Any]] = []
+    clean_densities: List[Dict[str, float]] = []
+    dirty_densities: List[Dict[str, float]] = []
+
+    for entry in ladder:
+        root = Path(entry["path"])
+        dens = probe_density(run_probes(root), root)
+        if entry["level"] == 0:
+            clean_densities.append(dens)
+        else:
+            dirty_densities.append(dens)
+        measured.append({**entry, "density": dens, "kloc": round(kloc(root), 4)})
+
+    # d* is derived from the WORST density seen on clean code, per tool: the
+    # highest clean reading is the most conservative reference point, because a
+    # d* set too low would flag healthy code.
+    good_union: Dict[str, float] = {}
+    for dens in clean_densities:
+        for tool, d in dens.items():
+            good_union[tool] = max(good_union.get(tool, 0.0), d)
+    bad_union: Dict[str, float] = {}
+    for dens in dirty_densities:
+        for tool, d in dens.items():
+            bad_union[tool] = max(bad_union.get(tool, 0.0), d)
+
+    d_star = derive_d_star(good_union, bad_union)
+
+    points: List[Dict[str, Any]] = []
+    for m in measured:
+        points.append({
+            "label": m["label"],
+            "level": m["level"],
+            "path": m["path"],
+            "defects": m["defects_seeded"],
+            "kloc": m["kloc"],
+            "score": score_from_densities(m["density"], d_star, k),
+        })
+
+    sweep = sweep_threshold(points)
+    return {
+        "method": "research/deterministic-quality-tooling.md §7",
+        "halflife_k": k,
+        "d_star": d_star,
+        "points": points,
+        # Raw per-rung measurements, kept so recalibrate() can re-tune k or the
+        # tie-break without paying for the toolchain sweep again.
+        "measured": measured,
+        "sweep": sweep,
+        "recommended_threshold": choose_threshold(points),
+    }
+
+
+# --- CLI --------------------------------------------------------------------
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="calibrate.py",
+        description="Calibrate d*, k and the pass threshold from labelled baselines (M8).",
+    )
+    parser.add_argument("--good", help="Known-good revision to baseline-scan")
+    parser.add_argument("--bad", help="Known-bad revision to baseline-scan")
+    parser.add_argument("--build-eval", metavar="DEST",
+                        help="Build a graded eval ladder at DEST from --base")
+    parser.add_argument("--base", help="Base repo the ladder is copied from")
+    parser.add_argument("--levels", default="0,1,2,4,8,16",
+                        help="Defect counts per rung (default 0,1,2,4,8,16)")
+    parser.add_argument("--seed", type=int, default=20261006)
+    parser.add_argument("--k", type=float, default=1.2, help="Hill steepness")
+    parser.add_argument("--out", default=None, help="Write the manifest here")
+    args = parser.parse_args(argv)
+
+    if args.build_eval:
+        if not args.base:
+            print("calibrate: --build-eval needs --base", file=sys.stderr)
+            return 2
+        levels = tuple(int(x) for x in args.levels.split(","))
+        ladder = build_eval_ladder(Path(args.base), Path(args.build_eval), levels, args.seed)
+        result = {"ladder": ladder}
+    elif args.good and args.bad:
+        result = calibrate(Path(args.good), Path(args.bad), args.seed)
+    else:
+        parser.print_help()
+        return 2
+
+    text = json.dumps(result, indent=2, ensure_ascii=False)
+    if args.out:
+        # newline="\n": write_text defaults to translating \n to os.linesep, so on
+        # Windows this file came out CRLF and the same calibration produced
+        # different bytes per platform. The manifest is a determinism anchor —
+        # it must be byte-identical everywhere, and the skill repo is LF-only.
+        Path(args.out).write_text(text + "\n", encoding="utf-8", newline="\n")
+        print(f"calibration written to {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+if __name__ == "__main__":
+    # Not a program: reached through `council <verb>`. See council.py.
+    from council import require_dispatch
+
+    require_dispatch("calibrate")
+    sys.exit(main())

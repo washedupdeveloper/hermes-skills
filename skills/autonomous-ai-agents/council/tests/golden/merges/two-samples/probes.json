@@ -1,0 +1,14 @@
+[
+  {
+    "parsed": true,
+    "ran": true,
+    "signal": 100.0,
+    "tool": "dep-graph"
+  },
+  {
+    "parsed": true,
+    "ran": true,
+    "signal": 100.0,
+    "tool": "declared-rules"
+  }
+]

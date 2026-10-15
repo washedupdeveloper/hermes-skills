@@ -1,0 +1,135 @@
+name: ci
+
+# This repository had NO CI. 174 files, 11 tests and a 13-claim auditor ran nowhere,
+# so a push could break any of them and nothing said so — including the docs gate,
+# which exists because the README had already drifted from reality twice.
+#
+# Three things are checked, and each is one the repo's own rules depend on:
+#
+#   tests   — the unit suite, on all three OSes. It is stdlib-only, so the matrix
+#             needs nothing but pytest and is the portability claim, executed.
+#   audit   — scripts/claim-audit.py, which exits 1 when any mechanical claim in the
+#             prose is FALSE. That is the rule "a claim that can be measured MUST be
+#             measured", enforced rather than stated.
+#   setup   — tests/e2e/test_setup.sh against a STUBBED `hermes`, so the initializer's
+#             merge path is exercised without touching a real config. It is a bash
+#             script, so it runs where bash is the shell the script was written for.
+#
+# No nix. This repository has no flake and needs none: everything above is stdlib
+# Python plus that one shell script.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The portability guarantee, executed: nothing installed but pytest.
+  tests:
+    name: tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      # checkout and setup-python must run on Node 24. Node 20 reached EOL in April
+      # 2026 and was removed from the runners on 2026-09-23, so v4/v5 (the Node-20
+      # majors) are wrong here. Pinning the major, not a SHA, is this repo's sibling's
+      # convention — review-council's docs/CI.md records the trade-off.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: install pytest
+        run: python -m pip install --upgrade pip pytest
+      # Job logs need admin rights to download, but a step can emit GitHub
+      # annotations and the checks API serves those unauthenticated for a public
+      # repository. So the suite writes junit.xml and the next step turns each
+      # failure into an annotation: an OS-specific failure is then readable without
+      # a token. The annotation step is the enforcing one, so the job still fails.
+      - name: run the suite
+        run: python -m pytest tests/ -q --junitxml=junit.xml
+        continue-on-error: true
+      - name: report failing tests as annotations
+        if: always()
+        shell: python
+        run: |
+          import pathlib, sys, xml.etree.ElementTree as ET
+          report = pathlib.Path("junit.xml")
+          if not report.is_file():
+              print("::error::junit.xml was not written — the suite did not run")
+              sys.exit(1)
+          bad = []
+          for case in ET.parse(report).getroot().iter("testcase"):
+              node = case.find("failure")
+              if node is None:
+                  node = case.find("error")
+              if node is None:
+                  continue
+              label = f"{case.get('classname', '')}::{case.get('name', '')}"
+              detail = (node.get("message") or "").replace("\n", " ")[:250]
+              print(f"::error title={label}::{detail}")
+              bad.append(label)
+          print(f"::notice::failing tests: {len(bad)}")
+          sys.exit(1 if bad else 0)
+
+  # The prose gate, on one OS. It reads the tree and executes `setup.sh --check`
+  # through subprocess, so a second platform would mostly repeat the same answer —
+  # and where `setup.sh` IS platform-sensitive, the e2e job below already covers
+  # macOS against a stub. One OS is enough here; macOS minutes count tenfold.
+  audit:
+    name: claim audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: audit the claims in the prose
+        run: |
+          # Failures become annotations as well as log lines. Job logs need admin
+          # rights to download; annotations are served unauthenticated for a public
+          # repository, so an audit that goes red stays diagnosable without a token.
+          out=$(mktemp)
+          if python scripts/claim-audit.py >"$out" 2>&1; then
+            tail -n 3 "$out"
+          else
+            tail -n 25 "$out" | while IFS= read -r line; do
+              echo "::error title=claim audit::$line"
+            done
+            exit 1
+          fi
+
+  # The initializer, against a stub. ubuntu and macOS only: the test builds an
+  # extensionless `hermes` stub and executes it through bash, and on a Windows
+  # runner that depends on how Git Bash's exec layer treats a shebang file with no
+  # extension. Unverified here, so it is not asserted — a job that fails for a
+  # reason unrelated to this repository teaches people to ignore red.
+  setup:
+    name: setup.sh e2e (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: exercise setup.sh against a stubbed hermes
+        run: |
+          # Annotated on failure for the same reason as the audit: the log is not
+          # readable without admin rights, the annotations are.
+          out=$(mktemp)
+          if bash tests/e2e/test_setup.sh >"$out" 2>&1; then
+            tail -n 3 "$out"
+          else
+            tail -n 25 "$out" | while IFS= read -r line; do
+              echo "::error title=setup.sh e2e::$line"
+            done
+            exit 1
+          fi

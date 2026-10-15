@@ -1,0 +1,42 @@
+{
+  "findings": [
+    {
+      "claim": "moving branch",
+      "dimension": "security",
+      "location": {
+        "line_range": "8",
+        "path": "flake.nix"
+      },
+      "severity": "high"
+    },
+    {
+      "claim": "docstring",
+      "dimension": "readability",
+      "location": {
+        "line_range": "9",
+        "path": "scripts/tool.py"
+      },
+      "severity": "low"
+    }
+  ],
+  "reviewer": "council-generalist",
+  "scores": {
+    "architecture": 100,
+    "correctness": 90,
+    "performance": 100,
+    "readability": 100,
+    "security": 80
+  },
+  "tools_run": [
+    {
+      "cmd": "statix check .",
+      "parsed": true,
+      "ran": true
+    },
+    {
+      "cmd": "secret-grep",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

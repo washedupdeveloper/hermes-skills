@@ -1,0 +1,12 @@
+{
+  "seconds": 2.848,
+  "samples": [
+    2.725,
+    2.815,
+    2.848,
+    7.928,
+    8.152
+  ],
+  "measured": "2026-10-06T20:57:12",
+  "note": "Pinned reference for the nix-eval-time probe. The probe scores the RATIO against this, never the absolute value (research/nix-tooling.md \u00a73). Re-pin deliberately when the machine or the flake's eval cost legitimately changes."
+}

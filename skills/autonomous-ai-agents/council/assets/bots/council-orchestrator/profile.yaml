@@ -1,0 +1,10 @@
+description: >-
+  Orchestrator of the review-council. Sets one goal per dimension for the harness to hand the
+  reviewer, then judges the round against those goals. The harness owns the convening, the scoring,
+  the deterministic gate and the fixes; the orchestrator does not fan out and has no delegation
+  toolset. One generalist reviewer profile, sampled N times — the five specialists this used to
+  describe were measured worse at equal cost and deleted (M8.5).
+description_auto: false
+ui_meta:
+  hermes-bots:
+    title: Council Orchestrator

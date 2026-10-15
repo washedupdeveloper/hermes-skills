@@ -1,0 +1,29 @@
+{
+  "beta_note": "fixture",
+  "dimension": "correctness",
+  "findings": [
+    {
+      "claim": "trusted-users widened",
+      "dimension": "correctness",
+      "falsifiable_check": "see the claim",
+      "id": "COR-0001",
+      "location": {
+        "line_range": "21",
+        "path": "modules/base.nix"
+      },
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "rationale": "fixture: defective round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 72.0,
+  "tools_run": [
+    {
+      "cmd": "nix flake check --no-build --keep-going",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

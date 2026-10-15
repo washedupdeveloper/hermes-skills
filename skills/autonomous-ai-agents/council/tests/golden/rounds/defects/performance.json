@@ -1,0 +1,29 @@
+{
+  "beta_note": "fixture",
+  "dimension": "performance",
+  "findings": [
+    {
+      "claim": "closure pulls a full nixpkgs",
+      "dimension": "performance",
+      "falsifiable_check": "see the claim",
+      "id": "PER-0001",
+      "location": {
+        "line_range": "4",
+        "path": "flake.nix"
+      },
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "rationale": "fixture: defective round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 72.0,
+  "tools_run": [
+    {
+      "cmd": "nix-eval-time",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

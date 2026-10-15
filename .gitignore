@@ -1,0 +1,22 @@
+# Hermes runtime state. These live in a machine's live skill library, never in this
+# repo — they are machine-local caches and logs, not skills. Ignored here so a stray
+# one cannot be committed if a live library is ever copied in for inspection.
+skills/.hub/
+skills/.locks/
+skills/.usage.json
+skills/.usage.json.lock
+skills/.curator_state
+skills/.curator_ledger.jsonl
+skills/.bundled_manifest
+
+# Bytecode and editor/OS noise.
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Council run artifacts. The harness writes its rounds into the reviewed repo, so a
+# review of THIS repo drops them here — gate inputs, per-round reviewer JSON and logs,
+# which are runtime scratch, not skills. review-council's own tree ignores the same
+# path for the same reason.
+.review-council/

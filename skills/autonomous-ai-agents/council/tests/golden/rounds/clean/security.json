@@ -1,0 +1,21 @@
+{
+  "beta_note": "fixture",
+  "dimension": "security",
+  "findings": [],
+  "rationale": "fixture: clean round",
+  "reviewer": "council-generalist",
+  "schema_valid": true,
+  "score": 100.0,
+  "tools_run": [
+    {
+      "cmd": "statix check .",
+      "parsed": true,
+      "ran": true
+    },
+    {
+      "cmd": "secret-grep",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}

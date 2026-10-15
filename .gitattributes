@@ -1,0 +1,26 @@
+# Line endings: LF in the repository, LF in the working tree, on every platform.
+#
+# This repo is mounted by Hermes on Windows, Linux, macOS and WSL2, and it ships
+# executable scripts. A CRLF shebang (`#!/usr/bin/env python3\r`) fails on Linux and
+# WSL2 with "bad interpreter: /usr/bin/env python3^M", so the repository must not
+# carry CRLF — not even when it is committed from a Windows machine with
+# core.autocrlf=true, which is what silently produced CRLF here before.
+#
+# `eol=lf` overrides core.autocrlf, so a Windows checkout is byte-identical to a
+# Linux one. Skills are text; nothing here needs CRLF.
+* text=auto eol=lf
+
+# Binary-ish assets, in case a skill ever ships one — never line-ending-converted.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.mp3  binary
+*.mp4  binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,346 @@
+{
+  "method": "research/deterministic-quality-tooling.md \u00a77",
+  "calibrated_with": "scripts/calibrate.py",
+  "provenance": {
+    "eval_set": "a graded defect ladder built from this repository",
+    "rungs": [
+      0,
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "seed": 20261006,
+    "note": "Level 0 is the repository at HEAD (known-good); each higher rung seeds a known number of defects drawn deterministically from the seed, so ground truth is known by construction. Rebuild with `calibrate.py --build-eval <dest> --base <repo>`."
+  },
+  "halflife_k": 1.2,
+  "d_star": {
+    "bash-n": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.0,
+      "floored": true
+    },
+    "complexity": {
+      "d_star": 1.8921,
+      "good_density": 1.8921,
+      "bad_density": 2.7076,
+      "floored": false
+    },
+    "deadnix": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 2.7076,
+      "floored": true
+    },
+    "declared-rules": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.0,
+      "floored": true
+    },
+    "dep-graph": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.0,
+      "floored": true
+    },
+    "flake-check": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.0,
+      "floored": true
+    },
+    "nix-eval": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.0,
+      "floored": true
+    },
+    "nix-eval-time": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.0,
+      "floored": true
+    },
+    "nixfmt": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 1.1282,
+      "floored": true
+    },
+    "py-compile": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.9025,
+      "floored": true
+    },
+    "secret-grep": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.9025,
+      "floored": true
+    },
+    "statix": {
+      "d_star": 0.05,
+      "good_density": 0.0,
+      "bad_density": 0.0,
+      "floored": true
+    }
+  },
+  "measured": [
+    {
+      "level": 0,
+      "label": "good",
+      "defects_seeded": 0,
+      "density": {
+        "bash-n": 0.0,
+        "complexity": 1.892147587511826,
+        "deadnix": 0.0,
+        "declared-rules": 0.0,
+        "dep-graph": 0.0,
+        "flake-check": 0.0,
+        "nix-eval": 0.0,
+        "nix-eval-time": 0.0,
+        "nixfmt": 0.0,
+        "py-compile": 0.0,
+        "secret-grep": 0.0,
+        "statix": 0.0
+      },
+      "kloc": 4.228
+    },
+    {
+      "level": 1,
+      "label": "bad",
+      "defects_seeded": 1,
+      "density": {
+        "bash-n": 0.0,
+        "complexity": 1.8917001655237644,
+        "deadnix": 0.0,
+        "declared-rules": 0.0,
+        "dep-graph": 0.0,
+        "flake-check": 0.0,
+        "nix-eval": 0.0,
+        "nix-eval-time": 0.0,
+        "nixfmt": 0.0,
+        "py-compile": 0.0,
+        "secret-grep": 0.23646252069047055,
+        "statix": 0.0
+      },
+      "kloc": 4.229
+    },
+    {
+      "level": 2,
+      "label": "bad",
+      "defects_seeded": 2,
+      "density": {
+        "bash-n": 0.0,
+        "complexity": 1.8908059560387616,
+        "deadnix": 0.0,
+        "declared-rules": 0.0,
+        "dep-graph": 0.0,
+        "flake-check": 0.0,
+        "nix-eval": 0.0,
+        "nix-eval-time": 0.0,
+        "nixfmt": 0.0,
+        "py-compile": 0.2363507445048452,
+        "secret-grep": 0.2363507445048452,
+        "statix": 0.0
+      },
+      "kloc": 4.231
+    },
+    {
+      "level": 4,
+      "label": "bad",
+      "defects_seeded": 4,
+      "density": {
+        "bash-n": 0.0,
+        "complexity": 2.1032951624211265,
+        "deadnix": 0.7010983874737088,
+        "declared-rules": 0.0,
+        "dep-graph": 0.0,
+        "flake-check": 0.0,
+        "nix-eval": 0.0,
+        "nix-eval-time": 0.0,
+        "nixfmt": 0.46739892498247254,
+        "py-compile": 0.23369946249123627,
+        "secret-grep": 0.23369946249123627,
+        "statix": 0.0
+      },
+      "kloc": 4.279
+    },
+    {
+      "level": 8,
+      "label": "bad",
+      "defects_seeded": 8,
+      "density": {
+        "bash-n": 0.0,
+        "complexity": 2.3094688221709005,
+        "deadnix": 1.3856812933025404,
+        "declared-rules": 0.0,
+        "dep-graph": 0.0,
+        "flake-check": 0.0,
+        "nix-eval": 0.0,
+        "nix-eval-time": 0.0,
+        "nixfmt": 0.6928406466512702,
+        "py-compile": 0.4618937644341801,
+        "secret-grep": 0.4618937644341801,
+        "statix": 0.0
+      },
+      "kloc": 4.33
+    },
+    {
+      "level": 16,
+      "label": "bad",
+      "defects_seeded": 16,
+      "density": {
+        "bash-n": 0.0,
+        "complexity": 2.707581227436823,
+        "deadnix": 2.707581227436823,
+        "declared-rules": 0.0,
+        "dep-graph": 0.0,
+        "flake-check": 0.0,
+        "nix-eval": 0.0,
+        "nix-eval-time": 0.0,
+        "nixfmt": 1.1281588447653428,
+        "py-compile": 0.9025270758122743,
+        "secret-grep": 0.9025270758122743,
+        "statix": 0.0
+      },
+      "kloc": 4.432
+    }
+  ],
+  "points": [
+    {
+      "label": "good",
+      "level": 0,
+      "defects": 0,
+      "kloc": 4.228,
+      "score": 94.387312573661
+    },
+    {
+      "label": "bad",
+      "level": 1,
+      "defects": 1,
+      "kloc": 4.229,
+      "score": 79.84087387390366
+    },
+    {
+      "label": "bad",
+      "level": 2,
+      "defects": 2,
+      "kloc": 4.231,
+      "score": 67.54257723932989
+    },
+    {
+      "label": "bad",
+      "level": 4,
+      "defects": 4,
+      "kloc": 4.279,
+      "score": 40.96388037402479
+    },
+    {
+      "label": "bad",
+      "level": 8,
+      "defects": 8,
+      "kloc": 4.33,
+      "score": 32.48954150939669
+    },
+    {
+      "label": "bad",
+      "level": 16,
+      "defects": 16,
+      "kloc": 4.432,
+      "score": 25.289441062673678
+    }
+  ],
+  "sweep": [
+    {
+      "threshold": 25.289,
+      "tp": 0,
+      "fp": 0,
+      "fn": 5,
+      "tn": 1,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "youden_j": 0.0
+    },
+    {
+      "threshold": 32.49,
+      "tp": 2,
+      "fp": 0,
+      "fn": 3,
+      "tn": 1,
+      "precision": 1.0,
+      "recall": 0.4,
+      "f1": 0.5714,
+      "youden_j": 0.4
+    },
+    {
+      "threshold": 40.964,
+      "tp": 3,
+      "fp": 0,
+      "fn": 2,
+      "tn": 1,
+      "precision": 1.0,
+      "recall": 0.6,
+      "f1": 0.75,
+      "youden_j": 0.6
+    },
+    {
+      "threshold": 67.543,
+      "tp": 4,
+      "fp": 0,
+      "fn": 1,
+      "tn": 1,
+      "precision": 1.0,
+      "recall": 0.8,
+      "f1": 0.8889,
+      "youden_j": 0.8
+    },
+    {
+      "threshold": 79.841,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0,
+      "tn": 1,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "youden_j": 1.0
+    },
+    {
+      "threshold": 94.387,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0,
+      "tn": 1,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "youden_j": 1.0
+    }
+  ],
+  "threshold": {
+    "recommended": 87.1141,
+    "separable": true,
+    "plateau": [
+      79.8409,
+      94.3873
+    ],
+    "margin": 7.2732,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "shipped_default": 87.1141,
+    "shipped_is_in_plateau": true
+  },
+  "caveats": [
+    "Calibrated from ONE known-good sample (this repository at HEAD). The plateau's upper edge is that single sample's score, so the recommended threshold is determined by one data point and is PROVISIONAL. Add more known-good repos and re-run before treating it as settled.",
+    "d* for tools that found nothing on the clean baseline is floored at 0.05 findings/KLOC rather than 0, because d*=0 collapses the Hill curve to a step at the origin. Floored entries are marked; the aggregate curve anchors only on tools with a real baseline reading.",
+    "This calibrates the DETERMINISTIC half only. The LLM half is not calibrated here; that needs labelled real council runs, ~9 min each.",
+    "Weights (alpha_t) remain the working defaults. \u00a77 says reweight only with evidence, and there is not yet evidence that any dimension's findings track real defects better than another's."
+  ]
+}

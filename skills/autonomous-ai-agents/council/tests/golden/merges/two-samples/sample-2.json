@@ -1,0 +1,42 @@
+{
+  "findings": [
+    {
+      "claim": "moving branch",
+      "dimension": "security",
+      "location": {
+        "line_range": "8",
+        "path": "flake.nix"
+      },
+      "severity": "high"
+    },
+    {
+      "claim": "trusted-users",
+      "dimension": "correctness",
+      "location": {
+        "line_range": "21",
+        "path": "modules/base.nix"
+      },
+      "severity": "medium"
+    }
+  ],
+  "reviewer": "council-generalist",
+  "scores": {
+    "architecture": 90,
+    "correctness": 90,
+    "performance": 90,
+    "readability": 90,
+    "security": 90
+  },
+  "tools_run": [
+    {
+      "cmd": "nix flake check --no-build --keep-going",
+      "parsed": true,
+      "ran": true
+    },
+    {
+      "cmd": "nix-eval-time",
+      "parsed": true,
+      "ran": true
+    }
+  ]
+}
