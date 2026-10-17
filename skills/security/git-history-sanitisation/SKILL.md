@@ -1,6 +1,6 @@
 ---
 name: git-history-sanitisation
-description: "Use when publishing a branch, or sanitising history first."
+description: "Use when publishing a branch, or sanitising history."
 version: 1.0.0
 author: Hermes Agent
 license: MIT
