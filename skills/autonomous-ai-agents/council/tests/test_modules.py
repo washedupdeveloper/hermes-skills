@@ -121,6 +121,75 @@ def test_a_foreign_destination_is_refused():
         assert not sync.is_our_destination(td)
 
 
+# --- sync_to_skill: host caches are not content ------------------------------
+# `--check` used to flag bytecode as EXTRA, so a deployment went permanently red
+# the moment anyone verified it the documented way -- by running its suite in
+# place. 40 `.pyc` files from one pytest run were enough to fail the gate.
+
+def _prune(src: Path, dst: Path) -> tuple[bool, str]:
+    """Run prune_tree in CHECK mode; return (drifted, output)."""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        sync.CHECK_ONLY = True
+        sync.DRIFT = False
+        try:
+            sync.prune_tree(str(src), str(dst))
+            return sync.DRIFT, out.getvalue()
+        finally:
+            sync.CHECK_ONLY = False
+            sync.DRIFT = False
+
+
+@needs("sync_to_skill", sync)
+def test_find_files_skips_host_caches():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "scripts" / "__pycache__").mkdir(parents=True)
+        (root / "scripts" / "real.py").write_text("x = 1\n", encoding="utf-8")
+        (root / "scripts" / "__pycache__" / "real.cpython-314.pyc").write_bytes(b"\x00")
+        (root / "stray.pyc").write_bytes(b"\x00")
+        (root / ".pytest_cache").mkdir()
+        (root / ".pytest_cache" / "CACHEDIR.TAG").write_text("x\n", encoding="utf-8")
+        found = sorted(os.path.relpath(p, root) for p in sync.find_files(td))
+        assert found == ["scripts/real.py"], found
+
+
+@needs("sync_to_skill", sync)
+def test_bytecode_in_a_deployment_is_not_reported_as_drift():
+    """The regression: verifying a deployment must not make --check fail."""
+    with tempfile.TemporaryDirectory() as td:
+        src, dst = Path(td) / "src", Path(td) / "dst"
+        (src / "scripts").mkdir(parents=True)
+        (src / "scripts" / "real.py").write_text("x = 1\n", encoding="utf-8")
+        (src / "tests").mkdir()
+        (src / "tests" / "test_x.py").write_text("y = 2\n", encoding="utf-8")
+        (dst / "scripts" / "__pycache__").mkdir(parents=True)
+        (dst / "scripts" / "real.py").write_text("x = 1\n", encoding="utf-8")
+        (dst / "scripts" / "__pycache__" / "real.cpython-314.pyc").write_bytes(b"\x00")
+        (dst / "tests").mkdir()
+        (dst / "tests" / "test_x.py").write_text("y = 2\n", encoding="utf-8")
+        (dst / "tests" / "__pycache__").mkdir()
+        (dst / "tests" / "__pycache__" / "test_x.cpython-314.pyc").write_bytes(b"\x00")
+        drifted, out = _prune(src, dst)
+        assert not drifted, out
+        assert "EXTRA" not in out, out
+
+
+@needs("sync_to_skill", sync)
+def test_a_genuinely_stray_file_is_still_reported():
+    """The filter must not blind the check it exists to make usable."""
+    with tempfile.TemporaryDirectory() as td:
+        src, dst = Path(td) / "src", Path(td) / "dst"
+        src.mkdir()
+        dst.mkdir()
+        (src / "real.py").write_text("x = 1\n", encoding="utf-8")
+        (dst / "real.py").write_text("x = 1\n", encoding="utf-8")
+        (dst / "notes.md").write_text("left behind\n", encoding="utf-8")
+        drifted, out = _prune(src, dst)
+        assert drifted, "a stray file must still be drift"
+        assert "EXTRA" in out and "notes.md" in out, out
+
+
 # --- toolchain: argument handling -------------------------------------------
 
 def test_a_flagged_option_without_a_value_is_an_error_not_a_traceback():
