@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import sys
 import tempfile
 import types
@@ -116,6 +117,95 @@ def test_the_real_repository_is_consistent():
     _require_repo_source()
     problems = version.check()
     assert not problems, "\n".join(problems)
+
+
+# --- prose that quotes the version ------------------------------------------
+
+# "Current release **v1.5.0**" is a checkable claim, and it is the one nobody
+# was checking: pyproject, CHANGELOG and tags all agreed at 1.5.2 while
+# docs/MILESTONES.md still advertised v1.5.0. The policy in docs/VERSIONING.md
+# says a claim that can be measured must be measured; this is that measurement.
+_PROSE_VERSION = re.compile(r"[Cc]urrent release\s+\*{0,2}v(\d+\.\d+\.\d+)\*{0,2}")
+
+# Files that speak about the release to a reader. Excluded: CHANGELOG.md (it is
+# the history, not a claim about now) and runs/ (records of a past moment).
+_PROSE_FILES = ("README.md", "docs")
+
+
+def _prose_version_claims(root: Path = REPO) -> list[tuple[str, str]]:
+    """(where, version) for every "current release" claim in the prose."""
+    claims: list[tuple[str, str]] = []
+    for name in _PROSE_FILES:
+        target = root / name
+        paths = sorted(target.rglob("*.md")) if target.is_dir() else [target]
+        for path in paths:
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for match in _PROSE_VERSION.finditer(text):
+                claims.append((str(path.relative_to(root)), match.group(1)))
+    return claims
+
+
+def _wrong_claims(root: Path = REPO) -> list[tuple[str, str]]:
+    current = version.read_pyproject_version(root / "pyproject.toml")
+    return [(where, claimed) for where, claimed in _prose_version_claims(root)
+            if claimed != current]
+
+
+def test_prose_version_claims_match_the_release():
+    """A doc that names the current release must name the current one.
+
+    Skipped in a deployed copy: `docs/` does not ship, and this asserts a
+    property of the repository, not of the skill.
+    """
+    _require_repo_source()
+    current = version.read_pyproject_version(REPO / "pyproject.toml")
+    wrong = _wrong_claims()
+    assert not wrong, (
+        f"prose claims a release other than {current}: "
+        + ", ".join(f"{w} says v{c}" for w, c in wrong)
+    )
+
+
+def _prose_tree(root: Path, *, pyproject_version: str, readme: str,
+                milestone: str) -> None:
+    _tree(root, pyproject_version=pyproject_version, changelog=GOOD)
+    (root / "README.md").write_text(readme, encoding="utf-8")
+    (root / "docs").mkdir(exist_ok=True)
+    (root / "docs" / "MILESTONES.md").write_text(milestone, encoding="utf-8")
+
+
+def test_a_stale_prose_claim_is_caught():
+    """The failure this check exists for: docs naming a superseded release."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _prose_tree(root, pyproject_version="1.5.2",
+                    readme="Current release **v1.5.2**.\n",
+                    milestone="Current release **v1.5.0**. The threshold ...\n")
+        assert _wrong_claims(root) == [("docs/MILESTONES.md", "1.5.0")]
+
+
+def test_agreeing_prose_is_accepted():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _prose_tree(root, pyproject_version="1.5.2",
+                    readme="Current release **v1.5.2**.\n",
+                    milestone="Current release v1.5.2, see the notes.\n")
+        assert _wrong_claims(root) == []
+
+
+def test_a_historical_version_is_not_a_current_claim():
+    """A run record may name the version it ran under without being wrong."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _prose_tree(root, pyproject_version="1.5.2",
+                    readme="Current release **v1.5.2**.\n",
+                    milestone="Release v1.2.0 scored 74.00.\n"
+                              "## [1.2.0] — 2026-10-01\n")
+        assert _wrong_claims(root) == []
+
+
 
 
 # --- each way the file can lie ----------------------------------------------

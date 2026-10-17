@@ -338,7 +338,7 @@
     "shipped_is_in_plateau": true
   },
   "caveats": [
-    "Calibrated from ONE known-good sample (this repository at HEAD). The plateau's upper edge is that single sample's score, so the recommended threshold is determined by one data point and is PROVISIONAL. Add more known-good repos and re-run before treating it as settled.",
+    "Calibrated from ONE known-good sample (this repository at HEAD). The plateau's upper edge is that single sample's score, so the recommended threshold is determined by one data point and is PROVISIONAL. It is a policy value, not a point estimate: across the seven samples measured so far (three clean, four defective) every threshold in the open interval (80.63, 89.23) yields identical verdicts, and the shipped value lies inside that band. A sample outside the band would narrow or close it -- see docs/CALIBRATION.md, 'The equivalence band'.",
     "d* for tools that found nothing on the clean baseline is floored at 0.05 findings/KLOC rather than 0, because d*=0 collapses the Hill curve to a step at the origin. Floored entries are marked; the aggregate curve anchors only on tools with a real baseline reading.",
     "This calibrates the DETERMINISTIC half only. The LLM half is not calibrated here; that needs labelled real council runs, ~9 min each.",
     "Weights (alpha_t) remain the working defaults. \u00a77 says reweight only with evidence, and there is not yet evidence that any dimension's findings track real defects better than another's."
