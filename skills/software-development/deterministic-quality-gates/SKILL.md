@@ -117,6 +117,27 @@ per-component value for per-component scoring.
 for the value that best separates the two classes is the mistake that looks correct
 and is not.
 
+**Calibrate on the scale the gate enforces, not on an intermediate one.** A calibration
+that measures an intermediate quantity (`score_from_densities`) while the gate compares a
+*hybrid* aggregate against the threshold derives a number for a scale nothing checks. The
+two look interchangeable — both are called "the score" — and they are not. Confirm which
+expression the gate actually evaluates before deriving anything, then derive on that one;
+otherwise the threshold and its evidence are two different measurements sharing a name.
+
+**When the labelled classes overlap, no threshold is derivable — say so.** A separating
+threshold exists only if the worst known-good member scores above the best known-bad one.
+Measure both and compare before deriving anything: if the best known-bad sits within a
+rounding step of the worst known-good, the max-margin line falls between two members of
+the same population and the verdict turns on noise. This is normal, not a defect in the
+model — real repositories are not defect-free, so "known-good" and "known-bad" differ in
+*density*, not in kind, and any weighted mean of quality tracks density. Report the
+overlap with its numbers (the gap in points, and the margin the line would have), then
+keep the shipped threshold as an explicit **policy line**: say plainly that it is not a
+measured boundary, what it does separate (every member with a real finding from every
+member without), and what evidence would move it (a larger sample, more known-good
+members). Do not quietly lower it to make more repositories pass — that replaces a stated
+policy with an unstated one, which is the thing the write-up exists to prevent.
+
 **Calibrate from labelled evidence and record the result in a file.** An
 unrecorded calibration is a guess with extra steps: the moment the manifest is
 missing the gate silently reverts to defaults. Ship the parameters alongside the

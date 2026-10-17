@@ -41,6 +41,35 @@ seconds to build), which is the argument *against* adding a cache: everything el
 stock nixpkgs package the default substituter already serves. Re-measure rather than
 trusting the numbers in a document — they move with the toolchain.
 
+## One tool added, every derived figure invalidated
+
+Closure bytes, path count, substitutable fraction, image tarball size, layer content, and
+every "N analyzers" string in prose are all functions of the same list. Add or remove one
+entry and each becomes wrong at once, in a different document, with nothing to warn you.
+Enumerate the derived figures before a toolchain change and re-measure each one after it,
+in the same commit.
+
+- **The count and the enumeration are two copies, and they drift.** A doc can state "14
+  tools" and then list thirteen names, because the number was updated and the list was
+  not. When a count changes, grep for the old number **and** for the enumeration
+  (`grep -rn 'statix.*deadnix' docs/`), and fix both.
+- **Prefer a figure that cannot go stale.** "every analyzer in `toolNames`" beats "all 13
+  analyzers" wherever the number is not the point; keep a hard number only where the
+  measurement itself is the claim.
+- **`which <tool>` inside a devshell resolves to the join, not the tool.** The devshell
+  puts the whole `symlinkJoin` on `PATH`, so `nix path-info -Sh $(which <tool>)` reports
+  the *toolchain's* closure — 901.8 MiB for one 25 MB linter. Size a single tool from
+  nixpkgs directly (`nix path-info -S nixpkgs#<tool>`) or rebuild the list without it.
+- **Counting a nix list's entries with a regex over the block counts comments too.** A
+  comment containing a quoted string (`"pyjwt~=2.13.0 not satisfied by version 2.14.0"`)
+  is a list item to any `"..."` matcher, so a 14-entry list reads as 15. Count with a
+  parser that walks lines beginning at the list's own indentation, and cross-check against
+  a number the code computes itself.
+- **A figure quoted from a source comment is a memory of a measurement.** Container
+  "loaded image size" comments, a build log's byte count, an upstream README's number —
+  none are re-derivable here. Either measure it or drop it; a number you cannot check is
+  a claim you cannot defend.
+
 ## A package's marginal cost is not its closure size
 
 Removing one entry frees its closure **minus** whatever the remaining entries already
@@ -228,6 +257,38 @@ the sum of `layer.tar` sizes is what the layers hold, and the size `docker load`
 reports is docker's own accounting. Quote the loaded size only from a run you did — a
 number carried over from a comment in the source is a memory of a measurement, and the
 layer content is the figure that stays checkable when no daemon is installed.
+
+## Mining a reference repo for conventions
+
+Reading a well-regarded project to learn its structure yields a list of things it does.
+Adopt the ones whose benefit you can measure **here**, and record each rejection with the
+number that decided it — otherwise the same convention is re-proposed next session, and
+an undocumented rejection reads as an oversight rather than a decision.
+
+The questions that actually decide it:
+
+- **Does it remove work, or move it?** A helper that parallelises a check set only pays
+  when evaluating the set is slow. Measure yours first: `nix flake check --no-build` is
+  seconds on a mid-size flake and a cached full gate is tens of seconds, so a "build only
+  the uncached derivations" wrapper has nothing to accelerate. The reference repo needs it
+  because its check set is an order of magnitude larger — that is the whole difference.
+- **Is the pattern about being a library?** `default.nix` / `shell.nix` back-compat in a
+  library repo is a `pkgs.callPackage ./lib` entry point. A tool that ships a CLI and a
+  flake has no such consumer, so the shim is a fourth style to maintain. Read what the
+  file actually returns before copying it — the filename is the misleading part.
+- **Is the thing it optimises already solved here?** A private binary cache earns its
+  secret and its CI job only when the closure is not already substitutable. Measure the
+  fraction first; when nearly all of it is on the default substituter, a cache would carry
+  only your own `symlinkJoin`s.
+- **Does the extra matrix pay for itself?** Testing two nixpkgs channels doubles CI cost;
+  for a toolchain pinned to one revision by design it tests a combination you do not
+  support.
+
+Then put the table in the docs — convention, where it came from, adopted or rejected, and
+why. A rejection with its measurement is a decision; a rejection with an opinion is a
+future argument. Adopted conventions that need a guard (a template, a schema, a generated
+file) get one in the same commit, because they are the artifacts nothing else in the gate
+can see.
 
 ## A linter is not a gate until it passes the tree it gates
 

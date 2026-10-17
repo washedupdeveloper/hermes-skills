@@ -74,6 +74,26 @@ report, stop.
   over a fixture may write into it (`nix flake check` creates `flake.lock`), so the next
   run scores a tree the first one altered. Check `git status` on the fixture after a
   measurement pass, and if it moved, restore it before quoting either run.
+- **A new guard is unproven until you have watched it fail.** A check, validation or lint
+  rule you just wrote asserts something about the world; the only evidence it asserts
+  anything is a run where the world is wrong and the guard says so. Prove it by
+  **deliberately breaking the thing it guards**, one break at a time: apply a single
+  minimal break, run the guard, confirm it exits non-zero **and** its message names the
+  right cause, then restore and confirm the clean run returns. Two to four distinct breaks
+  is enough, and they should differ in kind rather than in spelling — a wrong value, a
+  missing dependency of the guard, and a boundary the guard derives rather than hardcodes
+  exercise three different failure paths. Restore is part of the procedure: a guard proven
+  by leaving the tree broken is a worse outcome than an unproven one. Print the verdict
+  per break (`FAILED AS EXPECTED` / `PASSED — NO TEETH`) rather than eyeballing four runs,
+  and re-run clean at the end so the report ends on the state you are shipping.
+
+- **A guard that extracts its own evidence must assert the extraction found something.**
+  A check that greps a list out of a file and then compares it to another list passes
+  vacuously once the pattern stops matching, because it is comparing two empty results.
+  `test -s <extracted>` before the comparison is the difference between a check and a
+  formality — and the same shape covers any `grep -c` that could return 0 for the wrong
+  reason.
+
 - **A test of a limit needs an input that crosses it.** A truncation test, a cap, a
   pagination boundary, a "too long" branch — the fixture has to exceed the threshold, or
   the branch under test never runs and the assertion passes for the reason that nothing

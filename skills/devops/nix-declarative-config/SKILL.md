@@ -234,6 +234,10 @@ boundary per commit, and say which candidate was deliberately left alone.
 
 When the sandbox genuinely has no Nix and none can be installed the flake cannot be evaluated, but the *logic inside* a `writeShellScript` or `runCommand` can be — and that is where the bugs actually are. Extract the generated body, run it against stub binaries that drive every branch, cross-check any authored config artifact against the set that actually ships, and report the residue honestly rather than shipping unrun code with a caveat. Branch matrix and working harness: `references/verifying-generated-shell.md`.
 
+## Testing what you publish, from outside
+
+Every check in a repo builds from a **local path**, so the published artifact — the only thing a consumer gets — is the one thing nothing exercises. A throwaway flake whose only input is `github:owner/repo`, learning output names from `nix flake show --json` instead of memory (and why `packages.default` may not be the product), the `packages.<system>` nesting trap, and the `lib.evalModules` harness that imports a home-manager module without home-manager: `references/consumer-testing-a-flake.md`. Shipping `templates` so the first step is one command, and the check that keeps a template from rotting in someone else's repository, are in the same file.
+
 ## Checking what an upstream actually does
 
 Option names, defaults, deprecations and published guidance differ between the upstream website and the revision in `flake.lock`, and the pinned copy is the one that decides. Read it from the store rather than guessing or trusting a summary: `references/reading-upstream-from-the-store.md` has the commands, what to read there, and the clan-specific answers (which nixpkgs to follow, why the lock node is a `tarball`).
