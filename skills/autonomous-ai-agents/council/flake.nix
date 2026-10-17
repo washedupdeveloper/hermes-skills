@@ -84,6 +84,28 @@
           # That yields the packages, the formatter and the app — the same
           # definitions this repo builds for itself, not a copy of them.
           flakeModules.default = ./nix/flake-module.nix;
+
+          # Onboarding, the way crane and devshell do it: `nix flake init -t` writes a
+          # working consumer, so the first step is one command rather than reading a
+          # doc. `default` is the one most people want.
+          #
+          # checks.templates asserts these still reference the PUBLISHED flake and
+          # still import the module, because a template that rots is worse than no
+          # template — it fails in someone else's repository.
+          templates = {
+            default = {
+              path = ./templates/flake-parts;
+              description = "A flake-parts flake that imports the council's packages, formatter and app";
+            };
+            flake-parts = {
+              path = ./templates/flake-parts;
+              description = "A flake-parts flake that imports the council's packages, formatter and app";
+            };
+            home-manager = {
+              path = ./templates/home-manager;
+              description = "A home-manager module that enables programs.council";
+            };
+          };
         };
       }
     );

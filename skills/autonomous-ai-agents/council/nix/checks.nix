@@ -256,6 +256,68 @@ in
             touch $out
           '';
 
+          # The templates are the onboarding path, so they are the thing most likely to
+          # rot unnoticed: they reference a URL rather than this tree, so nothing else
+          # in the gate would see them drift. A rotted template is worse than none —
+          # it fails in someone else's repository, on their first command.
+          templates =
+            pkgs.runCommand "check-templates"
+              {
+                nativeBuildInputs = [
+                  pkgs.gnugrep
+                  pkgs.diffutils
+                ];
+              }
+              ''
+                t=${../templates}
+
+                for d in flake-parts home-manager; do
+                  test -d "$t/$d" || { echo "missing template: $d" >&2; exit 1; }
+                  test -n "$(ls -A "$t/$d")" || { echo "empty template: $d" >&2; exit 1; }
+                done
+
+                # 1. The flake template must point at the PUBLISHED repository. A local
+                #    path or a `path:` URL works on the author's machine and fails in
+                #    every consumer's.
+                f="$t/flake-parts/flake.nix"
+                grep -q 'review-council.url = "github:washedupdeveloper/agentic-council"' "$f" \
+                  || { echo "the flake template does not reference the published flake" >&2; exit 1; }
+                if grep -qE 'review-council.url = "(path:|file:|/|\./)' "$f"; then
+                  echo "the flake template references a local path, not the published flake" >&2
+                  exit 1
+                fi
+
+                # 2. It must actually import the consumer-facing module. Without this it
+                #    evaluates to an empty flake and the user gets nothing.
+                grep -q 'review-council.flakeModules.default' "$f" \
+                  || { echo "the flake template does not import flakeModules.default" >&2; exit 1; }
+
+                # 3. Its systems must be the ones THIS flake declares. Deriving them
+                #    from flake.nix is the point: adding a system here and forgetting
+                #    the template would leave consumers unable to build on it.
+                sed -n '/systems = \[/,/\];/p' ${src}/flake.nix \
+                  | grep -oE '"[a-z0-9_]+-[a-z0-9]+"' | tr -d '"' | sort > declared.txt
+                sed -n '/systems = \[/,/\];/p' "$f" \
+                  | grep -oE '"[a-z0-9_]+-[a-z0-9]+"' | tr -d '"' | sort > offered.txt
+                # A check that cannot fail verifies nothing: if the pattern stops
+                # matching, this fails instead of comparing two empty lists.
+                test -s declared.txt \
+                  || { echo "could not read a systems list from flake.nix" >&2; exit 1; }
+                if ! diff -u declared.txt offered.txt; then
+                  echo "the template's systems differ from the flake's" >&2
+                  exit 1
+                fi
+
+                # 4. The home-manager template must import the module and enable it.
+                h="$t/home-manager/council.nix"
+                grep -q 'homeManagerModules.default' "$h" \
+                  || { echo "the home-manager template does not import homeManagerModules.default" >&2; exit 1; }
+                grep -q 'programs.council' "$h" \
+                  || { echo "the home-manager template does not configure programs.council" >&2; exit 1; }
+
+                touch $out
+              '';
+
           # The command surface, driven by the app's own verb table. Silent
           # breakage otherwise: a verb naming a module that was renamed, a data
           # file missing from the framework tree, and the audience split leaking
