@@ -256,6 +256,44 @@ disk but was never `git add`ed fails the artifact check with a path `ls` confirm
 present, because the store copy carries tracked files only. Report it as the git
 problem it is -- `git status` first, `git add` the fix.
 
+**A shipped copy of a test suite must be self-contained.** When a repo vendors its
+own tests into a deployed artifact, every assertion that reads a repo-only path
+fails where that path is absent -- measured: three `test_version.py` tests died
+with `FileNotFoundError` on `pyproject.toml` and `docs/` inside a deployed skill
+while passing in the repo, because those files do not ship. The sibling tests guard
+themselves with an explicit deployed-copy skip; grep the shipped suite for that
+guard and require it wherever a test touches a repo-only path. A named skip is
+honest; the same fact arriving as a `FileNotFoundError` is reported as a defect.
+Check the SHIPPED copy, not the repo copy -- they diverge, and the deployed one is
+the one that runs on a user's machine. Verifying the sync that produced it is
+`nix-declarative-config`'s procedure, not this one.
+
+**The skip must work in BOTH runners, and `pytest.skip()` does not.** Several test
+files in this fleet are documented as runnable standalone (`python tests/x.py`), so
+the guard is reached by a hand-rolled runner as well as by pytest. `pytest.skip()`
+raises `Skipped`, which subclasses `BaseException` -- not `Exception` -- so a
+standalone runner that catches `AssertionError`/`Exception` does not catch it and
+the run dies with exit 1 on what should have been a skip. Measured: the fix
+"worked" under pytest and crashed the documented standalone path. Use
+`unittest.SkipTest`, which pytest maps to a SKIP natively and which any runner can
+catch by class:
+
+```python
+class _DeployedCopy(unittest.SkipTest):
+    """A test that reads repo-only files was reached in a shipped copy."""
+
+
+def _require_repo_source() -> None:
+    if (REPO / "scripts" / "<the copier>.py").exists():
+        return
+    raise _DeployedCopy("deployed copy: this test asserts the repo-side wiring")
+```
+
+Distinguish deployment from the repo by the presence of the copier itself -- it is
+the one file that never ships, so it is a reliable marker. Then verify FOUR modes,
+not one: repo+pytest, repo+standalone, deployed+pytest, deployed+standalone. A skip
+that only works under pytest is a bug the shipped tree cannot report.
+
 **`nix flake check` already runs the pre-commit hooks, via `checks.pre-commit`.**
 git-hooks.nix's `check.enable = true` makes `checks.pre-commit` a derivation that
 does `git init` in a temp dir, commits, and runs `pre-commit run --all-files`

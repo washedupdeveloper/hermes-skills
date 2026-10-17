@@ -146,11 +146,16 @@ copy keeps the old files, and both look complete.
    a sync that reports `REMOVED`/`EXTRA` is a different result from one that only adds.
    Say which happened.
 4. **Verify with a triad, never the copier's own "in sync".** It compares what it
-   knows how to compare. Check (a) the previously-drifting files byte-for-byte with
-   `cmp` against the source; (b) the file modes did not gain `+x` from the copy; and
-   (c) for anything a flake installs, re-evaluate the deployed artifact —
-   `nix eval .#packages.<system>` — because a flake whose `nix/` modules are missing
-   evaluates to NOTHING while every file "exists". Then run the synced tests.
+   knows how to compare -- often LF-normalised, and against a source it resolved itself
+   (a store path, not the working tree you are looking at). Check (a) the previously-drifting
+   files byte-for-byte with `cmp` against the source; (b) the file modes did not gain `+x`
+   from the copy; and (c) for anything a flake installs, re-evaluate the deployed artifact
+   -- `nix eval .#packages.<system>` — because a flake whose `nix/` modules are missing
+   evaluates to NOTHING while every file "exists". Then run the synced tests. Two facts to
+   state rather than discover: an uncommitted change in the source tree SHOULD show as a
+   difference, because a copier vendors committed content, so that is not drift; and the
+   sync's source is one specific commit, so name it -- `HEAD` moving afterwards makes "in
+   sync" true of a tree that no longer exists.
 5. **Stage only the vendored path**, and say what you left alone. Where the user has
    other work in progress, an unrelated unstaged file is theirs: report it, do not
    revert it, and commit with `--only -- <path>`.
@@ -271,6 +276,7 @@ Option names, defaults, deprecations and published guidance differ between the u
 - A store path is immutable, so "update" always produces a *new* path. Pointing the config at it directly means the config reference changes on every refresh — correct and cheap when the change lands through a rebuild (`nh os switch`), wrong if something outside Nix is expected to follow it. Reach for a stable symlink only when the artifact must go live without a rebuild.
 - `hermes config set` is blocked in managed mode (`HERMES_MANAGED`, or the `.managed` marker in `HERMES_HOME`). Declare the setting in Nix rather than shelling out.
 - Inside a Nix `''…''` string, `${` must be written `''${` to reach the shell as a parameter expansion, and `''` is an escaped single quote. Getting this wrong is silent: the script still evaluates, it just interpolates at build time or loses characters.
+- **`${f { }.attr}` closes the interpolation at the `}` of the empty argument.** A call written inline in a string whose argument is an empty attrset -- `${cfgOf { }.council.hermesHome}` -- terminates at the first `}`, so nix reports `cannot coerce a set to a string` and prints the whole call's result rather than the interpolation, which points at the wrong thing. Bind it first (`defaultCfg = cfgOf { };`) and interpolate the name. Same for any inline call whose argument braces would close the string early.
 - In shell you generate, never put a literal backtick inside a double-quoted string — it is command-substituted. Use `printf 'literal `%s`\n' "$var"` or single quotes. Markdown in a report is where this bites, because backticks read as harmless formatting.
 - A `runCommand` that copies selected children needs `mkdir -p $out` first, and the marker-file filter belongs in the shell (`for d in ${src}/*/; do [ -f "$d/SKILL.md" ] && cp -r "$d" "$out/$(basename "$d")"; done`). Writing it in shell rather than `builtins.readDir` lets the same derivation be `callPackage`d from both `perSystem` and a module without an `inputs`-shaped argument.
 - **A copier that installs only the unit's `SKILL.md` silently drops its `references/`.** A store-shipped skill is a *directory*; a provisioner that copies the marker file alone installs a skill whose pointers all dangle, and nothing errors. This bites twice when two copiers exist (a repo→mount sync and a mount→profile install) — each drops the same file independently, so fixing one still leaves the other. When a unit routes to a support file, verify that file lands: `find <dest> -type f` after the copy, not just the `SKILL.md`.

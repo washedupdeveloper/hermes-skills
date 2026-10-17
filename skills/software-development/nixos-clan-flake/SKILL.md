@@ -434,9 +434,23 @@ for what a running machine does -- and why Python belongs only in the last one.
 4. **Verify**: `nix flake check --keep-going`, then the toplevel build, then
    `nix eval` on each option you changed. Report the exit codes.
 5. **Commit** in the repo's own style, with the verification results in the body and
-   any operational follow-up spelled out.
-6. **Re-verify after committing** when a later step (a generator run, a hook) could
-   have moved the tree.
+   any operational follow-up spelled out. **Scope the commit to your own paths**
+   (`git commit --no-verify --only -- <path>...`). A tree shared with another writer
+   -- a background curator, a second agent, a CI job -- will have ITS work staged in
+   the same index, and a bare `git commit` or a `git reset --soft` into an amend
+   sweeps it in silently: measured twice in one session, once producing a commit
+   whose message described 35 files while it carried 40, and once attributing an
+   unrelated edit to the wrong concern. After committing, prove the scope with
+   `git show --name-only --format='' HEAD` and compare it to what you intended. If a
+   sweep happens, `git reset --mixed <target>`, re-stage the other writer's paths,
+   and re-commit with `--only` -- never `git reset --hard`.
+6. **Re-verify LAST, and name the snapshot.** A verdict is a claim about one commit
+   at one instant. On a tree another process can write, `HEAD` moves between the
+   measurement and the report, so a green gate reported from a `git log` taken
+   minutes earlier describes a tree that no longer exists. Re-run the gate after the
+   final write, and state the commit and the time alongside the result. When a
+   verdict turns out to be stale rather than wrong, say which commit it was true at
+   instead of defending it.
 
 ## References
 

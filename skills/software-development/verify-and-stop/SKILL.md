@@ -22,6 +22,17 @@ report, stop.
 
 - Reuse still-current results only when the repository state still matches. A result
   from before the last edit is not proof of the current tree.
+- **A verdict is a snapshot; name the commit and the instant, or it is a claim about a
+  moment you never stated.** On a tree another process can write — a background curator,
+  a second agent, a CI job, a user reviewing alongside you — `HEAD` moves between your
+  last check and your report, and every number you measured silently becomes history.
+  Record `git log --oneline -1` and `git status --short` immediately before *and* after
+  the proof run; if they differ the proof is stale and gets re-run, not annotated.
+  Report the SHA with the result: "18 checks pass at `<sha>`" is checkable, "all checks
+  pass" is not. When you discover the tree moved under a verdict you already delivered,
+  say so and re-measure in the same breath — a standing property cannot rest on one
+  observation, and a green summary is the easiest thing in the world to keep repeating
+  after it has stopped being true.
 - Run focused checks before wider gates. A focused failure is faster to read and
   cheaper to run.
 - Distinguish **pass / fail / unavailable / blocked** exactly. "Could not run" is not
