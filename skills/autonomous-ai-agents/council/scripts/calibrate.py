@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib.util as _shared_util
 import json
+import os
 import random
 import shutil
 import subprocess
@@ -48,17 +49,30 @@ def kloc(root: Path) -> float:
 
 
 def run_probes(root: Path, timeout: int = 900) -> List[Dict[str, Any]]:
-    """Run every probe against *root* and return their raw JSON objects."""
+    """Run every probe against *root* and return their raw JSON objects.
+
+    Two things this gets right that a naive subprocess call does not:
+
+    * `REVIEW_COUNCIL_DISPATCHED` is set explicitly. `probes.py` refuses a bare
+      invocation and prints usage instead of JSON, so without it a calibration called
+      as a LIBRARY (not through `council calibrate`) silently measured nothing.
+    * A non-JSON answer RAISES rather than returning `[]`. An empty list reads as
+      "no probes", which `choose_threshold` then reports as "no labels" — a much less
+      useful error than "the probes did not run, here is what they said".
+    """
+    environment = dict(os.environ)
+    environment["REVIEW_COUNCIL_DISPATCHED"] = "1"
     proc = subprocess.run(
         [sys.executable, str(PROBES), "--all", "--repo", str(root)],
-        capture_output=True, text=True, timeout=timeout,
+        capture_output=True, text=True, timeout=timeout, env=environment,
     )
-    if not proc.stdout.strip():
-        return []
     try:
         return json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as exc:
+        tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
+        raise RuntimeError(
+            f"probes did not return JSON for {root} (exit {proc.returncode}): "
+            + " | ".join(tail)) from exc
 
 
 def probe_density(results: List[Dict[str, Any]], root: Path) -> Dict[str, float]:
@@ -368,6 +382,58 @@ def calibrate(good: Path, bad: Path, seed: int = 20261006) -> Dict[str, Any]:
     }
 
 
+def calibrate_many(good: List[Path], bad: Path, seed: int = 20261006) -> Dict[str, Any]:
+    """§7 calibration against SEVERAL known-good baselines.
+
+    One known-good repo makes the threshold's upper edge that repo's own score, so a
+    second clean repo that is merely less tidy fails the gate. Each good repo
+    contributes its **own** labelled point, so the threshold has to clear all of them.
+
+    `d*` is anchored on the **worst** density seen per tool across the good set, not the
+    best. `d*` is the density at which a tool scores 50, so anchoring on the tidiest
+    repo would mark every other clean repo as failing — the opposite of what a
+    known-good baseline is for. A tool absent from one repo contributes nothing, so a
+    repo that simply does not use a tool cannot raise its floor for the others.
+    """
+    if not good:
+        raise ValueError("calibrate_many needs at least one known-good baseline")
+
+    good_dens: List[Tuple[Path, Dict[str, float]]] = [
+        (path, probe_density(run_probes(path), path)) for path in good
+    ]
+    worst: Dict[str, float] = {}
+    for _path, dens in good_dens:
+        for tool, value in dens.items():
+            worst[tool] = max(worst.get(tool, 0.0), value)
+
+    bad_dens = probe_density(run_probes(bad), bad)
+    d_star = derive_d_star(worst, bad_dens)
+
+    points: List[Dict[str, Any]] = []
+    good_scores: List[Dict[str, Any]] = []
+    for path, dens in good_dens:
+        score = score_from_densities(dens, d_star)
+        points.append({"label": "good", "path": str(path), "defects": 0,
+                       "score": score, "kloc": round(kloc(path), 4)})
+        good_scores.append({"path": str(path), "score": score})
+
+    bad_score = score_from_densities(bad_dens, d_star)
+    points.append({"label": "bad", "path": str(bad), "defects": None,
+                   "score": bad_score, "kloc": round(kloc(bad), 4)})
+
+    return {
+        "method": "research/deterministic-quality-tooling.md §7",
+        "seed": seed,
+        "baselines": {"good": [str(p) for p in good], "bad": str(bad)},
+        "halflife_k": 1.2,
+        "d_star": d_star,
+        "measured": {"good_scores": good_scores, "bad_score": bad_score},
+        "points": points,
+        "sweep": sweep_threshold(points),
+        "recommended_threshold": choose_threshold(points),
+    }
+
+
 def calibrate_ladder(ladder: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, Any]:
     """Calibrate against a graded eval ladder (defect levels 0..N).
 
@@ -538,7 +604,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         prog="calibrate.py",
         description="Calibrate d*, k and the pass threshold from labelled baselines (M8).",
     )
-    parser.add_argument("--good", help="Known-good revision to baseline-scan")
+    parser.add_argument("--good", action="append",
+                        help="Known-good revision to baseline-scan (repeatable: each "
+                             "adds a labelled point, and d* anchors on the worst "
+                             "density seen across all of them)")
     parser.add_argument("--bad", help="Known-bad revision to baseline-scan")
     parser.add_argument("--build-eval", metavar="DEST",
                         help="Build a graded eval ladder at DEST from --base")
@@ -599,7 +668,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             else recalibrate(doc["measured"], args.k)
         )
     elif args.good and args.bad:
-        result = calibrate(Path(args.good), Path(args.bad), args.seed)
+        result = (
+            calibrate_many([Path(p) for p in args.good], Path(args.bad), args.seed)
+            if len(args.good) > 1
+            else calibrate(Path(args.good[0]), Path(args.bad), args.seed)
+        )
     else:
         parser.print_help()
         return 2

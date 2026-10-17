@@ -50,6 +50,14 @@ let
     # cargo-audit with ONE binary, and unlike them it has no runtime
     # dependency of its own -- see the note where pip-audit used to be.
     "osv-scanner"
+    # GitHub Actions workflow security. The only analyzer that reads `.github/`, and
+    # a workflow is executed by a forge with the repository token's authority, so it
+    # is attack surface nothing else here looks at. Catches the class an LLM reviewer
+    # has to notice by hand: `uses: owner/repo@main` (a moving branch executing on
+    # every push) and a missing `permissions:` block (the default token is write-all
+    # on repositories created before February 2023). Measured on
+    # numtide/flake-utils: 5 findings, including the `@main` action.
+    "zizmor"
 
     # --- Python (DECISIONS #3: Python first-class) ---
     "ruff" # lint + format

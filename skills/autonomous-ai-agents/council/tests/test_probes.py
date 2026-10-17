@@ -452,7 +452,7 @@ def test_bridge_forbids_writing_a_lock_file():
     """Every `nix flake` / `nix eval` call carries `--no-write-lock-file`."""
     seen = []
 
-    def fake_run(args, repo=None, timeout=None, env_extra=None):
+    def fake_run(args, repo=None, timeout=None, env_extra=None, merge_stderr=True):
         seen.append(list(args))
         return (0, "")
 
@@ -476,7 +476,7 @@ def test_bridge_leaves_other_commands_alone():
     """Non-nix commands are passed through untouched."""
     seen = []
 
-    def fake_run(args, repo=None, timeout=None, env_extra=None):
+    def fake_run(args, repo=None, timeout=None, env_extra=None, merge_stderr=True):
         seen.append(list(args))
         return (0, "")
 
@@ -492,6 +492,121 @@ def test_bridge_leaves_other_commands_alone():
     assert seen[1] == ["nix-instantiate", "--parse", "a.nix"], seen[1]
     for args in seen:
         assert "--no-write-lock-file" not in args, args
+
+
+# --- zizmor: GitHub Actions workflow security ---------------------------------
+#
+# The only probe that reads `.github/`. Two invariants matter more than the parsing:
+# a repository without workflows must not be penalised, and a non-JSON answer must be
+# a reported failure rather than a silent clean.
+
+def test_zizmor_is_not_an_expected_tool():
+    """It reads `.github/workflows`, which many repositories do not have.
+
+    Listing it in STACK_TOOLS would make beta fall on every repo without CI — the
+    repository would be punished for a check that cannot apply to it. It still
+    contributes to `det` through `tools_run` when it does run.
+    """
+    expected = set()
+    for dim in score.STACK_TOOLS.values():
+        for tools in dim.values():
+            expected |= set(tools)
+    assert "zizmor" not in expected, (
+        "zizmor must stay out of the expected set: a repo with no workflows would "
+        "lose beta for a check that cannot run there")
+
+
+def test_zizmor_is_registered_and_resolvable():
+    assert "zizmor" in probes.PROBES
+    assert callable(probes.PROBES["zizmor"])
+
+
+def test_zizmor_without_workflows_does_not_run():
+    with tempfile.TemporaryDirectory() as td:
+        out = probes.run_probe("zizmor", Path(td))
+        assert out["ran"] is False, out
+        assert out["signal"] is None, "an inapplicable probe must not produce a score"
+        assert "workflow" in out["note"].lower(), out["note"]
+
+
+def test_zizmor_parses_severity_location_and_feature():
+    """The JSON shape is zizmor's, so it is pinned here rather than assumed."""
+    payload = json.dumps([
+        {"ident": "unpinned-uses", "desc": "unpinned action reference",
+         "determinations": {"severity": "High"},
+         "locations": [{
+             "symbolic": {"key": {"Local": {"verbatim_path": ".github/workflows/x.yml"}}},
+             "concrete": {"feature": "uses: actions/checkout@v4",
+                          "location": {"start_point": {"row": 7}}}}]},
+        {"ident": "excessive-permissions", "desc": "overly broad permissions",
+         "determinations": {"severity": "Medium"},
+         "locations": [{
+             "symbolic": {"key": {"Local": {"verbatim_path": ".github/workflows/x.yml"}}},
+             "concrete": {"feature": "build:",
+                          "location": {"start_point": {"row": 4}}}}]},
+    ])
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / ".github" / "workflows").mkdir(parents=True)
+        (root / ".github" / "workflows" / "x.yml").write_text("on: push\n", encoding="utf-8")
+
+        original = probes._bridge
+        probes._bridge = lambda *a, **k: (1, payload)
+        try:
+            out = probes.run_probe("zizmor", root)
+        finally:
+            probes._bridge = original
+
+    assert out["ran"] is True, out
+    assert out["parsed"] is True, out
+    assert len(out["findings"]) == 2, out["findings"]
+
+    high = out["findings"][0]
+    assert high["severity"] == "high", high
+    assert high["location"]["path"] == ".github/workflows/x.yml", high["location"]
+    assert high["location"]["line_range"] == "7", high["location"]
+    assert "actions/checkout@v4" in high["claim"], high["claim"]
+    assert "zizmor" in high["falsifiable_check"], high["falsifiable_check"]
+
+    assert out["findings"][1]["severity"] == "medium", out["findings"][1]
+
+
+def test_zizmor_reports_a_non_json_answer_rather_than_crashing():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / ".github" / "workflows").mkdir(parents=True)
+        (root / ".github" / "workflows" / "x.yml").write_text("on: push\n", encoding="utf-8")
+
+        original = probes._bridge
+        probes._bridge = lambda *a, **k: (14, "panic: something went wrong")
+        try:
+            out = probes.run_probe("zizmor", root)
+        finally:
+            probes._bridge = original
+
+    assert out["ran"] is False, out
+    assert out["signal"] is None, out
+    assert "did not emit JSON" in out["note"], out["note"]
+
+
+def test_zizmor_clean_repo_scores_100():
+    """No findings must read as clean, not as a missing measurement."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / ".github" / "workflows").mkdir(parents=True)
+        (root / ".github" / "workflows" / "x.yml").write_text("on: push\n", encoding="utf-8")
+
+        original = probes._bridge
+        probes._bridge = lambda *a, **k: (0, "[]")
+        try:
+            out = probes.run_probe("zizmor", root)
+        finally:
+            probes._bridge = original
+
+    assert out["ran"] is True, out
+    assert out["findings"] == [], out
+    assert out["signal"] == 100.0, out["signal"]
 
 
 def main() -> int:

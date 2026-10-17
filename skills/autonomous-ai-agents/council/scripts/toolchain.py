@@ -82,7 +82,8 @@ def which(tool: str, flake: Optional[Path] = None) -> Optional[str]:
 
 
 def run(argv: Sequence[str], repo: Optional[Path] = None, flake: Optional[Path] = None,
-        timeout: int = 1800, env_extra: Optional[Dict[str, str]] = None) -> Tuple[int, str]:
+        timeout: int = 1800, env_extra: Optional[Dict[str, str]] = None,
+        merge_stderr: bool = True) -> Tuple[int, str]:
     """Run a command against the toolchain. Returns (rc, combined output).
 
     (127, reason) when the toolchain is unavailable, so a probe reports ran=False
@@ -91,6 +92,12 @@ def run(argv: Sequence[str], repo: Optional[Path] = None, flake: Optional[Path] 
     *env_extra* is for probes that must run a tool WITHOUT writing into the repo
     they are reviewing: pytest and mypy both cache by default, and a review must
     not leave files behind in someone else's tree.
+
+    *merge_stderr* is False for a tool whose stdout is machine-readable and whose
+    stderr carries human progress. Merging the two corrupts the payload: zizmor
+    emits a JSON array on stdout and its banner and progress on stderr, so the
+    merged stream does not parse. Every other probe reads combined output, where
+    the split does not matter, so the default stays as it was.
     """
     environment = env(flake)
     if env_extra:
@@ -105,7 +112,9 @@ def run(argv: Sequence[str], repo: Optional[Path] = None, flake: Optional[Path] 
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 127, f"{type(exc).__name__}: {exc}"
-    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+    return proc.returncode, (
+        (proc.stdout or "") if not merge_stderr
+        else (proc.stdout or "") + (proc.stderr or ""))
 
 
 def main(argv: List[str]) -> int:

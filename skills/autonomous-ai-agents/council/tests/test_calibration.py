@@ -372,6 +372,102 @@ def test_the_flag_reports_the_fixture_it_was_given():
     assert proc == 0
 
 
+# --- run_probes: the trap that made a calibration measure nothing -------------
+#
+# `probes.py` refuses a bare invocation and prints usage instead of JSON. A caller that
+# only checks `json.loads` therefore gets an empty list, which reads as "no probes" and
+# turns into "no labels" — a much less useful error than the truth. Worse, the silent
+# version produced a calibration with ZERO points, which is how this was found.
+
+def test_run_probes_sets_the_dispatch_variable(monkeypatch=None):
+    """Called as a library, the subprocess must still be allowed to run."""
+    import subprocess as sp
+
+    seen = {}
+
+    def fake_run(argv, **kwargs):
+        seen["env"] = kwargs.get("env") or {}
+        return sp.CompletedProcess(argv, 0, "[]", "")
+
+    real = sp.run
+    sp.run = fake_run
+    try:
+        assert cal.run_probes(REPO) == []
+    finally:
+        sp.run = real
+    assert seen["env"].get("REVIEW_COUNCIL_DISPATCHED") == "1", (
+        "without this, probes.py prints usage and the calibration measures nothing")
+
+
+def test_run_probes_raises_rather_than_returning_nothing():
+    """An empty list would read as 'no probes' and surface as 'no labels'."""
+    import subprocess as sp
+
+    def fake_run(argv, **kwargs):
+        return sp.CompletedProcess(argv, 1, "probes: not a program", "usage: ...")
+
+    real = sp.run
+    sp.run = fake_run
+    try:
+        cal.run_probes(REPO)
+    except RuntimeError as exc:
+        assert "did not return JSON" in str(exc), exc
+        assert "usage" in str(exc) or "not a program" in str(exc), exc
+        return
+    finally:
+        sp.run = real
+    raise AssertionError("returned quietly on a non-JSON answer")
+
+
+# --- calibrate_many: several known-good baselines -----------------------------
+
+def test_calibrate_many_anchors_d_star_on_the_worst_good_repo():
+    """`d*` is the density at which a tool scores 50. Anchoring on the TIDIEST repo
+    would mark every other clean repo as failing, which is the opposite of what a
+    known-good baseline is for — so the worst density across the set wins."""
+    import json as _json
+    import subprocess as sp
+
+    dens = {
+        "tidy": {"statix": 1.0},
+        "messy": {"statix": 9.0},
+        "bad": {"statix": 20.0},
+    }
+
+    def fake_run(argv, **kwargs):
+        root = Path(argv[argv.index("--repo") + 1]).name
+        payload = [{"tool": "statix", "ran": True, "parsed": True, "signal": 100.0,
+                    "findings": [{}] * int(dens[root]["statix"])}]
+        return sp.CompletedProcess(argv, 0, _json.dumps(payload), "")
+
+    real_run = sp.run
+    real_kloc = cal.kloc
+    sp.run = fake_run
+    cal.kloc = lambda root, **kw: 1.0
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for name in ("tidy", "messy", "bad"):
+                (root / name).mkdir()
+            out = cal.calibrate_many([root / "tidy", root / "messy"], root / "bad")
+    finally:
+        sp.run = real_run
+        cal.kloc = real_kloc
+
+    assert out["d_star"]["statix"]["d_star"] == 9.0, out["d_star"]["statix"]
+    assert out["d_star"]["statix"]["floored"] is False
+
+
+def test_calibrate_many_needs_at_least_one_good_repo():
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            cal.calibrate_many([], Path(td))
+        except ValueError as exc:
+            assert "known-good" in str(exc), exc
+            return
+    raise AssertionError("accepted an empty good set")
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

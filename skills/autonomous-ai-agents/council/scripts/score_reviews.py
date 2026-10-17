@@ -72,6 +72,13 @@ STACK_TOOLS: Dict[str, Dict[str, List[str]]] = {
         # `secret-grep` is this framework's own regex probe with no external
         # dependency at all. They fail in different ways -- gitleaks cannot run
         # without the toolchain, secret-grep always can -- so both are expected.
+        #
+        # `zizmor` is a security probe that is DELIBERATELY NOT in this table. It
+        # reads `.github/workflows`, and a repository without CI has no workflows to
+        # read: listing it here would make beta fall on every repo that has no
+        # workflows, punishing it for a check that cannot apply. It contributes to
+        # `det` through `tools_run` whenever it does run, which is the correct
+        # behaviour for a conditional analyzer -- see `probe_zizmor`.
         "python": ["bandit", "osv-scanner", "gitleaks", "secret-grep"],
         "nix": ["statix", "gitleaks", "secret-grep"],
         "javascript": ["osv-scanner", "gitleaks", "secret-grep"],

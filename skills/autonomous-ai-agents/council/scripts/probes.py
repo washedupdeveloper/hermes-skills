@@ -337,7 +337,8 @@ def probe_declared_rules(root: Path) -> Dict[str, Any]:
 # These run in the pinned toolchain from flake.lock; see research/nix-tooling.md.
 
 def _bridge(root: Path, args: List[str], timeout: int = 600,
-            env_extra: Optional[Dict[str, str]] = None) -> Tuple[int, str]:
+            env_extra: Optional[Dict[str, str]] = None,
+            merge_stderr: bool = True) -> Tuple[int, str]:
     """Run a command in the pinned toolchain. Returns (rc, combined output).
 
     (127, reason) when the toolchain is unavailable, so the probe reports
@@ -357,7 +358,8 @@ def _bridge(root: Path, args: List[str], timeout: int = 600,
             args = [args[0], args[1], "--no-write-lock-file", *args[2:]]
         elif args[1] == "flake":
             args = [*args[:3], "--no-write-lock-file", *args[3:]]
-    return toolchain.run(args, repo=root, timeout=timeout, env_extra=env_extra)
+    return toolchain.run(args, repo=root, timeout=timeout, env_extra=env_extra,
+                         merge_stderr=merge_stderr)
 
 
 def _nix_files(root: Path, limit: int = 400) -> List[str]:
@@ -964,6 +966,89 @@ def probe_gitleaks(root: Path) -> Dict[str, Any]:
                   f"{len(findings)} credential(s) found")
 
 
+def probe_zizmor(root: Path) -> Dict[str, Any]:
+    """`zizmor --format=json .` — GitHub Actions workflow security (security).
+
+    The only probe that reads `.github/`. A workflow file is executed by a forge with
+    whatever the repository's token allows, so it is attack surface the source tree
+    does not otherwise expose — and nothing else in this toolchain looks at it.
+
+    zizmor is deterministic and offline for the audits that matter here: an unpinned
+    `uses: owner/repo@main` runs whatever that branch points at on every push, and an
+    absent `permissions:` block leaves the default token, which is write-all on
+    repositories created before February 2023. Both are findings here rather than
+    something a reviewer has to notice.
+
+    Measured on `numtide/flake-utils`: 5 findings, including
+    `uses: NixOS/nix-installer-action@main` — the same defect an LLM review of that
+    repository found, caught mechanically.
+    """
+    workflows = list((root / ".github" / "workflows").glob("*.y*ml")) \
+        if (root / ".github" / "workflows").is_dir() else []
+    if not workflows:
+        return result("zizmor", False, None, [],
+                      "no GitHub Actions workflows in the tree", parsed=False)
+
+    with tempfile.TemporaryDirectory(prefix="rc-zizmor-") as tmp:
+        # stdout only: zizmor's JSON is on stdout and its progress is on stderr, so
+        # the merged stream does not parse. `--no-progress` and `--color=never` keep
+        # the payload clean even on a TTY.
+        rc, out = _bridge(root, ["zizmor", "--format=json", "--no-progress",
+                                 "--color=never", "."],
+                          env_extra=_scratch_env(tmp), timeout=900, merge_stderr=False)
+    if rc == 127:
+        return result("zizmor", False, None, [], out[:200], parsed=False)
+
+    # zizmor exits non-zero when it has findings, so the exit code is not the
+    # verdict; the JSON is. A non-JSON answer IS a failure and says why.
+    try:
+        doc = json.loads(out)
+    except json.JSONDecodeError:
+        return result("zizmor", False, None, [],
+                      f"zizmor did not emit JSON (exit {rc}): {out[:200]}",
+                      parsed=False)
+    if not isinstance(doc, list):
+        return result("zizmor", False, None, [],
+                      f"zizmor emitted {type(doc).__name__}, expected a list",
+                      parsed=False)
+
+    def severity(entry: Dict[str, Any]) -> str:
+        raw = str((entry.get("determinations") or {}).get("severity") or "").lower()
+        return {"high": "high", "medium": "medium", "low": "low"}.get(raw, "info")
+
+    findings: List[Dict[str, Any]] = []
+    for entry in doc:
+        if not isinstance(entry, dict):
+            continue
+        ident = str(entry.get("ident") or "?")
+        desc = str(entry.get("desc") or "").strip()[:120]
+        location = (entry.get("locations") or [{}])[0]
+        symbolic = (location.get("symbolic") or {})
+        local = (symbolic.get("key") or {}).get("Local") or {}
+        # `lstrip("./")` would strip every leading dot AND slash — `.github/x.yml`
+        # becomes `github/x.yml`. Strip the prefix, not a character set.
+        path = str(local.get("verbatim_path") or "")
+        if path.startswith("./"):
+            path = path[2:]
+        concrete = (location.get("concrete") or {})
+        span = (concrete.get("location") or {}).get("start_point") or {}
+        line = int(span.get("row") or 0)
+        # `feature` is the offending source text, which makes the finding checkable
+        # without opening the file.
+        feature = str(concrete.get("feature") or "").strip()[:80]
+        findings.append({
+            "severity": severity(entry),
+            "status": "open",
+            "location": {"path": path or ".github/workflows",
+                         "line_range": str(line) if line else ""},
+            "claim": f"{ident}: {desc}" + (f" — `{feature}`" if feature else ""),
+            "falsifiable_check": f"zizmor {path or '.'}",
+        })
+
+    return result("zizmor", True, score_from_density(len(findings), root), findings,
+                  f"{len(findings)} workflow finding(s) over {len(workflows)} file(s)")
+
+
 def probe_shellcheck(root: Path) -> Dict[str, Any]:
     """`shellcheck -f json` — shell lints (security/readability).
 
@@ -1083,6 +1168,7 @@ PROBES: Dict[str, Callable[[Path], Dict[str, Any]]] = {
     "bandit": probe_bandit,
     "osv-scanner": probe_osv_scanner,
     "gitleaks": probe_gitleaks,
+    "zizmor": probe_zizmor,
     "shellcheck": probe_shellcheck,
     "pytest": probe_pytest,
 }

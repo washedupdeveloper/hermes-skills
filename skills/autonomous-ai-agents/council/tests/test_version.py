@@ -10,12 +10,39 @@ import os
 import sys
 import tempfile
 import types
+import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("version", REPO / "scripts" / "version.py")
 version = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(version)
+
+
+class _DeployedCopy(unittest.SkipTest):
+    """A test that reads repo-only files was reached in a shipped copy.
+
+    Subclasses `unittest.SkipTest` because pytest maps that to a SKIP natively,
+    so this needs no pytest import and works in the standalone runner too.
+    Calling `pytest.skip()` directly was wrong: it raises `Skipped`, which is a
+    `BaseException`, so the standalone path crashed with exit 1 instead of
+    skipping.
+    """
+
+
+def _require_repo_source() -> None:
+    """Skip when this is a deployed copy, where the repo-only files are absent.
+
+    `sync_to_skill.py` is the copier and never ships, so its absence is what
+    distinguishes a deployment from the repository. Without this guard three
+    tests below die with `FileNotFoundError` on `pyproject.toml` and `docs/` in
+    every deployed skill -- measured, and the same guard `test_portability.py`
+    and `test_skills.py` already carry.
+    """
+    if (REPO / "scripts" / "sync_to_skill.py").exists():
+        return
+    raise _DeployedCopy("deployed copy: this test asserts the repo-side wiring")
+
 
 
 # --- semver arithmetic -------------------------------------------------------
@@ -86,6 +113,7 @@ def test_a_consistent_tree_has_no_problems():
 
 def test_the_real_repository_is_consistent():
     """The tree this test runs in must satisfy its own policy."""
+    _require_repo_source()
     problems = version.check()
     assert not problems, "\n".join(problems)
 
@@ -287,11 +315,13 @@ def test_bump_is_devshell_only():
 
 def test_find_root_prefers_the_directory_you_stand_in():
     """No argument means the repository the command was run in."""
+    _require_repo_source()
     assert os.path.samefile(version.find_root(), REPO)
 
 
 def test_find_root_walks_up_from_a_subdirectory():
     """A command run in `docs/` is still about the repository."""
+    _require_repo_source()
     saved = Path.cwd()
     os.chdir(REPO / "docs")
     try:
@@ -322,19 +352,22 @@ def test_find_root_refuses_a_directory_that_is_not_a_repository():
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
-    passed = failed = 0
+    passed = failed = skipped = 0
     for name, fn in tests:
         try:
             fn()
             print(f"  PASS {name}")
             passed += 1
+        except _DeployedCopy:
+            print(f"  SKIP {name} (deployed copy)")
+            skipped += 1
         except AssertionError as exc:
             print(f"  FAIL {name} -> {exc}")
             failed += 1
         except Exception as exc:  # noqa: BLE001
             print(f"  ERROR {name} -> {type(exc).__name__}: {exc}")
             failed += 1
-    print(f"\n{passed} passed, {failed} failed")
+    print(f"\n{passed} passed, {failed} failed, {skipped} skipped")
     return 1 if failed else 0
 
 
