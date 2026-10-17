@@ -49,6 +49,32 @@ jobs:
       - name: nix flake check
         run: nix flake check --keep-going
 
+  # The real product, loading the real tree. This is the only job that answers
+  # "does Hermes actually load these skills?" rather than "is the tree shaped
+  # right?" -- it installs Hermes and asks it, so a frontmatter field the real
+  # parser rejects fails here and nowhere else.
+  #
+  # It is a separate job rather than a flake check because the product is not a
+  # flake input of this repository, and pulling the whole agent into the gate
+  # would make every contributor's `nix flake check` fetch it.
+  live:
+    name: live hermes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: install hermes
+        run: |
+          nix profile install github:NousResearch/hermes-agent#minimal
+          # `nix profile install` lands in ~/.nix-profile/bin, which the nix
+          # action does not put on PATH.
+          echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
+      - name: every catalog skill loads in the real hermes
+        run: python scripts/verify-live.py
+
   # The portability guarantee, executed: nothing installed but pytest.
   tests:
     name: tests (${{ matrix.os }})

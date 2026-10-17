@@ -63,6 +63,11 @@ def test_no_dead_references():
     a prescriptive sentence ("Write the installer (`scripts/x.sh`)") names a file
     to CREATE, not one that exists, so flagging it would be wrong. Same for a
     placeholder (`references/<topic>.md`).
+
+    A pointer that climbs OUT of the skill directory is broken too, even when the
+    target exists in the repo: Hermes resolves a skill's paths relative to the
+    skill's own directory, so `../../scripts/x.py` works from a checkout and
+    dangles from anywhere the skill is read on its own.
     """
     write_verbs = re.compile(
         r"\b(write|create|add|author|generate|scaffold|produce)\b", re.I)
@@ -79,6 +84,10 @@ def test_no_dead_references():
                     continue  # prescriptive: the file does not exist yet
                 if not (p.parent / rel).exists():
                     bad.append(f"{p.parent.name} -> {rel}")
+            for m in re.finditer(r"`(\.\./[^`\s]+)`", line):
+                if write_verbs.search(line):
+                    continue
+                bad.append(f"{p.parent.name} -> {m.group(1)} (escapes the skill dir)")
     assert not bad, f"dead references: {bad}"
 
 

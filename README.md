@@ -192,19 +192,31 @@ upstream-managed: pull them from their source rather than hand-editing them here
 
 ## Checks
 
-`nix flake check` is the gate. It has three tiers, and the tier is chosen by what
-the assertion needs:
+`nix flake check` is the gate. It has two tiers plus one live check, and the tier
+is chosen by what the assertion needs:
 
 | tier | answers | cost |
 |---|---|---|
 | eval | what the tree **says** — frontmatter, the index window, names, encoding | milliseconds |
-| build | what the **shipped artifact** carries — self-containment, no caches, the whole tree | seconds |
 | run | **behaviour** — `setup.sh` against a stub, and the prose claims against the tree | seconds |
+| live | does the **real Hermes** load every skill | one install |
 
-`nix/tests.nix` holds the eval tier, `nix/checks.nix` the other two, and each
+`nix/tests.nix` holds the eval tier, `nix/checks.nix` the run tier, and each
 explains why its assertions belong where they are. The rule: an assertion belongs
 in the cheapest tier that can make it, and an interpreter is only needed by the
-last one.
+run tier.
+
+**There is no build tier, deliberately.** An earlier version built a simulated
+"shipped" tree and checked self-containment against it. No copier exists — Hermes
+reads `external_dirs` in place — so the artifact was fiction. It was deleted, and
+the `../`-escape rule it carried moved into `test_no_dead_references`, where the
+write-verb heuristic it needs already lives.
+
+`scripts/verify-live.py` is the live check: it installs nothing, it asks the
+`hermes` on your PATH, and the `live` CI job installs Hermes to run it. It knows
+about `environments:` — a skill gated on `[s6]` is *correctly* absent outside
+that environment, and a check that ignored the gate would fail on every host that
+is not the one the skill is for.
 
 The three commands below still work on a machine with no Nix, which is why they
 stay: they are the no-Nix path, not a second owner of the same property. The
@@ -212,7 +224,8 @@ properties that moved to Nix were removed from `tests/unit/test_repo_skills.py`,
 and its docstring says which and why.
 
 ```bash
-nix flake check                   # the gate: all three tiers
+nix flake check                   # the gate: eval + run tiers
+python scripts/verify-live.py     # the real Hermes loads every skill (exit 2 = no hermes)
 python -m pytest tests/ -q        # the retained Python suite; the docs gate is part of it
 python scripts/claim-audit.py     # exit 1 on any claim in the prose that is FALSE
 bash tests/e2e/test_setup.sh      # setup.sh, against a STUBBED `hermes`
@@ -220,9 +233,9 @@ bash tests/e2e/test_setup.sh      # setup.sh, against a STUBBED `hermes`
 
 | gate | what it enforces | where |
 |---|---|---|
-| `skills` | frontmatter complete and closed, name matches its directory, unique, description inside the index window, no CRLF | `nix/tests.nix` |
-| `skills-shipped` | a skill's own directory carries everything it points at, and nothing machine-generated ships | `nix/checks.nix` |
+| `skills` | frontmatter complete and closed, every key parsed, name matches its directory, unique, description inside the index window (boundary inclusive), no CRLF | `nix/tests.nix` |
 | `tests` | the retained unit suite, on **Linux, macOS and Windows** | `.github/workflows/ci.yml` |
+| `live` | the real Hermes discovers every catalog skill and honours `environments:` | same |
 | `claim audit` | every mechanical claim in the prose is checked, not asserted | same |
 | `setup.sh e2e` | the initializer merges rather than clobbers, and `--check` exits 1 on drift | same, Linux and macOS |
 

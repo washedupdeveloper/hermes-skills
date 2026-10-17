@@ -53,21 +53,31 @@ effect. The chain and its consequences are stated once, in
 ## Verify
 
 ```bash
-nix flake check                    # the gate: eval + build + run tiers
+nix flake check                    # the gate: eval + run tiers
+python3 scripts/verify-live.py     # the REAL hermes loads every skill
 python3 scripts/claim-audit.py     # exit 1 on any false claim
 ```
 
-`nix flake check` is the whole gate. It is three tiers — what the tree *says*
-(`nix/tests.nix`, milliseconds), what the *shipped artifact* carries
-(`nix/checks.nix`, seconds), and *behaviour* (`setup.sh` against a stub, plus the
-prose claims). The rule is that an assertion belongs in the cheapest tier that can
-make it, so a new check goes in `nix/tests.nix` unless it needs an artifact or an
-interpreter.
+`nix flake check` is the whole gate, in two tiers: what the tree *says*
+(`nix/tests.nix`, milliseconds) and *behaviour* (`nix/checks.nix` — the Python
+suite, the prose claims, `setup.sh` against a stub). The rule is that an
+assertion belongs in the cheapest tier that can make it, so a new check goes in
+`nix/tests.nix` unless it needs an interpreter.
+
+There is no build tier because there is no artifact: Hermes reads this tree in
+place through `external_dirs`. A check that simulated an installer was deleted
+rather than kept — see `nix/checks.nix`.
+
+`scripts/verify-live.py` is the end-to-end check: it asks the real `hermes`
+binary whether it discovers every catalog skill, and exits 2 when `hermes` is not
+installed so it cannot be mistaken for a pass. It honours `environments:`, which
+is Hermes' own offer-time gate — `hermes-s6-container-supervision` is *correctly*
+absent outside an s6 container.
 
 `nix flake check` sees only **git-tracked** files. A reference file that exists on
 disk and is not `git add`ed is absent from the store copy, so a skill pointing at
-it fails `skills-shipped` with a path that looks present — `git status` is the
-first check, and `git add` is the fix.
+it fails with a path that looks present — `git status` is the first check, and
+`git add` is the fix.
 
 It checks the mechanical claims in this repo's prose — counts, links, the description
 ceiling, the setup script's behaviour — and classifies each `PROVEN` / `FALSE` /

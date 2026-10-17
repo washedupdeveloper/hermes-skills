@@ -51,6 +51,11 @@ let
 
   rel = p: lib.removePrefix (toString src + "/") (toString p);
 
+  # The window predicate, named so the boundary can be exercised directly.
+  fitsWindow = s: builtins.stringLength s <= descMax;
+
+  repeatChar = n: lib.concatMapStrings (_: "x") (lib.range 1 n);
+
   files = L.skillFiles src;
 
   parsed = map (
@@ -126,10 +131,36 @@ in
       expected = [ ];
     };
 
+    # The boundary itself, not just "over it". The window check above rejects a
+    # description LONGER than `descMax`; a rule written as `>=` would reject the
+    # last character that fits, and nothing in the tree would notice because no
+    # skill sits exactly on the boundary. So the predicate is exercised at 57 and
+    # at 58 rather than inferred.
+    test_the_window_boundary_is_inclusive = {
+      expr = [
+        (fitsWindow (repeatChar descMax))
+        (fitsWindow (repeatChar (descMax + 1)))
+      ];
+      expected = [
+        true
+        false
+      ];
+    };
+
     test_no_description_is_empty = {
       expr = map (x: rel x.path) (
         builtins.filter (x: (x.fields.description or "") == "") catalog
       );
+      expected = [ ];
+    };
+
+    # A frontmatter line the field regex cannot parse would vanish silently, so
+    # every column-0 key must be present in the parsed map. This is the test that
+    # makes the parser's completeness observable rather than assumed.
+    test_every_frontmatter_key_is_parsed = {
+      expr = lib.concatMap (
+        x: map (k: "${rel x.path}: ${k}") (builtins.filter (k: !(x.fields ? ${k})) x.keys)
+      ) parsed;
       expected = [ ];
     };
 

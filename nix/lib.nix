@@ -73,11 +73,28 @@ rec {
             name = builtins.elemAt m 0;
             value = unquote (builtins.elemAt m 1);
           };
+      # Column-0 keys only. A nested key (inside `metadata:`) is indented, and
+      # treating it as a field would make the completeness test below vacuous.
+      #
+      # The charset is deliberately WIDER than the field regex's: a key the field
+      # parser cannot handle (`x-tag:`, `foo.bar:`) must still be counted, or the
+      # completeness test would agree with the parser's own blind spot and prove
+      # nothing.
+      topLevel =
+        line:
+        let
+          m = builtins.match "([^:[:space:]]+):.*" line;
+        in
+        if m == null then null else builtins.elemAt m 0;
     in
     {
       inherit startsWithFence;
       closed = closing != [ ] && isFence (builtins.head closing);
       fields = lib.listToAttrs (lib.filter (x: x != null) (map field inner));
+      # Every column-0 key in the frontmatter. Compared against `fields` by the
+      # completeness test, so a line the field regex cannot parse fails loudly
+      # instead of vanishing.
+      keys = lib.filter (x: x != null) (map topLevel inner);
       # +2: past the closing fence and its newline.
       body = lib.concatStringsSep "\n" (lib.drop (builtins.length inner + 2) lines);
     };
