@@ -117,6 +117,7 @@ let
     "sync_to_skill.py"
     "goal.py" # goal — the /goal contract and quality-gate emitter
     "cron.py" # cron — print or install a scheduled unattended review
+    "pr.py" # pr — post a run's verdict to a GitHub pull request
     "council_config.py" # shared: the one place configuration lives
     "entrypoint.py" # the container ENTRYPOINT
     "hermes_home.py" # shared: where HERMES_HOME is

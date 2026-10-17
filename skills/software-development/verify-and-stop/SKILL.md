@@ -69,6 +69,15 @@ report, stop.
 Stop immediately when the acceptance proof is complete. Report the commands, their
 results, and any unresolved risk — nothing else.
 
+**An unresolved item is not a deliverable until it carries a decision.** This user
+rejects a report that ends on a list of open questions — the ask is "solve this, or
+decide a course of action to move forwards". So every risk or gap you name goes out with
+one of three things attached: what you did about it, the decision you made and the reason,
+or the single question that genuinely needs them with the options ranked and one
+recommended. A flag with no next step reads as work handed back, however well documented
+it is — and a defect found while investigating a flag is worth more than the flag itself,
+so look before escalating.
+
 ## Failure modes this prevents
 
 - **Scope growth** — turning a verification task into an implementation task.

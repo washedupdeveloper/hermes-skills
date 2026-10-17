@@ -44,6 +44,19 @@ converts *unmeasured* into *passed*. Carry the distinction in the data structure
 ran and parsed) carry that uncertainty into the final score rather than inventing
 a value for it.
 
+**A rate with an empty denominator is `null` with a reason, not `0`.** The same rule one
+step out, where the missing input is a person rather than a tool: a reported rate
+(acceptance, addressed, usefulness) whose denominator is zero because nobody has supplied
+the judgements is *unmeasured*, and `0.0` reads in a table exactly like "nothing was
+accepted". Print `null`/`no data`, name the field and the values the reader must write to
+fill it, and state coverage beside the rate so a 100% over one judged finding out of forty
+does not read as a clean sweep. A supplied value outside the known set is a mistake to
+report, never a category to coerce it into — coercion silently invents a measurement.
+
+Before accepting "this metric needs a new signal", read the artifacts the pipeline already
+writes: a per-finding status field or a per-round score list usually holds it, and the gap
+is a missing computation rather than a missing input. Say which of the two it was.
+
 **A verdict the gate does not compute is a verdict it cannot make.** Every claim must
 be derived from the artifact on this run. A verdict written as a literal —
 `claim("...", "PROVEN")` with no check behind it — is indistinguishable in the output
