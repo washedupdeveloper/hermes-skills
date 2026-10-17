@@ -113,6 +113,16 @@ The shape, in order of importance:
   reports drift and changes nothing, **exiting 1 on drift** so it can be a CI gate;
   `--print` shows the desired state. Verify both exit codes unpiped — reading `$?`
   through a pipe gives the last stage's status, not the script's.
+- **A `--check` must not flag what the writer itself deletes.** If `apply` removes a
+  cache or a generated file after copying, the comparison has to skip the same paths,
+  or the two modes disagree by construction and the check can never pass again — the
+  artifact is correct and the gate says otherwise, forever. Measured: a copier deleted
+  `__pycache__` on write but compared the whole tree on `--check`, so 40 `.pyc` files
+  left by running the deployed suite in place made it report drift on a tree that was
+  byte-for-byte correct, and each "fix" resynced a clean tree and changed nothing. The
+  filter must be narrow — a genuinely stray file still has to be reported, which is the
+  half worth a test, because the easy mistake is disabling the check instead of
+  scoping it.
 - **Resolve its own location** (`$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)`), so
   it works from any clone path and on any OS. Never bake in a home directory.
 - **Merge, never clobber, list-valued settings.** Another entry in `external_dirs` may
