@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.1.0
+version: 1.2.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -124,19 +124,50 @@ two look interchangeable — both are called "the score" — and they are not. C
 expression the gate actually evaluates before deriving anything, then derive on that one;
 otherwise the threshold and its evidence are two different measurements sharing a name.
 
-**When the labelled classes overlap, no threshold is derivable — say so.** A separating
-threshold exists only if the worst known-good member scores above the best known-bad one.
-Measure both and compare before deriving anything: if the best known-bad sits within a
-rounding step of the worst known-good, the max-margin line falls between two members of
-the same population and the verdict turns on noise. This is normal, not a defect in the
-model — real repositories are not defect-free, so "known-good" and "known-bad" differ in
-*density*, not in kind, and any weighted mean of quality tracks density. Report the
-overlap with its numbers (the gap in points, and the margin the line would have), then
-keep the shipped threshold as an explicit **policy line**: say plainly that it is not a
-measured boundary, what it does separate (every member with a real finding from every
-member without), and what evidence would move it (a larger sample, more known-good
-members). Do not quietly lower it to make more repositories pass — that replaces a stated
-policy with an unstated one, which is the thing the write-up exists to prevent.
+**When the labelled classes overlap, derive the equivalence band — not a gap.** A
+*separating* threshold exists only if the worst known-good member scores above the best
+known-bad one; measure both before deriving anything. When they overlap, the max-margin
+line falls between two members of one population and the verdict turns on noise, so no
+point estimate is recoverable — and that is normal, not a defect in the model: real
+repositories are not defect-free, so "known-good" and "known-bad" differ in *density*,
+not in kind, and any weighted mean of quality tracks density. But "no threshold is
+derivable" overstates it, and leaving it there makes the parameter look unjustified when
+it is not. A threshold needs the set of values that yield **identical verdicts on every
+sample**, and that set is computable: `(max(defective), min(clean))`. Report the interval,
+its width, and where the shipped value sits inside it — the distance to each edge. Every
+value in the band is then a defensible policy, so the choice is a decision whose
+consequence is *measured* (none, on that evidence) rather than an open question; state
+what would reopen it, namely a sample landing outside the band. Do not quietly lower the
+threshold to make more members pass — that replaces a stated policy with an unstated one,
+which is what the write-up exists to prevent.
+
+**Probe a band edge with the real gate, never from a printed score.** The comparison is
+exact (`aggregate >= threshold`) while the printed score is rounded, so a member displayed
+at 89.23 can carry an aggregate of 89.2299… and *fail* `--threshold 89.23`. Both ends of
+the interval are open for that reason. Run the shipped gate at the edge and one epsilon
+either side, and read the exit codes; taking an edge from the displayed number puts the
+boundary a rounding step off, and the error is invisible because the numbers look equal.
+
+**A band built from one observation per member is only as wide as the noise.** Each score
+in the interval is a single run. If the member nearest the line can move more between runs
+than its distance to the line, the interval is not a band and the threshold is a coin
+flip. Measure repeat-run spread on that member before calling the band settled, and always
+quote the distance from the shipped value to the nearest edge — a member two points above
+the line sits inside the noise floor of any LLM-scored gate.
+
+**A new check is not trusted until you have watched it fail.** For each thing a check
+guards, break exactly that thing, confirm the check fails and names the break, then
+restore and confirm it passes. A check that cannot fail is indistinguishable from a
+passing one in a green run, so this failure mode is silent by construction. Where a check
+derives its expectation by extraction — parsing a list out of another file, grepping a
+manifest — assert the extraction is non-empty first (`test -s`), or a broken pattern
+compares two empty results and passes.
+
+**A claim that also lives in code has to change in the code.** Correcting a documented
+statement is not one edit: CLI output, wizard text, a generated config comment and the
+calibration manifest's own caveats each restate it, and each is a separate copy. Grep the
+source for the sentence, not just the docs. A tool that contradicts its own documentation
+is worse than either being wrong alone, because the reader cannot tell which to trust.
 
 **Calibrate from labelled evidence and record the result in a file.** An
 unrecorded calibration is a guess with extra steps: the moment the manifest is
@@ -158,8 +189,9 @@ code, and document that deleting the file restores uncalibrated behaviour.
 5. **Record** the parameters, the measured points, and the caveats in the manifest.
    Include the caveats — a calibration that overstates its coverage is worse than none.
 6. **Re-verify after any model change.** Changing weights or a curve silently moves
-   every historical score; re-run the labelled set and confirm the classes still
-   separate before trusting the new numbers.
+   every historical score; re-run the labelled set and confirm every member still lands
+   on its labelled side of the threshold — that the *verdicts* are unchanged. Whether the
+   classes separate is a different question, and the answer may legitimately be no.
 
 ## Driving the gate: the adaptive loop
 
