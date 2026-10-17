@@ -130,6 +130,77 @@ be *your* error rather than the test's: mutating `ports` inside
 `services.openssh.settings` instead of as its sibling silently changed nothing,
 and the "not caught" result was the mutation's fault, not the test's.
 
+**Verify a mutation APPLIED before concluding the test is vacuous.** `perl -0pi -e
+'s|a|b|'` reported success and changed nothing in one repo, so a real mutation read
+as "the check did not fire". After mutating, grep for the new text and print it;
+if the tool is unreliable, use the editor's patch operation, which reports a diff
+or refuses. A mutation that silently no-ops is indistinguishable from a vacuous
+assertion once you are filtering build output for `FAIL`.
+
+**A verification loop whose `if` tests a PIPELINE reports success regardless.**
+
+```sh
+# WRONG -- the condition is `tail`'s status, which is always 0
+if nix build .#checks.$c 2>&1 | grep -E 'FAIL|error' | tail -6; then :; else fail=$((fail+1)); fi
+```
+
+That loop printed `### FAILURES: 0 ###` over a run in which every check had
+failed. It is the worst kind of false green: the exact shape a human writes to
+*prove* a gate is red, reporting clean. Test the command, not the pipeline:
+
+```sh
+nix build .#checks.$c >/tmp/out 2>&1; status=$?    # sound
+set -o pipefail; nix build ... | tail -6; status=${PIPESTATUS[0]}   # sound
+```
+
+Two corollaries, both measured:
+
+- **`nix build --rebuild` is the wrong tool for a check that never built.** It
+  errors `some outputs ... are not valid, so checking is not possible` -- a falsy
+  failure that reads like a broken check. Drop `--rebuild` for a fresh build; the
+  derivation is new, so a plain build already executes it.
+- **`nix flake check` prints `running 0 flake checks` when every result is
+  cached, then `all checks passed!`.** A green summary over zero executions is
+  not evidence anything ran. Force re-execution per attribute and say which mode
+  produced the verdict.
+
+
+**A `runTests` group fails as an EVAL ERROR when an assertion's `expr` throws, and
+that error wins over every named failure in the group.** Asserting a nested key
+(`home.file."<path>".source`) means a renamed path produces
+`error: attribute '"<path>"' missing` and the group never reports which test
+failed. Split it: assert the KEYS with `builtins.attrNames` (a clean failure with
+both values), then the VALUE with `... or null` so a missing key reports as a
+failed test instead of aborting the group. Measured: a drifted link path failed
+three named tests once both were in place, and only an opaque eval error before.
+
+**A Nix build sandbox has no `/usr/bin/env`, so a script whose shebang is
+`#!/usr/bin/env bash` cannot be spawned at all.** The error is
+`FileNotFoundError: [Errno 2] No such file or directory: '<the script>'` -- it
+names the script, not the interpreter, so it reads as a missing file in a tree
+where `ls` shows the file. `patchShebangs $out` fixes a copied tree, but it only
+rewrites the FIRST line of each file: a stub created inside a heredoc keeps its
+`#!/usr/bin/env bash` and still fails. A second targeted
+`sed -i -E "s|^#![[:space:]]*/usr/bin/env[[:space:]]+bash\$|#!${pkgs.bash}/bin/bash|"`
+on the copy fixes that one, and it belongs in the CHECK's copy rather than the
+repo's test -- the sandbox limitation is the harness's, not the test's.
+
+**A tier that checks the source tree cannot see what a copier drops, and a tier
+that checks the artifact cannot see prose.** For a repo whose artifact is a tree of
+files (skills, docs, rubrics), build the artifact the installer would produce --
+marker file plus its support directories -- and assert self-containment against it:
+every pointer resolves INSIDE the shipped directory, and none climbs out with `../`.
+That last rule is the one a source-tree check cannot make, because `../x` resolves
+in the source and breaks once the directory ships alone. Pair it with a count
+parity between source and artifact so a copier that silently drops a skill fails
+too.
+
+**An untracked file is the most common cause of a build-tier failure that looks
+like a content bug.** A skill pointing at `references/new-file.md` that exists on
+disk but was never `git add`ed fails the artifact check with a path `ls` confirms is
+present, because the store copy carries tracked files only. Report it as the git
+problem it is -- `git status` first, `git add` the fix.
+
 **`nix flake check` already runs the pre-commit hooks, via `checks.pre-commit`.**
 git-hooks.nix's `check.enable = true` makes `checks.pre-commit` a derivation that
 does `git init` in a temp dir, commits, and runs `pre-commit run --all-files`
