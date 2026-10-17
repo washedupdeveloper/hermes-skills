@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.2.0
+version: 1.3.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -136,10 +136,13 @@ it is not. A threshold needs the set of values that yield **identical verdicts o
 sample**, and that set is computable: `(max(defective), min(clean))`. Report the interval,
 its width, and where the shipped value sits inside it — the distance to each edge. Every
 value in the band is then a defensible policy, so the choice is a decision whose
-consequence is *measured* (none, on that evidence) rather than an open question; state
-what would reopen it, namely a sample landing outside the band. Do not quietly lower the
-threshold to make more members pass — that replaces a stated policy with an unstated one,
-which is what the write-up exists to prevent.
+consequence is *measured* (none, on that evidence) rather than an open question. Do not
+quietly lower the threshold to make more members pass — that replaces a stated policy with
+an unstated one, which is what the write-up exists to prevent. **The band is provisional
+until you have tested its weakest input** — a member landing outside it reopens the
+question, and so does the member nearest the line turning out to move more between runs
+than its distance to it; the next two rules are that test, and they are not optional before
+the word "proven" is written down.
 
 **Probe a band edge with the real gate, never from a printed score.** The comparison is
 exact (`aggregate >= threshold`) while the printed score is rounded, so a member displayed
@@ -148,12 +151,45 @@ the interval are open for that reason. Run the shipped gate at the edge and one 
 either side, and read the exit codes; taking an edge from the displayed number puts the
 boundary a rounding step off, and the error is invisible because the numbers look equal.
 
-**A band built from one observation per member is only as wide as the noise.** Each score
-in the interval is a single run. If the member nearest the line can move more between runs
-than its distance to the line, the interval is not a band and the threshold is a coin
-flip. Measure repeat-run spread on that member before calling the band settled, and always
-quote the distance from the shipped value to the nearest edge — a member two points above
-the line sits inside the noise floor of any LLM-scored gate.
+**A band built from one observation per member is only as wide as the noise — and the noise
+must be measured at the configuration users run.** Each score in the interval is a single
+run. If the member nearest the line can move more between runs than its distance to the
+line, the interval is not a band and the threshold is a coin flip. Measure repeat-run
+spread on that member before calling the band settled, and always quote the distance from
+the shipped value to the nearest edge — a member two points above the line sits inside the
+noise floor of any LLM-scored gate. Measure those repeats at the **shipped default**, not
+at a cheaper one: a calibration taken at `--samples 1` against a shipped default of 5
+measures a different gate, and the band it produces describes a configuration nobody runs.
+
+**A recall parameter under-measured biases the score upward, in one direction.** More
+samples find more distinct findings; findings feed a density term; higher density scores
+lower. So a single-sample baseline is not a noisy estimate of the multi-sample score — it
+is a systematically *higher* one. A member that looks clean and passes at one sample can
+fail at five while gaining a real blocking finding the cheap run never surfaced. Before a
+repository or revision joins the **clean** class, measure it at the configuration the gate
+ships; otherwise the clean set is a set of under-sampled runs and every interval derived
+from it is an interval over inflated numbers. When the shipped default changes, every
+class membership established under the old one is unverified.
+
+**A coverage fraction of 1 is not determinism.** `score = beta*det + (1-beta)*llm` at
+beta = 1 removes only the LLM's *self-assigned* score. If `det` is computed from findings
+the reviewer produced — a density term, a severity-weighted count — then the "deterministic"
+half is a deterministic *formula over a non-deterministic input*, and the number still moves
+between runs on the same commit and toolchain. Document what beta actually covers ("the
+LLM's score does not enter") rather than "the score is deterministic"; the second sentence
+is false and it is the one a reader will quote back when a repeat run disagrees. A spread
+measured with beta = 1 is still reviewer variance, not measurement error.
+
+**Two bands that disagree are usually two samples, not a contradiction.** A stored
+manifest derives its interval from the labelled set it was fitted on; an independent
+evaluation set derives a different interval from different members, and both can be
+correct at once. Before reporting an inconsistency between a recorded parameter and a
+documented interval, identify the sample behind each — count the members, name the
+extremes — and check whether the shipped value sits inside **both**. If it does, the two
+numbers are two measurements of different populations, and the only real defect is a
+document that does not say which set produced its figures; state that, and do not "fix"
+a number that was never wrong. The reverse also holds: a figure quoted without its sample
+is not comparable to anything, so name the set whenever you print an interval.
 
 **A new check is not trusted until you have watched it fail.** For each thing a check
 guards, break exactly that thing, confirm the check fails and names the break, then
@@ -245,6 +281,21 @@ happened to mention first.
   wording belongs to whatever can check the environment (`doctor`), or to a neutral
   statement of what was observed. An instruction that contradicts the machine it is
   printed on costs the reader a round trip and teaches them to distrust the plan.
+- **Reusing a calibration measured at a non-default configuration.** A manifest records
+  numbers but not always the flags behind them, so a calibration taken at one sample count,
+  one scope or one mode stands in silently for a default it never measured — and the same
+  threshold evaluated at a different recall setting is a different gate. Record the
+  configuration beside the parameters, and re-derive when the shipped default differs from
+  the one calibrated. The tell that this has already happened: a baseline whose members
+  cluster suspiciously high, or one whose lowest clean member sits within a couple of
+  points of the threshold.
+- **Retracting a published measurement without retracting its dependents.** When a
+  baseline turns out to be under-sampled or misclassified, the number is the smallest part
+  of the correction: the derived interval, the class membership of every member, the
+  manifest caveat, the wizard text, the generated config comment and the README each restate
+  it. Grep for the figure and for the *claim* it supported, and mark the old record as a
+  record rather than deleting it — a superseded measurement that stays visible, labelled,
+  is what stops the next session re-deriving it.
 - **Reading a plateau off the sweep.** A sweep over observed scores cannot see the
   interior of the gap between classes; the plateau it reports is an artifact of
   rounding. Compute the separating interval from the labels.

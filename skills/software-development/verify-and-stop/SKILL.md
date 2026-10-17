@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.0.0
+version: 1.1.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -70,6 +70,24 @@ report, stop.
   supported a real conclusion, keep the conclusion and drop the arithmetic that no longer
   reproduces — do not keep an unreproducible number because the sentence reads better
   with it.
+- **A derived claim is only as good as the stability of its inputs — test the weakest one
+  before calling it proven.** When a conclusion is computed from several measured values
+  (an interval from a set of scores, a threshold from two classes, a projection from a
+  rate), the arithmetic can be flawless and the conclusion still wrong, because it inherits
+  every assumption underneath. Enumerate what the derivation takes for granted, rank them
+  by how likely they are to be false, and test the top one *before* the claim is written
+  down. The usual culprits: that each input is a stable measurement rather than one sample
+  of a noisy process; that the inputs were measured under the configuration that actually
+  ships; and that the members were correctly classified in the first place. "Proven" is a
+  claim about the assumptions, not about the arithmetic — and a derived number that ships
+  into a document is far more expensive to retract than to test, because everything
+  downstream restates it.
+- **Do not state a property in a summary that you have not run a command for.** A closing
+  report invites asides — "the mirror is in sync", "no other file references this", "the
+  config was untouched" — and each is a claim with the same standing as the ones you
+  measured. Either run the check and say what it returned, or mark it as unverified. The
+  cheap failure mode is worse than the expensive one: an aside is read as a finding because
+  it sits beside findings, so an unchecked one launders an assumption into the record.
 - **Measuring can change the thing you measured.** A verification command that runs tools
   over a fixture may write into it (`nix flake check` creates `flake.lock`), so the next
   run scores a tree the first one altered. Check `git status` on the fixture after a
@@ -77,13 +95,26 @@ report, stop.
 - **A new guard is unproven until you have watched it fail.** A check, validation or lint
   rule you just wrote asserts something about the world; the only evidence it asserts
   anything is a run where the world is wrong and the guard says so. Prove it by
-  **deliberately breaking the thing it guards**, one break at a time: apply a single
-  minimal break, run the guard, confirm it exits non-zero **and** its message names the
-  right cause, then restore and confirm the clean run returns. Two to four distinct breaks
-  is enough, and they should differ in kind rather than in spelling — a wrong value, a
-  missing dependency of the guard, and a boundary the guard derives rather than hardcodes
-  exercise three different failure paths. Restore is part of the procedure: a guard proven
-  by leaving the tree broken is a worse outcome than an unproven one. Print the verdict
+  **deliberately breaking the thing it guards**, one break at a time: apply a break that
+  actually changes the behaviour the guard observes, run the guard, confirm it exits
+  non-zero **and** its message names the right cause, then restore and confirm the clean
+  run returns. **A mutation that leaves the behaviour unchanged proves nothing**, and it
+  reads exactly like a guard with no teeth. When the fix has redundant layers — a
+  directory filter *and* a suffix filter, a length cap *and* a regex, two independent
+  conditions that each reject the same input — removing one leaves the other doing the
+  job, so a single break produces a clean run and you conclude the test is vacuous when
+  the test was fine and the mutation was insufficient. Remove **every** layer before
+  concluding that, and check the failure you finally get reproduces the original symptom
+  rather than a new one. Two to four distinct breaks is enough, and they should differ in
+  kind rather than in spelling — a wrong value, a missing dependency of the guard, and a
+  boundary the guard derives rather than hardcodes exercise three different failure paths.
+  **The negative fixture must differ from the good one in exactly the thing under test.**
+  A test asserting "no drift" fails for the wrong reason when its tree also carries a file
+  the source genuinely lacks: the assertion is correct, it is reporting a real defect, and
+  it is not the one you planted — so the run proves nothing about the rule you added and
+  the fixture has to be trimmed until that is the only difference left. Restore is part of
+  the procedure: a guard proven by leaving the tree broken is a worse outcome than an
+  unproven one. Print the verdict
   per break (`FAILED AS EXPECTED` / `PASSED — NO TEETH`) rather than eyeballing four runs,
   and re-run clean at the end so the report ends on the state you are shipping.
 

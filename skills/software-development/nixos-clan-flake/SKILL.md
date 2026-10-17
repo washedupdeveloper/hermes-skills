@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.1.0
+version: 1.2.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -112,6 +112,18 @@ Build the same flake from two different directories
 `/nix/store/...` path proves the lock file pins the whole set; a differing one means
 something outside the lock is leaking in. Run this before claiming "same toolchain
 everywhere".
+
+**A store path is an identity, not a copy of the repository — never answer a question
+about it by diffing its contents.** Two ways that misleads, both measured: a packaging
+derivation is not a transcription of the tree, so a legitimate output may simply omit a
+file the repo has (a "framework" tree that ships no `flake.nix`), and `diff` then reports
+a packaging decision as drift; and `cmp -s A B` returns non-zero for a **missing** file
+exactly as for a differing one, so "DIFFERS" from that command proves neither. Resolve it
+the way Nix does — `nix build --no-link --print-out-paths '.#<attr>'` and compare the
+path to the one you hold. When a consumer records a store path and you need to know which
+source produced it, build the candidate attributes: `.#framework` and `.#dev-framework`
+are different trees, and the right one is the tree whose content the consumer needs, not
+the attribute whose name sounds like the product.
 
 **A background process does not survive a WSL invocation — start the daemon and
 use it in the SAME script.** `nohup dockerd &` followed by the shell exiting leaves

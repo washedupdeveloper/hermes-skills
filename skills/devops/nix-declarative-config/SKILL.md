@@ -155,7 +155,16 @@ copy keeps the old files, and both look complete.
 3. **Read the output for removals.** A mirror copier PRUNES what the source lacks, so
    a sync that reports `REMOVED`/`EXTRA` is a different result from one that only adds.
    Say which happened.
-4. **Verify with a triad, never the copier's own "in sync".** It compares what it
+4. **Know each side's shape before you diff them.** The two trees are not always the same
+   object at the same depth: a mirror may hold the whole framework tree (`SKILL.md`,
+   `scripts/`, `tests/`, `nix/`, `assets/`) while the repo's `skills/<name>/` holds only that
+   unit's own folder. Diffing those two reports a pile of `Only in <mirror>: …` lines that
+   reads as catastrophic drift and is actually a comparison of a subtree against a whole
+   tree. Match the pair deliberately — the unit's `SKILL.md` against the mirror's
+   `SKILL.md`, the repo's `scripts/` against the mirror's `scripts/` — and say which pair you
+   compared. A mismatch of *scope* looks exactly like a mismatch of *content*, and the wrong
+   conclusion from it is either "massive drift" or, if you stop looking there, "in sync".
+5. **Verify with a triad, never the copier's own "in sync".** It compares what it
    knows how to compare -- often LF-normalised, and against a source it resolved itself
    (a store path, not the working tree you are looking at). Check (a) the previously-drifting
    files byte-for-byte with `cmp` against the source; (b) the file modes did not gain `+x`
@@ -166,7 +175,7 @@ copy keeps the old files, and both look complete.
    difference, because a copier vendors committed content, so that is not drift; and the
    sync's source is one specific commit, so name it -- `HEAD` moving afterwards makes "in
    sync" true of a tree that no longer exists.
-5. **Stage only the vendored path**, and say what you left alone. Where the user has
+6. **Stage only the vendored path**, and say what you left alone. Where the user has
    other work in progress, an unrelated unstaged file is theirs: report it, do not
    revert it, and commit with `--only -- <path>`.
 
