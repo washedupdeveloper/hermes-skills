@@ -698,7 +698,15 @@ let
       from pathlib import Path
 
       OUT_PATH = re.compile(r"exactly this path:\s+(\S+)")
-      DIMS = ["security", "correctness", "readability", "architecture", "performance"]
+      # The dimension set is the ROUND's, not this stub's. Hardcoding it meant a
+      # dimension could never be ADDED under test: the stub would answer a
+      # six-dimension round with five scores, and the missing dimension would look
+      # like a gate failure rather than a test double that did not know about it.
+      # `COUNCIL_STUB_DIMS` lets the add-a-dimension test say what the round has.
+      DIMS = [d.strip() for d in os.environ.get("COUNCIL_STUB_DIMS", "").split(",")
+              if d.strip()] or [
+          "security", "correctness", "readability", "architecture", "performance",
+      ]
 
 
       def arg(flag):
@@ -765,6 +773,15 @@ let
       target.parent.mkdir(parents=True, exist_ok=True)
       findings = []
       scores = {d: 100 for d in DIMS}
+      # One dimension can be scored low on demand (`accessibility:40`). Without it
+      # a test can only show that a new dimension APPEARS in the round; scoring it
+      # low is what shows it MOVES the aggregate, i.e. that it is really part of
+      # the score rather than a file nobody reads.
+      low = os.environ.get("COUNCIL_STUB_LOW", "")
+      if ":" in low:
+          name, value = low.split(":", 1)
+          if name in scores:
+              scores[name] = float(value)
       if os.environ.get("VM_STUB_DEFECT") == "high":
           # One open high finding, and every score still 100. That isolates the
           # BLOCKING rule: the aggregate passes and the gate must refuse a pass
@@ -920,6 +937,74 @@ let
         # 7. the modules are still not programs, inside the VM too.
         machine.fail("python3 ${mkFramework pkgs "user"}/scripts/probes.py --list")
         machine.succeed("council probes --list >/dev/null")
+
+        # 8. THE OTHER ACCEPTANCE CLAUSE, EXECUTED: "a new reviewer can be added
+        #    following the docs alone". The framework is a read-only store path, so
+        #    the documented edits go on a writable copy, and the dispatcher is
+        #    copied and re-pointed at it -- that keeps every toolchain export
+        #    verbatim instead of restating them here.
+        machine.succeed(
+            "cp -r ${mkFramework pkgs "user"} /tmp/fw && chmod -R u+w /tmp/fw")
+        added = machine.succeed("python3 ${./vm-add-dimension.py} /tmp/fw")
+        machine.log(added)
+        assert "6 dimensions" in added, added
+
+        machine.succeed("mkdir -p /usr/local/bin")
+        machine.succeed(
+            "sed 's|exec python3 .*/scripts/council.py|"
+            "exec python3 /tmp/fw/scripts/council.py|' "
+            "\"$(readlink -f \"$(command -v council)\")\" > /usr/local/bin/council-mod"
+        )
+        machine.succeed("chmod +x /usr/local/bin/council-mod")
+        assert machine.succeed(
+            "grep -c /tmp/fw/scripts/council.py /usr/local/bin/council-mod"
+        ).strip() == "1", "the wrapper does not point at the modified tree"
+
+        # step 4: reinstall, so the reviewer profile carries the new rubric. The doc
+        # used to say the installer globbed reviewer-*/SKILL.md and needed no edit;
+        # it does not -- CORE_SKILLS is an explicit list -- so the editor above adds
+        # the rubric there and this asserts the profile actually received it.
+        installed = machine.succeed("/usr/local/bin/council-mod setup bots 2>&1")
+        machine.log(installed)
+        # The count, and the file itself: a profile that says six but is missing the
+        # rubric would still answer with no criteria for that dimension.
+        assert "6 skill(s)" in installed, installed
+        machine.succeed(
+            "test -f /root/.hermes/profiles/council-generalist/skills/"
+            "reviewer-accessibility/SKILL.md")
+
+        # 9. the round must carry the dimension, and the dimension must MOVE THE
+        #    NUMBER. Step 4's five-dimension run scored exactly [100.0]; a dimension
+        #    that is merely present leaves that unchanged, so the stub scores this
+        #    one 40 and the aggregate has to land on the rebalanced weighted mean:
+        #    0.93*100 + 0.07*40 = 95.8.
+        machine.succeed("rm -rf /tmp/target2 && mkdir -p /tmp/target2")
+        machine.succeed("printf 'def add(a, b):\\n    return a + b\\n' > /tmp/target2/main.py")
+        out2 = machine.succeed(
+            "COUNCIL_STUB_DIMS=security,correctness,readability,architecture,"
+            "performance,accessibility "
+            "COUNCIL_STUB_LOW=accessibility:40 "
+            "/usr/local/bin/council-mod review /tmp/target2 --mode advisory --max-rounds 1 "
+            "--samples 1 --threshold 90 2>&1"
+        )
+        machine.log(out2)
+        run2 = machine.succeed("ls -d /tmp/target2/.review-council/*/ | tail -1").strip()
+        machine.log(f"six-dimension run dir: {run2}")
+        for dim in ("security", "correctness", "readability", "architecture",
+                    "performance", "accessibility"):
+            machine.succeed(f"test -f {run2}/round-1/{dim}.json")
+
+        six = machine.succeed(
+            f"python3 -c 'import json; d=json.load(open(\"{run2}/outcome.json\")); "
+            f"print(d[\"outcome\"], d[\"scores\"][-1])'"
+        ).strip()
+        machine.log(f"six-dimension run: {six}")
+        verdict, aggregate = six.split()[0], float(six.split()[1])
+        assert verdict == "satisfied", six
+        assert aggregate < 99.9, (
+            f"the added dimension did not move the aggregate: {six}")
+        assert abs(aggregate - 95.8) < 1.0, (
+            f"the aggregate is not the rebalanced weighted mean: {six}")
       '';
     };
 in

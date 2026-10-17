@@ -95,9 +95,9 @@ CORE_SKILLS: Dict[str, tuple] = {
 DEFAULTS: Dict[str, Any] = {
     "schema_version": SCHEMA_VERSION,
     "review": {
-        # The gate. Lower is stricter. PROVISIONAL — a policy value inside the
-        # measured equivalence band (80.63, 89.23); every threshold in that band
-        # gives the same verdict on all seven samples. docs/CALIBRATION.md.
+        # The gate. Lower is stricter. PROVISIONAL — the band that follows from the
+        # measured scores, (80.63, 89.23), assumes they are exact, and they are not:
+        # four repeat runs of one clean repo spread 3.57 points. docs/CALIBRATION.md.
         "threshold": 87.1141,
         # How many reviewer samples per round. More is more recall, more time.
         "samples": 5,
@@ -285,9 +285,9 @@ def render(cfg: Dict[str, Any]) -> str:
         "",
         "[review]",
         "# The gate. A run must score at least this to be SATISFIED.",
-        "# Lower is stricter. PROVISIONAL: a policy value inside a measured",
-        "# equivalence band (80.63, 89.23) -- every threshold in that band gives",
-        "# the same verdict on all seven measured samples. docs/CALIBRATION.md.",
+        "# Lower is stricter. PROVISIONAL: the band that follows from the measured",
+        "# scores, (80.63, 89.23), assumes they are exact -- and they are not. Four",
+        "# repeat runs of one clean repo spread 3.57 points. docs/CALIBRATION.md.",
         f"threshold = {review.get('threshold')}",
         "# Reviewer samples per round. More samples find more, and cost more time.",
         f"samples = {review.get('samples')}",

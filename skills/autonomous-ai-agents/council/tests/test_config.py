@@ -186,6 +186,40 @@ def test_core_skills_are_static_and_exclude_the_council_skill():
     assert "council" not in every, "the council's own skill is not a bot rubric"
 
 
+def test_every_dimension_has_its_rubric_in_the_core_list():
+    """A dimension and its rubric are one decision, so the two lists must agree.
+
+    This is the silent failure docs/EXTENDING.md warns about: the loop fans out to
+    a dimension whose rubric is not in `CORE_SKILLS`, so the reviewer is installed
+    WITHOUT it, answers with no criteria, and reports nothing. Nothing else in the
+    pipeline notices — the round completes, the merge buckets an empty dimension,
+    and the run looks quiet rather than misconfigured.
+
+    The doc used to say the installer globbed `reviewer-*/SKILL.md` and needed no
+    edit. It does not: `CORE_SKILLS` is an explicit list on purpose. Following the
+    doc as written produced exactly the silent failure above, which is how this
+    test came to exist.
+    """
+    import council_loop as loop_mod  # noqa: PLC0415 - after sys.path is set
+
+    core = set(cfg_mod.CORE_SKILLS["reviewer"])
+    missing = sorted(
+        spec["rubric"] for spec in loop_mod.DIMENSION_SPEC.values()
+        if spec["rubric"] not in core
+    )
+    assert not missing, (
+        f"dimensions whose rubric is not a reviewer core skill: {missing}. "
+        "Add them to CORE_SKILLS['reviewer'] in scripts/council_config.py, or the "
+        "reviewer is installed without that rubric and reports nothing for it."
+    )
+
+    # The reverse direction is a different bug: a core rubric no dimension names is
+    # installed into every profile and can never produce a finding the gate reads.
+    rubrics = {spec["rubric"] for spec in loop_mod.DIMENSION_SPEC.values()}
+    orphaned = sorted(core - rubrics)
+    assert not orphaned, f"core skills that no dimension names: {orphaned}"
+
+
 def test_every_member_declares_core_and_optional_skills():
     """Both halves must be present and render, so the file a user edits shows them."""
     text = cfg_mod.render(cfg_mod.DEFAULTS)
