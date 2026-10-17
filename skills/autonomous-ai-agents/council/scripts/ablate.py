@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import importlib.util as _shared_util
 import json
 import os
 import re
@@ -30,6 +31,14 @@ from council_loop import (  # noqa: E402  (path shim must run first)
     run_hermes,
     run_probes,
 )
+
+# `_shared` by path, like every sibling here -- see its own docstring for why a
+# plain import would not be safe.
+_SHARED_SPEC = _shared_util.spec_from_file_location(
+    "_shared", Path(__file__).resolve().parent / "_shared.py")
+assert _SHARED_SPEC is not None and _SHARED_SPEC.loader is not None, "_shared.py"
+_shared = _shared_util.module_from_spec(_SHARED_SPEC)
+_SHARED_SPEC.loader.exec_module(_shared)
 
 GENERALIST = "council-generalist"
 GENERALIST_BARE = "council-generalist-bare"
@@ -106,7 +115,7 @@ in this shape:
     "tools_run": [{{"name": "<tool>", "cmd": "<cmd>", "ran": <bool>,
                     "parsed": <bool>, "signal": <0-100 or null>}}],
     "findings": [{{"id": "{dim_prefix}-0001", "severity": "critical|high|medium|low|info",
-                   "status": "open|fixed|wontfix|accepted",
+                   "status": "open|accepted|fixed|wontfix|rejected",
                    "location": {{"path": "<p>", "line_range": "<a-b>"}},
                    "claim": "<verbatim-grounded claim>",
                    "falsifiable_check": "<how to verify>"}}],
@@ -213,10 +222,7 @@ def _norm_path(value: Any) -> str:
     leading run of `.` and `/` characters and so would have mangled a path like
     `...`. Repo-relative paths do not begin with those, so nothing observable moves.
     """
-    text = str(value or "").strip().replace("\\", "/")
-    while text.startswith("./"):
-        text = text[2:]
-    return text
+    return _shared.norm_path(value)
 
 
 def _fingerprint(finding: Dict[str, Any]) -> str:
@@ -225,13 +231,7 @@ def _fingerprint(finding: Dict[str, Any]) -> str:
     Deliberately coarse: the claim text is normalised hard, because two arms
     describing the same defect will not phrase it identically.
     """
-    loc = finding.get("location") or {}
-    path = _norm_path(loc.get("path"))
-    lines = str(loc.get("line_range") or "").strip()
-    claim = str(finding.get("claim") or "")
-    claim = re.sub(r"[^a-z0-9 ]+", " ", claim.lower())
-    claim = " ".join(claim.split())[:120]
-    return f"{path}|{lines}|{claim}"
+    return _shared.fingerprint(finding)
 
 
 def _lines_of(line_range: Any) -> Tuple[int, int]:

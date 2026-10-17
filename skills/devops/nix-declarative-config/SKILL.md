@@ -127,6 +127,34 @@ The shape, in order of importance:
 Test the merge branch explicitly, not just the happy path: a machine that already has
 an unrelated entry is the case the live run never exercises once the setting is set.
 
+### Syncing a vendored copy back to its source
+
+When a repo's tree is vendored into another repo — a skill copied into a skills
+library, a framework mirrored into a consumer — the two copies drift and nothing
+says so. The drift is one-directional and invisible: the source moves, the vendored
+copy keeps the old files, and both look complete.
+
+1. **Use the repo's own copier; do not hand-copy.** Look for one first (`setup
+   skill`, `sync_to_*.py`, a `--check` flag). It encodes the shipping manifest —
+   which files ship, which never do, what gets pruned — and a hand copy will include
+   or omit the wrong ones. Run `--check` before writing: it lists exactly the drift,
+   changes nothing, and exits 1, so it doubles as a gate.
+2. **Know what the copier syncs FROM.** It may sync the *store build* of the
+   framework rather than the working tree; the `--check` header names the source path.
+   Untracked files are absent from that copy, so they will not sync — `git add` first.
+3. **Read the output for removals.** A mirror copier PRUNES what the source lacks, so
+   a sync that reports `REMOVED`/`EXTRA` is a different result from one that only adds.
+   Say which happened.
+4. **Verify with a triad, never the copier's own "in sync".** It compares what it
+   knows how to compare. Check (a) the previously-drifting files byte-for-byte with
+   `cmp` against the source; (b) the file modes did not gain `+x` from the copy; and
+   (c) for anything a flake installs, re-evaluate the deployed artifact —
+   `nix eval .#packages.<system>` — because a flake whose `nix/` modules are missing
+   evaluates to NOTHING while every file "exists". Then run the synced tests.
+5. **Stage only the vendored path**, and say what you left alone. Where the user has
+   other work in progress, an unrelated unstaged file is theirs: report it, do not
+   revert it, and commit with `--only -- <path>`.
+
 ## The Hermes desktop app (home-manager)
 
 `programs.hermes-agent.desktop.enable` adds `hermes-desktop` to `home.packages` and an XDG launcher entry. It is a passthru of the same agent package and the wrapper points `HERMES_DESKTOP_HERMES` at the Nix-built `hermes`, so it installs no second runtime and downloads nothing on first start. It does not replace the CLI or TUI — every surface shares one `HERMES_HOME`, so there is nothing to disable.
@@ -209,6 +237,22 @@ Option names, defaults, deprecations and published guidance differ between the u
 
 - **Experimental features and modern syntax:** the bootstrap rule (a `|>` written in `flake.nix` itself can never be self-enabled, but one in an **imported** module can -- so set `nixConfig.extra-experimental-features` and do not argue against it), the literal-attribute-set rule for `flake.nix` and `nixConfig`, `|>` semantics, which features are worth enabling, and the `nix.settings.experimental-features` concatenation/`mkDefault` trap are all in `references/nix-experimental-features.md`. Read it before enabling a feature or writing a pipe.
 
+- **`nix flake check` and `nix eval` WRITE `flake.lock` into the tree they run against.**
+  Any tool that runs nix over a user's repository must pass `--no-write-lock-file`, or a
+  "read-only" review leaves a new untracked file in the working copy — and if the target
+  is a fixture whose own hashes you pin, the next run scores a tree you silently changed.
+  The flag must follow the **subcommand**: `nix flake check --no-write-lock-file` is
+  accepted, `nix flake --no-write-lock-file check` fails with `unrecognised flag`. Inject
+  it at the one place every nix invocation funnels through rather than at each call site,
+  and test both halves — flag present and positioned, and non-nix commands untouched.
+- **A nix-built CLI cannot find the working tree from `__file__`.** The installed command
+  is a launcher into a store copy of the package, so `Path(__file__).parent.parent` is a
+  `/nix/store/…` path — and a shipped tree deliberately carries no build metadata
+  (`pyproject.toml`, `CHANGELOG.md`), so a tool that resolves its repository that way
+  fails with `FileNotFoundError` on a file the user is looking at. Resolve the root from
+  **CWD then upwards**, offer `--repo <path>` to override, and keep the module's own
+  location only as the last resort — which is exactly right for a sandboxed nix check
+  that runs the file from a copy of the tree it should inspect.
 - **Comments inside a `writeShellScript` / `runCommand` body are part of the derivation text**, so a comment-only edit there changes the store path and everything downstream of it (a systemd unit's `ExecStart`, the home-manager generation, `/etc`, `system.build.toplevel`). Consequences: (a) do not claim "the derivation is byte-identical" for a change that touches a script body -- check where the comment sits first; (b) when the derivation *does* move for a comment-only edit, prove the cause by swapping just that file back and forth and re-evaluating, rather than assuming something functional changed. Comments in a plain module (not a string) do not affect any derivation, which is why a flake refactor can leave `system.build.toplevel` byte-identical while a script comment cannot.
 - **`nix flake check` silently skips outputs it does not recognise.** It knows a fixed set of output names; anything else prints `warning: unknown flake output '<name>'` and is *not* evaluated. A broken `topology`, `clan` or `clanInternals` output therefore passes the check untouched -- infra carried a `topology` output that had never once evaluated, and the only visible symptom was a dangling `result` symlink. Pair every custom output with a `checks.<system>.<name>` entry pointing at it, so a regression fails the check instead of waiting to be discovered. Two corollaries decide whether a **build output** is verified at all:
   - **A check must BUILD the artifact, not merely name it.** Until a check builds it, the artifact is verified by whatever separate workflow builds it and by nothing else — so "it is a pure derivation, it must be fine" is inference, not evidence. A `dockerTools.buildLayeredImage` output is a gzipped tarball, so building it needs **no docker daemon** and can be an ordinary `runCommand` (`test -s ${mkContainer pkgs}`), which is what lets the image be covered by the gate; a test needing KVM or a daemon cannot be, and stays a manual `nix build .#<name>`. Where a build is cheap and daemonless, prefer the check and let the separate workflow do only what a check cannot (publishing).

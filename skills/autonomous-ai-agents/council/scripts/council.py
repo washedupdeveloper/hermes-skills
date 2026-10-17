@@ -41,7 +41,10 @@ VERBS: Dict[str, Tuple[str, str, bool, str]] = {
     "ablate": ("ablate.py", "dev", True, "the four-arm ablation behind M8.5"),
     "golden": ("golden.py", "dev", True, "replay fixed inputs and diff against pinned values"),
     "baseline": ("baseline.py", "user", True, "report the baseline, or what changed since it"),
+    "metrics": ("metrics.py", "user", True, "acceptance, addressed and iterations from judged findings"),
     "goal": ("goal.py", "user", True, "express a run as a native Hermes /goal + quality gate"),
+    "cron": ("cron.py", "user", True, "print or install a scheduled unattended review"),
+    "version": ("version.py", "dev", True, "check or bump the release version (docs/VERSIONING.md)"),
     "corpus": ("inject_defects.py", "dev", True, "build a defect corpus with independent truth"),
 }
 

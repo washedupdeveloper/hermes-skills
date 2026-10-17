@@ -71,8 +71,12 @@ nix eval --option allow-import-from-derivation false .#<attr>   # IFD gate: 0 = 
 nix flake check --no-build                        # eval-only cost
 ```
 
+> **Devshell only:** `nix-tree`, `nix-diff` and `nix-du` are contributor tooling, NOT
+> in the shipped toolchain — a container review will not have them. This dimension
+> ships `nix path-info`, `nix store diff-closures`, `nix eval` and `nix flake check`.
+
 > **Correction:** `nix store du` **does not exist**. Use `nix path-info -Sh`,
-> `du -sh /nix/store`, or `nix-du`.
+> `du -sh /nix/store`, or (devshell) `nix-du`.
 
 **Gate (multiplicative):** IFD present → **performance category × 0.6**.
 

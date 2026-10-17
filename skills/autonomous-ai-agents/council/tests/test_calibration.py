@@ -232,6 +232,53 @@ def test_the_shipped_manifest_loads():
     assert cal_manifest["threshold"]["recommended"] > 0
 
 
+# --- the recalibration path (M8) -------------------------------------------
+
+def _measured():
+    """Two labelled points, in the shape a `--ladder` run records."""
+    return [
+        {"label": "good", "level": 0, "path": "/g", "defects_seeded": 0,
+         "kloc": 1.0, "density": {"statix": 0.1}},
+        {"label": "bad", "level": 2, "path": "/b", "defects_seeded": 2,
+         "kloc": 1.0, "density": {"statix": 0.5}},
+    ]
+
+
+def test_recalibrate_keeps_the_measurements_it_was_given():
+    """Measurement is the expensive half, so a re-tuned manifest must stay
+    re-tunable — dropping `measured` makes a second `--recalibrate` impossible."""
+    out = cal.recalibrate(_measured(), k=1.2)
+    assert out["measured"] == _measured(), (
+        "recalibrate dropped its measurements, so its output cannot be re-tuned"
+    )
+
+
+def test_recalibrate_retunes_the_threshold_without_remeasuring():
+    """The point of splitting measurement from arithmetic: k moves the threshold
+    with no toolchain sweep."""
+    a = cal.recalibrate(_measured(), k=1.2)
+    b = cal.recalibrate(_measured(), k=3.0)
+    assert a["recommended_threshold"] is not None
+    assert a["recommended_threshold"]["threshold"] != b["recommended_threshold"]["threshold"], (
+        "k did not move the threshold"
+    )
+    assert a["halflife_k"] == 1.2 and b["halflife_k"] == 3.0
+
+
+def test_a_labelless_manifest_yields_no_threshold():
+    """No labels means no threshold, and that is the honest answer.
+
+    A sweep-based fallback looks tempting here and is wrong: `sweep_threshold`
+    requires both classes too, so it returns [] for exactly the points where
+    `choose_threshold` returns None. Such a fallback could only ever contribute
+    None, which is why there is none. This test pins that decision.
+    """
+    unlabelled = [{k: v for k, v in m.items() if k != "label"} for m in _measured()]
+    out = cal.recalibrate(unlabelled, k=1.2)
+    assert out["recommended_threshold"] is None
+    assert out["sweep"] == [], "a one-class sweep must produce no rows"
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

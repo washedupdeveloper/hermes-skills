@@ -1352,6 +1352,7 @@ def test_merge_yields_a_nonzero_beta_for_a_nix_repo():
             "scores": {"security": 80}, "findings": [],
             "tools_run": [
                 {"cmd": "statix check .", "ran": True, "parsed": True},
+                {"cmd": "gitleaks detect", "ran": True, "parsed": True},
                 {"cmd": "secret-grep", "ran": True, "parsed": True}]})
         loop.merge_generalist_samples([s], tmp)
         review = json.loads((tmp / "security.json").read_text())

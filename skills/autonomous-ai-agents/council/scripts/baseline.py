@@ -7,12 +7,21 @@ meant at baseline. Invariants and invalidation rules: docs/BASELINE.md.
 from __future__ import annotations
 
 import argparse
+import importlib.util as _shared_util
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+# `_shared` by path, like every sibling here -- see its own docstring for why a
+# plain import would not be safe.
+_SHARED_SPEC = _shared_util.spec_from_file_location(
+    "_shared", Path(__file__).resolve().parent / "_shared.py")
+assert _SHARED_SPEC is not None and _SHARED_SPEC.loader is not None, "_shared.py"
+_shared = _shared_util.module_from_spec(_SHARED_SPEC)
+_SHARED_SPEC.loader.exec_module(_shared)
 
 #: The five dimension files a complete round must have.
 DIMENSIONS = ("security", "correctness", "readability", "architecture", "performance")
@@ -25,10 +34,7 @@ BASELINE_SCOPES = ("whole-repo",)
 
 def norm_path(value: Any) -> str:
     """Repo-relative, forward-slashed. A Windows checkout may echo backslashes."""
-    text = str(value or "").strip().replace("\\", "/")
-    while text.startswith("./"):
-        text = text[2:]
-    return text
+    return _shared.norm_path(value)
 
 
 def fingerprint(finding: Dict[str, Any]) -> str:
@@ -42,13 +48,7 @@ def fingerprint(finding: Dict[str, Any]) -> str:
     Deliberately coarse -- the claim is normalised hard, because two passes
     describing the same defect will not phrase it identically.
     """
-    loc = finding.get("location") or {}
-    path = norm_path(loc.get("path"))
-    lines = str(loc.get("line_range") or "").strip()
-    claim = str(finding.get("claim") or "")
-    claim = re.sub(r"[^a-z0-9 ]+", " ", claim.lower())
-    claim = " ".join(claim.split())[:120]
-    return f"{path}|{lines}|{claim}"
+    return _shared.fingerprint(finding)
 
 
 #: A URL is stripped before scanning, so its host and path cannot be mistaken
@@ -102,10 +102,6 @@ def _git(repo: Path, *args: str) -> str:
             f"git {' '.join(args)} failed in {repo}: {proc.stderr.strip()}"
         )
     return proc.stdout
-
-
-def head_sha(repo: Path) -> str:
-    return _git(repo, "rev-parse", "HEAD").strip()
 
 
 def changed_files(repo: Path, since_sha: str) -> List[str]:
@@ -314,22 +310,6 @@ def merge_into_round(round_dir: Path, carried: Sequence[Dict[str, Any]]) -> Dict
             encoding="utf-8", newline="\n",
         )
     return added
-
-
-def carried_llm_scores(
-    baseline_scores: Dict[str, float],
-    changed: Iterable[str],
-    findings: Sequence[Dict[str, Any]],
-) -> Dict[str, float]:
-    """The baseline LLM score per dimension, for dimensions not fully re-read.
-
-    A reviewer that saw only the changed files cannot honestly score the whole
-    repository, so its self-assigned score is discarded for those dimensions and
-    the baseline's is carried. `det` still moves -- it is computed from
-    `carried + new` findings and the freshly re-run probes -- so a regression in
-    the changed files is not lost; it lands in the deterministic half.
-    """
-    return dict(baseline_scores)
 
 
 # --- CLI --------------------------------------------------------------------

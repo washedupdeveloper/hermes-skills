@@ -89,7 +89,7 @@ def _platform_keys() -> Tuple[str, ...]:
 
 # --- Nix: the declarative, pinned path --------------------------------------
 #
-# Nix is the PREFERRED provisioning mechanism: flake.nix declares the tool set,
+# Nix is the PREFERRED provisioning mechanism: nix/builders.nix declares the tool set,
 # flake.lock pins the exact nixpkgs revision, and `nix build .#toolchain` yields
 # the same store path on every machine. Nothing is installed imperatively and
 # nothing drifts. The pip/brew/scoop hints below exist only as a fallback for
@@ -173,9 +173,10 @@ def tool_available(name: str) -> bool:
 def install_command(name: str) -> Optional[str]:
     """How to get *name*.
 
-    Nix first, always: the answer is to declare it in flake.nix and rebuild, so
-    the tool set stays pinned and reproducible. The imperative installers are
-    only offered when the tool is genuinely unavailable through the flake.
+    Nix first, always: the answer is to declare it in nix/builders.nix's `toolNames`
+    and rebuild, so the tool set stays pinned and reproducible. The imperative
+    installers are only offered when the tool is genuinely unavailable through the
+    flake.
     """
     status = nix_status()
     if status["available"]:
@@ -400,8 +401,9 @@ def render(report: Dict[str, Any]) -> str:
         lines.append("  Note: a missing analyzer does not fail the run — it lowers beta, so")
         lines.append("  the dimension is scored on reviewer judgement alone.")
         if nix.get("available"):
-            lines.append("  Provision declaratively: declare the tool in flake.nix's")
-            lines.append("  toolNames, then rebuild with `nix build .#toolchain`.")
+            lines.append("  Provision declaratively: declare the tool in")
+            lines.append("  nix/builders.nix's toolNames, then rebuild with")
+            lines.append("  `nix build .#toolchain`.")
     lines.extend(calibration_note(Path(report["repo"])))
     return "\n".join(lines)
 

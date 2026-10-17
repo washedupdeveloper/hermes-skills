@@ -286,12 +286,25 @@ def test_the_launchers_pass_the_flake_location():
     """Both entry points must set REVIEW_COUNCIL_FLAKE_DIR, or `setup skill` from
     the nix app or the container would refuse — and from the image there is no
     checkout to fall back to."""
-    flake = (REPO / "flake.nix").read_text(encoding="utf-8")
-    assert flake.count("REVIEW_COUNCIL_FLAKE_DIR") == 2, (
-        "expected REVIEW_COUNCIL_FLAKE_DIR in both mkDispatcher and "
+    # Every Nix source, not flake.nix alone. The launchers live in nix/builders.nix
+    # since the flake was split into flake-parts modules, and a test pinned to one
+    # filename fails on the next move rather than on a real regression. tests/golden
+    # is fixture data and is not source.
+    nix = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in sorted(REPO.rglob("*.nix"))
+        if ".review-council" not in p.parts
+        and ".git" not in p.parts
+        and "golden" not in p.parts
+    )
+    # Counts ASSIGNMENTS (`NAME=`), not mentions: the variable is also named in
+    # comments explaining what the staged tree is for, and a bare substring count
+    # fails on prose rather than on a launcher that stopped setting it.
+    assert nix.count("REVIEW_COUNCIL_FLAKE_DIR=") == 2, (
+        "expected REVIEW_COUNCIL_FLAKE_DIR to be SET in both mkDispatcher and "
         "mkContainerEntrypoint"
     )
-    assert "flakeFiles" in flake, (
+    assert "flakeFiles" in nix, (
         "the flake must stage the two files as their own store path"
     )
 

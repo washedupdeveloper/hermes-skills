@@ -14,8 +14,8 @@ metadata:
 
 # Correctness & Testing Review Rubric (Nix / NixOS / Clan)
 
-Review **only the diff** at the pinned SHA. Correctness is the one dimension with
-a **hard deterministic gate**.
+Review **only the diff** at the pinned SHA. Correctness is the one dimension with a
+**hard deterministic gate**.
 
 ## Hard gate
 
@@ -80,6 +80,9 @@ clan vars check --flake .                      # GATE: all generated vars presen
 nix-fast-build --flake .#checks --result-format json --result-file out.json  # per-check pass/fail
 nixfmt --check <files>
 ```
+
+> **Devshell only:** `nix-fast-build` is a contributor accelerator, not in the
+> shipped toolchain; its per-check results come from `nix flake check`, which ships.
 
 Quote the real output. **Never assert that something "should evaluate"** — if you
 did not run it, mark the claim `AMBIGUOUS`.

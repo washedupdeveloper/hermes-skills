@@ -19,11 +19,11 @@ not line-by-line.
 
 ## The β rule
 
-> Architecture has **no deterministic signal** unless the repo declares
-> architecture rules (import-linter-style contracts, ArchUnit equivalents, explicit
-> module boundaries). Without them this dimension is LLM judgment: emit
+> Architecture has **no deterministic signal** unless the repo declares architecture
+> rules (import-linter-style contracts, ArchUnit equivalents, explicit module
+> boundaries). Without them this dimension is LLM judgment: emit
 > `claim_type: RECOMMENDATION`, mark confidence honestly, and expect a **low β**.
-> Overconfidence here is the most expensive mistake in this dimension.
+> Overconfidence is the most expensive mistake here.
 
 ## Scoring anchors (0–100)
 
@@ -101,7 +101,7 @@ Architecture remains the lowest-β dimension.
 ## Evidence
 
 `file`, `line_range`, and the **structural consequence** in words ("this couples X
-to Y", "this duplicates Z across N machines"). Not an aesthetic preference.
+to Y", "this duplicates Z across N machines") — not an aesthetic preference.
 
 ## Output
 

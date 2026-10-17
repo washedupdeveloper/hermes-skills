@@ -401,10 +401,29 @@ hash into the conversation.
 host key, or deleting state has an operational tail: a device or a client needs to
 know. Ask first, then state the follow-up in the commit body and in your reply.
 
+**A test that cannot fail is worse than no test, and a test of something that does
+not exist is fiction.** This user asks for proof, not the presence of tests, and
+will push back on a suite that only demonstrates its own existence. Three
+obligations follow, and they are not optional polish:
+
+- **Prove each new assertion can fail**, by breaking the property and watching the
+  matching test report, then restoring it. A suite green on its first run has
+demonstrated nothing.
+- **Never simulate an artifact or a consumer that does not exist.** If the product
+  has no installer, there is no build tier; say so instead of building a fake one.
+  A stub is acceptable only where the real thing is genuinely unavailable (network,
+  a model, a second host) -- and then name what it stands in for and validate its
+  contract against the real interface.
+- **Report which mode produced the verdict.** "Checks pass" over cached results, over
+  zero executions, or over a pipeline whose status is the last stage's, is not
+  evidence. Say whether anything actually ran.
+
 **Testing a clan flake.** Eval assertions (`lib.runTests`), VM tests (clan's
 `clanTest`), the deployability checks, the "no undeclared ports" pair, and the
 gate/git-hook wiring are in `references/testing-a-clan-flake.md`. Read it before
-adding or debugging a test, or before touching `modules/flake/git-hooks.nix`.
+adding or debugging a test, or before touching `modules/flake/git-hooks.nix`. It
+also carries the three-tier rule -- eval for a value, build for a rendered file, e2e
+for what a running machine does -- and why Python belongs only in the last one.
 
 ## Procedure
 

@@ -11,12 +11,21 @@ prompt), 2 error. Input contract: docs/FRAMEWORK.md.
 from __future__ import annotations
 
 import argparse
+import importlib.util as _shared_util
 import json
 import math
 import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+# `_shared` by path, like every sibling here -- see its own docstring for why a
+# plain import would not be safe.
+_SHARED_SPEC = _shared_util.spec_from_file_location(
+    "_shared", Path(__file__).resolve().parent / "_shared.py")
+assert _SHARED_SPEC is not None and _SHARED_SPEC.loader is not None, "_shared.py"
+_shared = _shared_util.module_from_spec(_SHARED_SPEC)
+_SHARED_SPEC.loader.exec_module(_shared)
 
 HERE = Path(__file__).resolve().parent
 
@@ -57,12 +66,18 @@ STACK_TOOLS: Dict[str, Dict[str, List[str]]] = {
         # npm-audit and cargo-audit -- and unlike them it has no runtime
         # dependency of its own to get wrong. gosec stays because it is a Go
         # security LINTER, a different job from auditing dependencies.
-        "python": ["bandit", "osv-scanner", "secret-grep"],
-        "nix": ["statix", "secret-grep"],
-        "javascript": ["osv-scanner", "secret-grep"],
-        "rust": ["osv-scanner", "secret-grep"],
-        "go": ["gosec", "osv-scanner", "secret-grep"],
-        "shell": ["shellcheck", "secret-grep"],
+        #
+        # TWO secret scanners, and they are not redundant: `gitleaks` is the
+        # maintained binary with entropy detection and a few hundred rules, while
+        # `secret-grep` is this framework's own regex probe with no external
+        # dependency at all. They fail in different ways -- gitleaks cannot run
+        # without the toolchain, secret-grep always can -- so both are expected.
+        "python": ["bandit", "osv-scanner", "gitleaks", "secret-grep"],
+        "nix": ["statix", "gitleaks", "secret-grep"],
+        "javascript": ["osv-scanner", "gitleaks", "secret-grep"],
+        "rust": ["osv-scanner", "gitleaks", "secret-grep"],
+        "go": ["gosec", "osv-scanner", "gitleaks", "secret-grep"],
+        "shell": ["shellcheck", "gitleaks", "secret-grep"],
     },
     "correctness": {
         "python": ["pytest", "py-compile"],
@@ -127,6 +142,25 @@ GENERIC_TOOLS: Dict[str, List[str]] = {
     "performance": [],
     "architecture": [],
 }
+
+#: Expected-tool names that are EXTERNAL BINARIES: the toolchain must ship them, or
+#: beta is capped by the packaging rather than by the repository under review.
+#: Every OTHER name in STACK_TOOLS/GENERIC_TOOLS is a probe implemented inside
+#: scripts/probes.py -- no binary, no dependency. The two sets are disjoint and
+#: together cover every name, which `tests/test_probes.py` asserts, so a name added to
+#: STACK_TOOLS without a probe or a shipped tool cannot go unnoticed.
+EXTERNAL_TOOLS = frozenset({
+    # security
+    "bandit", "gitleaks", "gosec", "osv-scanner", "shellcheck", "statix",
+    # correctness
+    "cargo-check", "cargo-test", "go-test", "go-vet", "jest", "pytest", "tsc",
+    # readability
+    "clippy", "deadnix", "eslint", "gofmt", "golint", "mypy", "nixfmt", "prettier",
+    "ruff", "rustfmt",
+    # performance
+    "cargo-bench", "go-bench",
+})
+
 
 # Stack detection: marker files and extensions, in precedence order.
 STACK_MARKERS: Dict[str, Tuple[str, ...]] = {
@@ -317,18 +351,7 @@ def kloc(root: Optional[Path]) -> float:
     """
     if root is None or not root.is_dir():
         return 0.0
-    total = 0
-    for path in root.rglob("*"):
-        if not path.is_file() or path.suffix not in SOURCE_SUFFIXES:
-            continue
-        if any(part in {".git", ".review-council", "node_modules", "result"}
-               for part in path.parts):
-            continue
-        try:
-            total += sum(1 for _ in path.open("r", encoding="utf-8", errors="replace"))
-        except OSError:
-            continue
-    return total / 1000.0
+    return _shared.kloc(root)
 
 
 def hill_density(density: float, dimension: Optional[str] = None,

@@ -20,13 +20,13 @@ pass/fail.
 
 ## What the harness does for you
 
-The loop owns the convening. It spawns **one generalist profile N times** and buckets
+The loop owns the convening: it spawns **one generalist profile N times** and buckets
 each finding by the dimension it declares, so each dimension's result lands in the
-run directory. Do not convene, do not delegate, and do not review the code yourself.
+run directory. Do not convene, do not delegate, do not review the code yourself.
 
-That division is deliberate: the rubrics are installed into that one profile, and a
-delegated child inherits the *parent's* home and therefore cannot load them. Spawning
-the profile is the only path that actually applies the rubrics.
+The rubrics are installed into that one profile; a delegated child inherits the
+*parent's* home and cannot load them, so spawning the profile is the only path that
+applies the rubrics.
 
 ## The council
 
@@ -38,7 +38,7 @@ the profile is the only path that actually applies the rubrics.
 | correctness | `reviewer-correctness` | high — `nix flake check` is a hard gate |
 | architecture | `reviewer-architecture` | **low** — no signal without declared rules |
 
-All five run in **one** profile (`council-generalist`), sampled N times — there is no
+All five run in **one** profile (`council-generalist`), sampled N times — no
 per-dimension profile any more. M8.5 measured five of them against this and they lost
 (13/22 injected defects against 22/22).
 
@@ -53,12 +53,12 @@ per-dimension profile any more. M8.5 measured five of them against this and they
    - Dedupe by `path:line` + functional claim. Cells: `AGREE | DISAGREE | DID_NOT_EXAMINE`.
    - **Silence is never agreement.** Unexamined = `DID_NOT_EXAMINE`.
    - `VERIFIED` fact → **union** at full weight. No voting.
-   - `AMBIGUOUS` fact → note it for escalation; a bounded cross-examination round
-     is not wired yet, so do not claim one ran.
-   - `RECOMMENDATION` → confidence × severity × category weight, with
-     **minority-veto** for unresolved high-severity safety claims.
+   - `AMBIGUOUS` fact → note for escalation; a bounded cross-examination round is not
+     wired, so do not claim one ran.
+   - `RECOMMENDATION` → confidence × severity × category weight, with **minority-veto**
+     for unresolved high-severity safety claims.
 4. **Do NOT compute the aggregate score, and do NOT decide the verdict.** The gate
-   reads these same files and owns both. You report; it judges.
+   reads these same files and owns both.
 5. **Report** the control message below.
 
 ## Hard rules
@@ -74,3 +74,7 @@ per-dimension profile any more. M8.5 measured five of them against this and they
 
 Emit a `control` message carrying `termination`, `reason`, `iterations`, and
 `final_scores`. `termination` ∈ `satisfied | continue | blocked | escalate`.
+
+That message is for the log. The loop writes it and does not parse it — the gate decides
+the verdict, from the reviewer files, and its own vocabulary is
+`satisfied | not_satisfied`.

@@ -69,17 +69,20 @@ signal-to-noise term.
 ## Commands (ground truth — run these first)
 
 ```bash
-nixfmt --check <files>          # or: treefmt --ci --no-cache  (project formatter — check which)
+nixfmt --check <files>          # the repo's formatter — respect its choice, do not impose another
 statix check . -o json          # JSON (requires a --all-features build)
 deadnix --output-format json --fail .
-tokei -t Nix --output json | jq .Nix.code    # KLOC denominator (or cloc --json --include-lang Nix)
+tokei -t Nix --output json | jq .Nix.code    # devshell: read a density by hand
 ```
+
+> **The KLOC denominator comes from the framework, not `tokei`/`cloc`** — both are
+> devshell-only conveniences for reading a report by hand; the ratio a finding is
+> normalised against is the framework's own source-suffix count.
 
 A finding that names a `statix`/`deadnix` rule id is worth more than an opinion.
 Formatting is a **separate binary gate**, not folded into density.
 
-**Gate (multiplicative):** `nixfmt --check` / `treefmt --ci` fails → **readability
-category × 0.5**.
+**Gate (multiplicative):** `nixfmt --check` fails → **readability category × 0.5**.
 
 **Deadnix FP note:** fires on intentionally-unused lambda pattern names —
 `--no-lambda-pattern-names` suppresses the `callPackage` case. **Do not adopt

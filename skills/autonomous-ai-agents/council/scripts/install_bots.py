@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util as _shared_util
 import json
 import os
 import shutil
@@ -13,6 +14,14 @@ from typing import Any, Dict, List, NoReturn, Optional
 
 import council_config as cfg_mod
 from hermes_home import resolve as resolve_hermes_home
+
+# `_shared` by path, like every sibling here -- see its own docstring for why a
+# plain import would not be safe.
+_SHARED_SPEC = _shared_util.spec_from_file_location(
+    "_shared", Path(__file__).resolve().parent / "_shared.py")
+assert _SHARED_SPEC is not None and _SHARED_SPEC.loader is not None, "_shared.py"
+_shared = _shared_util.module_from_spec(_SHARED_SPEC)
+_SHARED_SPEC.loader.exec_module(_shared)
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -108,12 +117,7 @@ def resolves(skill: str, libraries: List[Path]) -> bool:
 
 def hermes_output(args: List[str]) -> str:
     """A `hermes ...` command's stdout, or empty when it cannot run; stderr dropped."""
-    try:
-        proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                              text=True, encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
-    return proc.stdout or ""
+    return _shared.hermes_run(args)[1]
 
 
 def library_dirs() -> str:

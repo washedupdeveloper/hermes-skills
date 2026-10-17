@@ -8,6 +8,7 @@ See docs/CALIBRATION.md.
 from __future__ import annotations
 
 import argparse
+import importlib.util as _shared_util
 import json
 import random
 import shutil
@@ -15,6 +16,14 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+# `_shared` by path, like every sibling here -- see its own docstring for why a
+# plain import would not be safe.
+_SHARED_SPEC = _shared_util.spec_from_file_location(
+    "_shared", Path(__file__).resolve().parent / "_shared.py")
+assert _SHARED_SPEC is not None and _SHARED_SPEC.loader is not None, "_shared.py"
+_shared = _shared_util.module_from_spec(_SHARED_SPEC)
+_SHARED_SPEC.loader.exec_module(_shared)
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -24,25 +33,18 @@ PROBES = HERE / "probes.py"
 # it as d* would make the Hill curve collapse to a step function at x=0.
 DENSITY_FLOOR = 0.05   # findings per KLOC
 
-SOURCE_SUFFIXES = {".py", ".nix", ".sh", ".bash", ".js", ".ts", ".go", ".rs", ".c", ".h"}
+SOURCE_SUFFIXES = _shared.SOURCE_SUFFIXES
 
 
 # --- measuring --------------------------------------------------------------
 
 def kloc(root: Path) -> float:
-    """Thousands of source lines — the denominator for findings density."""
-    total = 0
-    for path in root.rglob("*"):
-        if not path.is_file() or path.suffix not in SOURCE_SUFFIXES:
-            continue
-        if any(part in {".git", ".review-council", "node_modules", "result"}
-               for part in path.parts):
-            continue
-        try:
-            total += sum(1 for _ in path.open("r", encoding="utf-8", errors="replace"))
-        except OSError:
-            continue
-    return max(total / 1000.0, 0.001)
+    """Thousands of source lines — the denominator for findings density.
+
+    The 0.001 floor is this caller's: a density must be defined even for an empty
+    rung of the ladder. The scorer does NOT floor -- see _shared.kloc.
+    """
+    return _shared.kloc(root, floor=0.001)
 
 
 def run_probes(root: Path, timeout: int = 900) -> List[Dict[str, Any]]:
@@ -295,29 +297,6 @@ def choose_threshold(points: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     }
 
 
-def pick_threshold(sweep: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Sweep-based threshold selection, used only when labels are unavailable.
-
-    Prefer choose_threshold(), which works from the labels and can therefore see
-    the full separating interval rather than only its endpoints.
-    """
-    if not sweep:
-        return None
-    best_j = max(r["youden_j"] for r in sweep)
-    plateau = [r for r in sweep if r["youden_j"] == best_j]
-    if len(plateau) == 1:
-        return plateau[0]
-    low = min(r["threshold"] for r in plateau)
-    high = max(r["threshold"] for r in plateau)
-    midpoint = (low + high) / 2.0
-    # The threshold is a FREE PARAMETER — it need not coincide with an observed
-    # score. Snapping to the nearest observed score makes the choice a coin flip
-    # when the plateau holds exactly two points (the distances are equal), and
-    # the float rounding decides.
-    return {**plateau[0], "threshold": round(midpoint, 4),
-            "plateau": [low, high], "margin": round((high - low) / 2.0, 4)}
-
-
 def recalibrate(measured: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, Any]:
     """Re-derive d*, the sweep and the threshold from ALREADY-measured points.
 
@@ -350,6 +329,9 @@ def recalibrate(measured: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, Any
         "halflife_k": k,
         "d_star": d_star,
         "points": points,
+        # Carried through so a re-tuned manifest is itself re-tunable: measurement
+        # is the expensive half and dropping it here would make this a dead end.
+        "measured": measured,
         "sweep": sweep,
         "recommended_threshold": choose_threshold(points),
     }
@@ -447,6 +429,28 @@ def calibrate_ladder(ladder: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, 
 
 # --- CLI --------------------------------------------------------------------
 
+def _read_manifest(path: str) -> Optional[Dict[str, Any]]:
+    """Read a manifest this verb wrote earlier.
+
+    `--ladder` and `--recalibrate` both consume a file `calibrate` produced, so a
+    missing or malformed one names the flag that makes it instead of raising a
+    bare traceback at the user.
+    """
+    p = Path(path)
+    if not p.is_file():
+        print(f"calibrate: no such manifest: {p}", file=sys.stderr)
+        return None
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"calibrate: {p} is not valid JSON: {exc}", file=sys.stderr)
+        return None
+    if not isinstance(doc, dict):
+        print(f"calibrate: {p} is not a manifest object", file=sys.stderr)
+        return None
+    return doc
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="calibrate.py",
@@ -456,6 +460,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--bad", help="Known-bad revision to baseline-scan")
     parser.add_argument("--build-eval", metavar="DEST",
                         help="Build a graded eval ladder at DEST from --base")
+    parser.add_argument("--ladder", metavar="MANIFEST",
+                        help="Calibrate against a ladder manifest from --build-eval")
+    parser.add_argument("--recalibrate", metavar="MANIFEST",
+                        help="Re-derive d*, the sweep and the threshold from a "
+                             "calibration manifest's own measured points, without "
+                             "re-running the probes")
     parser.add_argument("--base", help="Base repo the ladder is copied from")
     parser.add_argument("--levels", default="0,1,2,4,8,16",
                         help="Defect counts per rung (default 0,1,2,4,8,16)")
@@ -471,6 +481,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         levels = tuple(int(x) for x in args.levels.split(","))
         ladder = build_eval_ladder(Path(args.base), Path(args.build_eval), levels, args.seed)
         result = {"ladder": ladder}
+    elif args.ladder or args.recalibrate:
+        source = args.ladder or args.recalibrate
+        doc = _read_manifest(source)
+        if doc is None:
+            return 2
+        want = "ladder" if args.ladder else "measured"
+        if want not in doc:
+            print(
+                f"calibrate: {source} has no {want!r} — "
+                + ("make it with --build-eval" if want == "ladder"
+                   else "it must be a calibration manifest, not a ladder"),
+                file=sys.stderr,
+            )
+            return 2
+        result = (
+            calibrate_ladder(doc["ladder"], args.k)
+            if args.ladder
+            else recalibrate(doc["measured"], args.k)
+        )
     elif args.good and args.bad:
         result = calibrate(Path(args.good), Path(args.bad), args.seed)
     else:

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -15,6 +17,14 @@ REPO = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("probes", REPO / "scripts" / "probes.py")
 probes = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(probes)
+
+# The gate's own definition of what a dimension expects, so the toolchain<->gate
+# contract is asserted against the real table rather than a copy of it.
+_sspec = importlib.util.spec_from_file_location(
+    "score_reviews", REPO / "scripts" / "score_reviews.py")
+score = importlib.util.module_from_spec(_sspec)
+sys.modules["score_reviews"] = score
+_sspec.loader.exec_module(score)
 
 
 # --- output parsing ---------------------------------------------------------
@@ -182,10 +192,15 @@ def test_python_probes_degrade_without_a_toolchain():
         # "nothing to audit" without invoking anything -- a correct answer that
         # does not require osv-scanner to exist.
         (root / "requirements.txt").write_text("requests==2.31.0\n", encoding="utf-8")
+        # Both of these need a file of the right kind before they reach the toolchain:
+        # shellcheck reports "no shell files" without invoking anything, and gitleaks
+        # needs a file to scan at all.
+        (root / "a.sh").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
         original = probes._bridge
         probes._bridge = lambda *a, **k: (127, "toolchain unavailable (test)")
         try:
-            for name in ("ruff", "mypy", "bandit", "pytest", "osv-scanner"):
+            for name in ("ruff", "mypy", "bandit", "pytest", "osv-scanner",
+                         "gitleaks", "shellcheck"):
                 out = probes.run_probe(name, root)
                 assert out["ran"] is False, f"{name} claimed to run without a toolchain"
                 assert out["parsed"] is False, name
@@ -195,17 +210,109 @@ def test_python_probes_degrade_without_a_toolchain():
             probes._bridge = original
 
 
+#: The stacks this toolchain ships for. `STACK_TOOLS` also lists tools for
+#: JavaScript, Rust and Go, which the framework does not claim to cover — asserting
+#: those would demand probes for tools that are deliberately absent.
+SUPPORTED_STACKS = ("nix", "python", "shell")
+
+
+def _expected_for_supported_stacks() -> set:
+    """Every expected tool name the gate can ask for on a stack we ship."""
+    out = set()
+    for _dimension, per_stack in score.STACK_TOOLS.items():
+        for stack in SUPPORTED_STACKS:
+            out |= set(per_stack.get(stack, []))
+    for _dimension, names in score.GENERIC_TOOLS.items():
+        out |= set(names)
+    return out
+
+
+def _all_expected_names() -> set:
+    out = set()
+    for _dimension, per_stack in score.STACK_TOOLS.items():
+        for names in per_stack.values():
+            out |= set(names)
+    for _dimension, names in score.GENERIC_TOOLS.items():
+        out |= set(names)
+    return out
+
+
 def test_every_expected_tool_has_a_probe():
     """The asymmetry this closes: a tool the gate EXPECTS that no probe runs can
     only ever be satisfied by the reviewer's own report. That is what made beta a
-    measure of diligence on the Python side and of the toolchain on the Nix side."""
-    expected = {
-        "statix", "deadnix", "nixfmt", "flake-check", "nix-eval", "nix-eval-time",
-        "ruff", "mypy", "bandit", "osv-scanner", "pytest",
-        "secret-grep", "py-compile", "complexity", "dep-graph", "declared-rules",
-    }
+    measure of diligence on the Python side and of the toolchain on the Nix side.
+
+    DERIVED from `STACK_TOOLS`, not a hand-written list: the previous version listed
+    16 names by hand and missed `shellcheck`, which was scored for the `shell` stack
+    with no probe — a shell repository had an expected tool that could never run.
+    """
+    expected = _expected_for_supported_stacks()
     missing = sorted(expected - set(probes.PROBES))
     assert missing == [], f"the gate expects tools that no probe runs: {missing}"
+
+
+def test_every_declared_external_tool_is_actually_expected():
+    """`EXTERNAL_TOOLS` says "the toolchain must ship this". A name in it that the
+    gate never asks for is a typo, and a typo silently exempts the tool it was meant
+    to cover from the shipping requirement below."""
+    stray = sorted(set(score.EXTERNAL_TOOLS) - _all_expected_names())
+    assert stray == [], f"declared external but never expected by the gate: {stray}"
+
+
+def test_every_internal_expected_name_is_a_probe():
+    """The other half of the classification: a name that is not an external binary is
+    a probe implemented inside probes.py, so it must exist there.
+
+    Note an external name is ALSO a probe name — the probe named `ruff` is what runs
+    the `ruff` binary — so the two sets overlap by design. What must not happen is an
+    expected name with no probe at all, for a stack we ship.
+    """
+    internal = _expected_for_supported_stacks() - set(score.EXTERNAL_TOOLS)
+    missing = sorted(internal - set(probes.PROBES))
+    assert missing == [], f"internal expected names with no probe: {missing}"
+
+
+def test_the_qa_toolchain_ships_every_external_scored_tool():
+    """A scored tool that does not ship cannot run, so beta is capped by the packaging
+    rather than by the repository. This is the toolchain<->gate contract."""
+    names = _toolchain_tool_names()
+    assert names, "could not read toolNames from nix/builders.nix"
+    needed = {t for t in _expected_for_supported_stacks() if t in score.EXTERNAL_TOOLS}
+    missing = sorted(needed - names)
+    assert missing == [], f"the gate scores tools the toolchain does not ship: {missing}"
+
+
+#: Tools that SHIP in the toolchain but must NOT be probed.
+#:
+#: `vulnix` is the case, and both halves of the decision matter. It is available on
+#: demand, because closure CVEs are a real question for a Nix reviewer. It is not
+#: probed, because running it is the expensive half — it fetches NVD data over the
+#: network (minutes, and the answer varies with the date) — and it is unmaintained
+#: with a high false-positive rate, so a routine review would pay a large cost for an
+#: unusable signal.
+ON_DEMAND_TOOLS = {"vulnix"}
+
+
+def _toolchain_tool_names() -> set[str]:
+    """The names in nix/builders.nix's `toolNames` — the toolchain closure."""
+    text = (REPO / "nix" / "builders.nix").read_text(encoding="utf-8")
+    block = text.split("toolNames = [", 1)[1].split("];", 1)[0]
+    return set(re.findall(r'^\s*"([^"]+)"', block, re.M))
+
+
+def test_an_on_demand_tool_ships_but_is_not_probed():
+    """Both halves, so neither can drift: available, and never run by a review.
+
+    A tool that ships but is not probed is invisible to `council probes`; a tool that
+    is probed but not shipped fails on PATH. This asserts the deliberate state rather
+    than letting either half move alone.
+    """
+    names = _toolchain_tool_names()
+    assert names, "could not read toolNames from nix/builders.nix"
+    missing = sorted(ON_DEMAND_TOOLS - names)
+    assert missing == [], f"declared on demand but not shipped: {missing}"
+    probed = sorted(ON_DEMAND_TOOLS & set(probes.PROBES))
+    assert probed == [], f"on-demand tools are being probed on every run: {probed}"
 
 
 def test_parser_accepts_a_top_level_json_array():
@@ -236,6 +343,63 @@ def test_osv_scanner_separates_nothing_to_audit_from_cannot_audit():
         assert out2["ran"] is False, "declared-but-unreadable deps reported as clean"
         assert out2["signal"] is None
         assert "lockfile" in out2["note"]
+
+
+# --- the two probes added by the toolchain audit ----------------------------
+#
+# Both need the PINNED toolchain, which CI's nix job provides and a bare pytest run
+# does not. `checks.probes` requires both to have RUN, so the real exercise happens
+# there; here the positive case is skipped when the toolchain does not resolve, and the
+# degradation test above covers the absent case.
+
+def _toolchain_unresolved(out: dict) -> bool:
+    """True when the probe reached the toolchain and could not resolve it.
+
+    Guarding on `shutil.which` is not enough: in the Nix build sandbox the toolchain IS
+    on PATH while `toolchain.run` still cannot resolve it (there is no `nix` inside it),
+    so a which-based guard lets the test run and fail where it should skip.
+    """
+    return not out["ran"] and "toolchain" in str(out.get("note", "")).lower()
+
+
+def test_gitleaks_finds_a_credential_without_reporting_it():
+    """The report carries the SECRET. It must never reach a finding — a credential in
+    a review report is the leak the probe exists to prevent."""
+    if shutil.which("gitleaks") is None:
+        return
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        # Built at runtime rather than written as a literal: this test exists
+        # to prove a credential never reaches a report, and a committed
+        # `sk_live_` string is that mistake in the test itself. The SHAPE is
+        # what gitleaks matches, so the fixture still exercises the rule.
+        secret = "sk_" + "live_" + "".join(
+            "0123456789abcdef"[i % 16] for i in range(48)
+        )
+        (root / "app.py").write_text(f'KEY = "{secret}"\n', encoding="utf-8")
+        out = probes.run_probe("gitleaks", root)
+        if _toolchain_unresolved(out):
+            return
+        assert out["ran"] is True, out["note"]
+        assert out["findings"], "a hardcoded credential was not reported"
+        blob = json.dumps(out)
+        assert secret not in blob, "the secret value leaked into the probe result"
+        assert "sk_live" not in blob, "a prefix of the secret leaked"
+
+
+def test_shellcheck_reports_a_shell_issue():
+    if shutil.which("shellcheck") is None:
+        return
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "bad.sh").write_text("#!/bin/sh\nfor f in $(ls); do echo $f; done\n",
+                                     encoding="utf-8")
+        out = probes.run_probe("shellcheck", root)
+        if _toolchain_unresolved(out):
+            return
+        assert out["ran"] is True, out["note"]
+        assert out["findings"], "SC2045 was not reported"
+        assert all(f["location"]["path"] for f in out["findings"])
 
 
 def test_pytest_exit_5_is_not_run_not_pass():
@@ -275,6 +439,59 @@ def test_density_falls_back_to_a_count_with_no_measurable_size():
     must match score_reviews' so the two never disagree."""
     assert probes.score_from_density(16, None) == probes.score_from_density(16, Path("/nonexistent-rc"))
     assert probes.score_from_density(0, None) == 100.0
+
+
+# --- probing must not modify the repo under review --------------------------
+#
+# `nix flake check` and `nix eval` write `flake.lock` into the repo they run
+# against. A review is a read: probing `tests/golden/target` created a
+# `flake.lock` there, and the fixture's own hashes picked it up. `_bridge`
+# injects `--no-write-lock-file` so it cannot happen again.
+
+def test_bridge_forbids_writing_a_lock_file():
+    """Every `nix flake` / `nix eval` call carries `--no-write-lock-file`."""
+    seen = []
+
+    def fake_run(args, repo=None, timeout=None, env_extra=None):
+        seen.append(list(args))
+        return (0, "")
+
+    original = probes.toolchain.run
+    probes.toolchain.run = fake_run
+    try:
+        probes._bridge(Path("."), ["nix", "flake", "check", "--no-build"])
+        probes._bridge(Path("."), ["nix", "eval", "--raw", ".#x"])
+    finally:
+        probes.toolchain.run = original
+
+    assert len(seen) == 2, seen
+    for args in seen:
+        assert "--no-write-lock-file" in args, f"lock write not forbidden: {args}"
+    # the flag must follow the SUBCOMMAND, or nix calls it unrecognised
+    assert seen[0][:4] == ["nix", "flake", "check", "--no-write-lock-file"], seen[0]
+    assert seen[1][:3] == ["nix", "eval", "--no-write-lock-file"], seen[1]
+
+
+def test_bridge_leaves_other_commands_alone():
+    """Non-nix commands are passed through untouched."""
+    seen = []
+
+    def fake_run(args, repo=None, timeout=None, env_extra=None):
+        seen.append(list(args))
+        return (0, "")
+
+    original = probes.toolchain.run
+    probes.toolchain.run = fake_run
+    try:
+        probes._bridge(Path("."), ["statix", "check", ".", "-o", "json"])
+        probes._bridge(Path("."), ["nix-instantiate", "--parse", "a.nix"])
+    finally:
+        probes.toolchain.run = original
+
+    assert seen[0] == ["statix", "check", ".", "-o", "json"], seen[0]
+    assert seen[1] == ["nix-instantiate", "--parse", "a.nix"], seen[1]
+    for args in seen:
+        assert "--no-write-lock-file" not in args, args
 
 
 def main() -> int:

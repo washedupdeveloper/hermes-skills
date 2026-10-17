@@ -76,13 +76,16 @@ the cap explicitly in your rationale.
 Grep-class checks; each is a hard signal, not a heuristic:
 
 ```bash
-rg -n 'builtins\.readFile' modules/ machines/ | rg -i 'secret|sops|age|key'   # secret → store
-rg -n 'age\.identityPaths|sops\.age\.(sshKeyPaths|keyFile)' -A3 | rg '\.\./'   # path literal, must be str
-rg -n -- '--impure' .github/ Makefile justfile 2>/dev/null                     # impurity in CI
-rg -n 'fetchTarball' | rg -v 'sha256'                                          # hash-less fetch
-rg -n 'allowUnfree'                                                            # blanket unfree
-rg -n 'accept-flake-config'                                                    # config injection
-rg -n 'trusted-users'                                                          # root-equivalence
+grep -rn 'builtins\.readFile' modules/ machines/ | grep -iE 'secret|sops|age|key'  # secret → store
+grep -rnE -A3 'age\.identityPaths|sops\.age\.(sshKeyPaths|keyFile)' | grep -F '../'  # path literal, must be str
+grep -rn -- '--impure' .github/ Makefile justfile 2>/dev/null                  # impurity in CI
+grep -rn 'fetchTarball' | grep -v 'sha256'                                     # hash-less fetch
+grep -rn 'allowUnfree'                                                         # blanket unfree
+grep -rn 'accept-flake-config'                                                 # config injection
+grep -rn 'trusted-users'                                                       # root-equivalence
+
+`grep` rather than `rg`: `gnugrep` ships in the toolchain's shell dependencies, ripgrep
+does not.
 ```
 
 Store/closure hygiene (needs a Linux host with Nix):
@@ -91,8 +94,22 @@ Store/closure hygiene (needs a Linux host with Nix):
 nix store verify --recursive --sigs-needed 1 <toplevel>   # unsigned path count
 nix why-depends --all <pkg> <dep>                         # reachability of a sensitive path
 nix flake archive --json .                                # all inputs locked
-vulnix --system -w whitelist.toml --json                  # CVE count (unmaintained, high FP)
+# Advisory CVEs for the PINNED nixpkgs — the cheap, routine answer:
+#   https://tracker.security.nixos.org/
 ```
+
+**`vulnix` — on demand only, never probed.** It ships so closure CVEs can be asked
+when they are the question; it is absent from `scripts/probes.py` because running it
+is the expensive half: it fetches NVD data over the network (minutes; the answer
+moves with the date), is unmaintained, and matches name+version, so backported fixes
+are invisible — whitelisting is mandatory and this repo ships none. When wanted:
+
+```bash
+vulnix --system -w <whitelist.toml> --json
+```
+
+`--system` scans the closure of the machine RUNNING it, not the repository under
+review. See docs/NIX.md.
 
 **Multiplicative gates (not averaged):**
 - any `builtins.readFile`-on-secret hit → **security category = 0**
@@ -100,18 +117,16 @@ vulnix --system -w whitelist.toml --json                  # CVE count (unmaintai
 
 ## Web applications — on demand
 
-This rubric is the **core** for the security dimension and is loaded on every
-review. Web-application controls are not, because most diffs are not web diffs and
-paying for that checklist every sample is waste.
+This rubric is **core**, loaded on every review. Web-application controls are not —
+most diffs are not web diffs, and paying for that checklist every sample is waste.
 
 **If the diff touches a web project** — HTTP handlers, auth, sessions, uploads,
 database access, external APIs, PII, or LLM features — load the `web-app-security`
 skill and score against it **as well as** this one. Where both apply, the score is
 the **worst** applicable result.
 
-If the `web-app-security` skill is not installed, that is not a reason to skip the
-dimension: report the web surface as **unverified** and name the missing skill.
-Silence is never a clean bill.
+If `web-app-security` is not installed, do not skip the dimension: report the web
+surface as **unverified** and name the missing skill. Silence is never a clean bill.
 
 ## Evidence
 

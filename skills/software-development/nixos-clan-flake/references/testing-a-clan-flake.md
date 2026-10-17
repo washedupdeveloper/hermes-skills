@@ -4,29 +4,58 @@ Unit assertions, VM tests, the deployability checks, the "no undeclared ports"
 pair, and the gate/hook wiring. Read this before adding or debugging a test, or
 before touching `modules/flake/git-hooks.nix`.
 
+**Three tiers, and the tier is chosen by what the assertion NEEDS.** This is the
+organizing rule for every test added to a repo like this:
+
+- **eval** (`lib.runTests`) -- the *value* of an option in the evaluated
+  configuration. Milliseconds, no build.
+- **build** (`runCommand`) -- the *file or artifact* the configuration produced.
+  Seconds. Anything that is a property of a generated file belongs here, because
+  a rendered file is evidence on its own.
+- **e2e** (`runNixOSTest` + `testScript`) -- what a RUNNING machine does with it:
+  a daemon parsing its own config, a socket bound, a command succeeding.
+
+Python is the price of the third tier and nothing else. An assertion that can be
+made against a rendered file must not be made by booting a machine to look at it.
+The practical consequence is speed: a drift in a generated file fails in seconds
+instead of after a VM boot, and the VM is left to the residue that genuinely needs
+a kernel. A suite whose `testScript` greps `/etc/...` for content it could have
+read from `config.system.build.etc` is paying minutes for nothing.
+
 **Testing a clan flake: `lib.runTests` for eval, clan's `clanTest` for a VM.**
 `nix flake check` builds `checks`, so both belong in it. For eval-level
 assertions use `lib.runTests { test_x = { expr = ...; expected = ...; }; }` --
 the helper clan-core uses for its own `eval-tests`. Two contracts are easy to get
 wrong: it returns a **list of failures** (`== [ ]` means pass; it does *not*
 return `true`), and it only runs attributes whose name starts with `test`.
-Pretty-print a failure with `lib.throwTestFailures { inherit failures; }`. One
+Pretty-print a failure with `lib.debug.throwTestFailures { inherit failures; }` --
+**not** `lib.throwTestFailures`, which does not exist. The bare name fails with
+`attribute 'throwTestFailures' missing`, so a red gate reports the REPORTER
+instead of the failing test's name, expected value and result. It hides for as
+long as every group passes, because the else branch only runs on a failure -- so
+the one part of a green suite that has never executed is the part that explains a
+red one. Read a failure on purpose before trusting a suite's red output. One
 check per group beats one check for everything: `--keep-going` then reports every
 failing group instead of the first.
 
 For a VM test, clan-core exposes the test module at
 `clan-core.modules.nixosTest.clanTest` -- **not** `clan.nixosTests`, which lives
 in clan-core's `testModule` flake module and drags in clan-core's whole check
-suite. Apply it with `nixosLib.runTest`, the call clan-core makes itself:
+suite. Apply it with `pkgs.testers.runNixOSTest`, the API the nix.dev integration-testing
+tutorial documents. It accepts `imports`, so `clanTest` drops straight into it:
 
 ```nix
-nixosLib = import (inputs.nixpkgs + "/nixos/lib") { };
-nixosLib.runTest ({
+pkgs.testers.runNixOSTest ({
   imports = [ inputs.clan-core.modules.nixosTest.clanTest ];
-  hostPkgs = pkgs;
   defaults.imports = [ { _module.args.clan-core = inputs.clan-core; } ];
 } // body)
 ```
+
+`runNixOSTest` is `nixos.runTest` with `hostPkgs` and `node.pkgs` already
+supplied, so **do not pass them again** -- a duplicate definition conflicts. That
+is why it is preferable to hand-rolling `import (inputs.nixpkgs + "/nixos/lib")`
+with an explicit `hostPkgs`: one less thing to get wrong, and it matches the
+documented API rather than an internal call.
 
 A module may be a plain attrset, so the `{ ... }:` wrapper is unnecessary (and
 statix flags it as an empty pattern). `clan.directory` must be a real path -- a
@@ -58,11 +87,15 @@ writes CamelCase (`PasswordAuthentication no`), so a lowercase comparison never
 matches.
 
 **Mutation-test a new suite before trusting it.** A green suite proves nothing
-about whether it can fail: break each property in turn and confirm the matching
-group fails, then restore. `lib.all` over an attrset, or a predicate taking two
-arguments where it takes one, both *error* at evaluation rather than reporting a
-failure -- the suite looks wired and is not. Assert the *actual* values too: a
-`lib.all` over an empty list is vacuously true.
+about whether it can fail: break each property in turn, confirm the matching group
+reports, then restore. Two traps make this weaker than it looks -- a check that
+*errors* rather than failing (`lib.all` over an attrset, a predicate taking two
+arguments where it takes one) looks wired and is not, and a `lib.all` over an empty
+list is vacuously true, so assert the actual values too. Expect at least one
+mutation to be *your* error rather than the test's: mutating `ports` inside
+`services.openssh.settings` instead of as its sibling silently changed nothing, and
+the "not caught" result was the mutation's fault, not the test's. Confirm the
+mutation landed before concluding the test is blind.
 
 **"No undeclared ports open" needs two layers, and they are different claims.**
 At evaluation time, assert the *declared* exposure set exactly --
@@ -122,14 +155,6 @@ build, so nothing else in a gate would catch a deprecation or a
 misconfiguration. Asserting both are empty is a few lines and covers ground no
 hand-written test reaches.
 
-**Prove a new suite can fail before trusting it.** A suite that passes on the
-first run has demonstrated nothing -- mine did, and mutation testing then found
-two of its groups were only accidentally correct. Break each property in turn,
-confirm the matching group fails, and restore. Expect at least one mutation to
-be *your* error rather than the test's: mutating `ports` inside
-`services.openssh.settings` instead of as its sibling silently changed nothing,
-and the "not caught" result was the mutation's fault, not the test's.
-
 **Verify a mutation APPLIED before concluding the test is vacuous.** `perl -0pi -e
 's|a|b|'` reported success and changed nothing in one repo, so a real mutation read
 as "the check did not fire". After mutating, grep for the new text and print it;
@@ -164,6 +189,28 @@ Two corollaries, both measured:
   not evidence anything ran. Force re-execution per attribute and say which mode
   produced the verdict.
 
+**A check that asserts "X is discovered" must know the product's own filters.**
+When a discovery check reports something missing, look for a declared relevance
+gate before calling it a defect: an `environments:`-style filter is an *offer-time*
+rule, so an entry gated to `[s6]` is CORRECTLY absent on every host that is not
+one. Teach the check the gate and assert both directions -- an ungated entry that
+is absent fails, and a gated entry that IS offered also fails, or the gate is
+decorative. Deleting the filter to make the check pass breaks the product to
+satisfy the test, which is the one repair that must never be chosen.
+
+**A comparison loosened for display truncation must loosen in exactly one
+direction.** A listing column truncated with an ellipsis makes a LISTED name a
+prefix of the real one, so `listed.startswith(expected)` is the only valid
+tolerance. Writing it as `expected.startswith(listed) or listed.startswith(expected)`
+makes the check vacuous: a skill renamed `caveman-renamed` then satisfies
+`caveman`, which is precisely the drift the check exists to catch. Prove it with a
+rename mutation, not by reading the code.
+
+**Parsing a human-readable table needs a shape check on the parsed rows.** A
+multi-line cell emits continuation rows whose first column holds a box character;
+counted as records they inflate the total and hide a missing entry. Require every
+parsed name to match the identifier's shape (a slug regex) and cross-check the
+count in BOTH directions against what was expected.
 
 **A `runTests` group fails as an EVAL ERROR when an assertion's `expr` throws, and
 that error wins over every named failure in the group.** Asserting a nested key
@@ -185,15 +232,23 @@ rewrites the FIRST line of each file: a stub created inside a heredoc keeps its
 on the copy fixes that one, and it belongs in the CHECK's copy rather than the
 repo's test -- the sandbox limitation is the harness's, not the test's.
 
-**A tier that checks the source tree cannot see what a copier drops, and a tier
-that checks the artifact cannot see prose.** For a repo whose artifact is a tree of
-files (skills, docs, rubrics), build the artifact the installer would produce --
-marker file plus its support directories -- and assert self-containment against it:
-every pointer resolves INSIDE the shipped directory, and none climbs out with `../`.
-That last rule is the one a source-tree check cannot make, because `../x` resolves
-in the source and breaks once the directory ships alone. Pair it with a count
-parity between source and artifact so a copier that silently drops a skill fails
-too.
+**A build tier needs a REAL consumer. Do not simulate the artifact.** The build
+tier is worth having when something actually copies or packages the tree: build the
+artifact that consumer produces -- marker file plus its support directories -- and
+assert self-containment against it. Every pointer must resolve INSIDE the shipped
+directory, and none may climb out with `../`: that rule is the one a source-tree
+check cannot make, because `../x` resolves in the source and breaks once the
+directory ships alone. Pair it with a count parity between source and artifact so a
+copier that silently drops an entry fails too.
+
+**But check that the copier exists before building one.** If delivery is a live
+read -- an app pointed at the tree through an extra search path, with no copy, no
+symlink and no installer -- then there is no artifact, and a check that simulates
+one is testing fiction. It will pass forever while proving nothing about the
+product, which is worse than having no middle tier: it spends the trust a real test
+earns. Say plainly that the repo has no build tier and why. The one rule worth
+keeping from it (`../` escapes) moves down into the source-tier pointer test, next
+to the write-verb heuristic it needs.
 
 **An untracked file is the most common cause of a build-tier failure that looks
 like a content bug.** A skill pointing at `references/new-file.md` that exists on

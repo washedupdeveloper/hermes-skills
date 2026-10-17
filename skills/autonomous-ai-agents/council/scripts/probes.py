@@ -342,7 +342,21 @@ def _bridge(root: Path, args: List[str], timeout: int = 600,
 
     (127, reason) when the toolchain is unavailable, so the probe reports
     ran=False rather than fabricating a result.
+
+    `nix flake check` and `nix eval` WRITE `flake.lock` into the repository they
+    run against when it is missing or stale. Probing must not modify the repo
+    under review — a review is a read — so both get `--no-write-lock-file`.
+
+    The flag must follow the SUBCOMMAND: `nix flake --no-write-lock-file check`
+    is "unrecognised flag", `nix flake check --no-write-lock-file` is accepted.
+    Found the hard way: probing `tests/golden/target` created a `flake.lock`
+    there, which then appeared in the fixture's own hashes.
     """
+    if len(args) >= 3 and args[0] == "nix" and "--no-write-lock-file" not in args:
+        if args[1] == "eval":
+            args = [args[0], args[1], "--no-write-lock-file", *args[2:]]
+        elif args[1] == "flake":
+            args = [*args[:3], "--no-write-lock-file", *args[3:]]
     return toolchain.run(args, repo=root, timeout=timeout, env_extra=env_extra)
 
 
@@ -576,7 +590,7 @@ def probe_nix_eval_time(root: Path) -> Dict[str, Any]:
     if rc == 127:
         return result("nix-eval-time", False, None, [], out[:200], parsed=False)
 
-    baseline, baseline_path = load_eval_baseline(root)
+    baseline, _ = load_eval_baseline(root)
 
     if baseline is None:
         return result("nix-eval-time", True, None, [],
@@ -650,6 +664,12 @@ def pin_eval_baseline(root: Path, samples: int = 3) -> Dict[str, Any]:
 
 def _py_files(root: Path, limit: int = 5000) -> List[str]:
     return [p.relative_to(root).as_posix() for p in iter_files(root, (".py",))][:limit]
+
+
+def _sh_files(root: Path, limit: int = 200) -> List[str]:
+    """Shell files for shellcheck, capped: its paths go on the command line."""
+    return [p.relative_to(root).as_posix()
+            for p in iter_files(root, (".sh", ".bash"))][:limit]
 
 
 def _scratch_env(tmp: str) -> Dict[str, str]:
@@ -887,6 +907,110 @@ def probe_osv_scanner(root: Path) -> Dict[str, Any]:
                   f"{len(locks)} lockfile(s)")
 
 
+def probe_gitleaks(root: Path) -> Dict[str, Any]:
+    """`gitleaks detect --no-git` — hardcoded credentials (security).
+
+    Reads the WORKING TREE, not git history: the review is about the code as it
+    stands, and a history scan is a different and much slower audit.
+
+    The report carries the SECRET ITSELF, so it never reaches a finding — only the
+    rule, the file and the line are used. `--redact` keeps it out of stdout as well,
+    which is why a credential cannot leak into a review report from here.
+
+    `--exit-code 0` because gitleaks exits 1 on "found leaks", which would otherwise
+    be indistinguishable from a failed run.
+    """
+    if not any(p.is_file() for p in root.rglob("*")):
+        return result("gitleaks", False, None, [], "the tree has no files to scan",
+                      parsed=False)
+    with tempfile.TemporaryDirectory(prefix="rc-gitleaks-") as tmp:
+        report = Path(tmp) / "gitleaks.json"
+        rc, out = _bridge(
+            root,
+            ["gitleaks", "detect", "--no-git", "--source", ".",
+             "--report-format", "json", "--report-path", str(report),
+             "--redact", "--exit-code", "0"],
+            env_extra=_scratch_env(tmp), timeout=900)
+        if rc == 127:
+            return result("gitleaks", False, None, [], out[:200], parsed=False)
+        if not report.is_file():
+            return result("gitleaks", False, None, [],
+                          f"gitleaks exited {rc} without writing a report: {out[:160]}",
+                          parsed=False)
+        try:
+            doc = json.loads(report.read_text(encoding="utf-8", errors="replace") or "[]")
+        except json.JSONDecodeError as exc:
+            return result("gitleaks", False, None, [],
+                          f"gitleaks report is not JSON: {exc}", parsed=False)
+
+    findings: List[Dict[str, Any]] = []
+    for entry in doc if isinstance(doc, list) else []:
+        path = str(entry.get("File") or "").lstrip("./")
+        start = int(entry.get("StartLine") or 0)
+        end = int(entry.get("EndLine") or start)
+        rule = str(entry.get("RuleID") or "?")
+        # `Description` names the RULE, never the value.
+        desc = str(entry.get("Description") or "").split(",")[0].strip()[:120]
+        findings.append({
+            # A committed credential is the one finding class the rubric already treats
+            # as blocking, so `high` is the framework's own convention for it.
+            "severity": "high", "status": "open",
+            "location": {"path": path,
+                         "line_range": str(start) if start == end else f"{start}-{end}"},
+            "claim": f"{rule}: {desc}"[:200],
+            "falsifiable_check": f"gitleaks detect --no-git --source {path}",
+        })
+    return result("gitleaks", True, score_from_density(len(findings), root), findings,
+                  f"{len(findings)} credential(s) found")
+
+
+def probe_shellcheck(root: Path) -> Dict[str, Any]:
+    """`shellcheck -f json` — shell lints (security/readability).
+
+    The `shell` stack's scored tool. It shipped with no probe, so a repository
+    containing shell had an expected tool that could never run: beta was capped below
+    1.0 for a dimension the framework claimed to cover.
+
+    The file list is capped, and passed on the command line: shellcheck has no
+    file-list option, so an unbounded list would hit ARG_MAX on a large repository —
+    the same limit that forced the reviewer prompt into a file.
+    """
+    files = _sh_files(root)
+    if not files:
+        return result("shellcheck", False, None, [], "no shell files in the tree",
+                      parsed=False)
+    rc, out = _bridge(root, ["shellcheck", "-f", "json", "--"] + files, timeout=600)
+    if rc == 127:
+        return result("shellcheck", False, None, [], out[:200], parsed=False)
+    doc = _json_objects(out)
+    if not doc:
+        # shellcheck prints `[]` for a clean tree; anything unparseable is not a pass.
+        if "[]" in out.replace(" ", ""):
+            return result("shellcheck", True, 100.0, [], f"{len(files)} file(s) clean")
+        return result("shellcheck", False, None, [],
+                      f"shellcheck exited {rc}: {out[:160]}", parsed=False)
+
+    entries = doc[0] if isinstance(doc[0], list) else doc
+    findings: List[Dict[str, Any]] = []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        line = int(item.get("line") or 0)
+        end = int(item.get("endLine") or line)
+        level = str(item.get("level") or "").lower()
+        findings.append({
+            # Same convention as statix: an `error` level is medium, the rest low. A
+            # linter's opinion does not block satisfaction.
+            "severity": "medium" if level == "error" else "low", "status": "open",
+            "location": {"path": str(item.get("file") or "").lstrip("./"),
+                         "line_range": str(line) if line == end else f"{line}-{end}"},
+            "claim": f"SC{item.get('code')}: {str(item.get('message') or '')}"[:200],
+            "falsifiable_check": f"shellcheck {item.get('file')}",
+        })
+    return result("shellcheck", True, score_from_density(len(findings), root), findings,
+                  f"{len(findings)} finding(s) over {len(files)} file(s)")
+
+
 def probe_pytest(root: Path) -> Dict[str, Any]:
     """`python3 -B -m pytest -q -p no:cacheprovider` — the repo's suite (correctness).
 
@@ -958,6 +1082,8 @@ PROBES: Dict[str, Callable[[Path], Dict[str, Any]]] = {
     "mypy": probe_mypy,
     "bandit": probe_bandit,
     "osv-scanner": probe_osv_scanner,
+    "gitleaks": probe_gitleaks,
+    "shellcheck": probe_shellcheck,
     "pytest": probe_pytest,
 }
 

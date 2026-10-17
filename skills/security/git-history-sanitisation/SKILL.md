@@ -1,6 +1,6 @@
 ---
 name: git-history-sanitisation
-description: "Use when sanitising a git history before publishing."
+description: "Use when publishing a branch, or sanitising history first."
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -13,6 +13,10 @@ metadata:
 ---
 
 # Sanitising a git history before publishing
+
+Two jobs share one question -- what is about to become public? The first is
+**publishing a branch at all**: scope the commit, scan the range, verify it landed.
+The second is **sanitising a history** that already carries what must not ship.
 
 A secret committed and later deleted is still in the history and still readable. Audit
 every blob reachable from any ref, not the working tree, and rewrite before the
@@ -71,8 +75,16 @@ what catches a malformed replacements file, and it costs one command.
    printf %s "$VALUE" | sha256sum | cut -c1-12
    ```
    A report that quotes the secret is itself a leak. A test fixture that mimics the real
-   provider's format (same length and prefix, different hash) is **not** a leak: say so
-   with that evidence rather than leaving the scanner's finding unexplained.
+   provider's format (same length and prefix, different hash) is **not** a credential
+   leak: say so with that evidence rather than leaving the scanner's finding
+   unexplained. It is still a **publishing blocker**, and the two claims are different.
+   Host push protection matches the shape, not the value -- measured, gitleaks flags any
+   `sk_live_`-shaped string including an obviously fake one, while a provider's own
+   documented example key is not flagged. So rewrite the fixture to build its value at
+   runtime (`"sk_" + "live_" + ...`) and keep the shape the probe must match: the
+   literal disappears from history while the test still proves what it claims. Rewrite
+   it in the commit that introduced it, before the push -- a fixture that forces an
+   exemption in the push path teaches everyone to ignore that path.
 5. **Dry-run on a clone.** `git clone <repo> /tmp/dry`, run the full rewrite there, and
    check the *result* before trusting the input files: comments intact, no unexpected
    replacement token anywhere in the tree, commit count unchanged, identities collapsed
@@ -195,6 +207,64 @@ rather than left to be discovered:
 - A file that names a path inside the repository is *content*, so the rewrite edits it.
   Afterwards, check that no doc or skill now names a path that does not exist — a
   sanitised placeholder that was never real is worse than a generic description.
+
+## Before a normal push: scope, scan the range, verify it landed
+
+Publishing a branch that has never been pushed needs its own preflight. Do it per
+repository -- "the repos" is not one unit, and one of them may have no remote at all.
+
+1. **Map each repo before touching any of them.** Branch, remote, upstream, and the
+   unpushed range:
+   ```bash
+   git rev-parse --abbrev-ref HEAD
+   git remote -v                                   # may be EMPTY
+   git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo NONE
+   git log --oneline '@{u}..HEAD'                  # what would actually leave
+   ```
+   A repo with no remote cannot be pushed, and "push the changes" then means asking
+   rather than inventing a destination. Confirm the push is a fast-forward before it
+   happens: `git merge-base --is-ancestor origin/<branch> HEAD`.
+2. **Scan the COMMIT RANGE, not the working tree.** `gitleaks --no-git --pipe` and
+   `gitleaks dir .` scan the checkout, so they report untracked caches, editor state
+   and a reviewer's run artifacts that will never be pushed -- a wall of findings
+   about files git does not track. Use history mode over the exact range:
+   ```bash
+   gitleaks git --log-opts="origin/<branch>..HEAD" --redact -v
+   ```
+   Before believing any finding, ask whether the file is tracked
+   (`git ls-files | grep <path>`) and which commit introduced it
+   (`git log --oneline -- <path>`). Untracked means it is not in the push; a commit
+   older than the branch point is somebody else's history, already published or
+   deliberately parked.
+3. **Never push a possible credential to find out whether it is real.** Report the
+   path, the rule, the commit and the shape (length, prefix, hash prefix) -- never
+   the value. Then ask. An agent that resolves the ambiguity by pushing has made the
+   leak irreversible on someone else's behalf.
+4. **Scope every commit to your own paths.** In a repo where the user has staged work
+   that is not yours -- the normal case when they have been reviewing alongside you --
+   `git commit --amend` and `git reset --soft` both carry the WHOLE index into the
+   commit, so your one-file change silently publishes their twenty-seven. Both are
+   safe to use only with an explicit path list:
+   ```bash
+   git commit --amend --no-edit --only -- path/to/my-file
+   git commit -F msg.txt --only -- path/to/my-file
+   ```
+   `reset --soft` has no path argument at all: after it, re-stage only your own paths
+   (`git add <yours>`) and leave the rest in the working tree, or use `reset --mixed`
+   and rebuild the index deliberately. Verify before pushing --
+   `git show --name-only --format='' HEAD` must list exactly the files you intended,
+   and `git diff --cached --name-only | wc -l` must still equal what the user had
+   staged.
+5. **Verify the push landed, per repo.** A push that reported success is not a ref
+   that matches:
+   ```bash
+   git fetch -q origin && git rev-list --left-right --count origin/<branch>...HEAD
+   ```
+   Both numbers must be `0`. Compare the SHAs too, and say in the report which
+   repository received what -- a range like `c2bc808..758363e` is the receipt.
+
+Report the commit range per repo, and what was deliberately left unpushed. A branch
+kept local on purpose is a result, not an omission.
 
 ## Publishing: a force-push is not enough
 

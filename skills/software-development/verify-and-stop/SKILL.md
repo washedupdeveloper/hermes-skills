@@ -51,6 +51,19 @@ report, stop.
   passes for a reason it did not establish is worse than one that failed**, because it
   is reported as a pass. Before quoting a result, say which condition produced it.
 
+- **A number is evidence only if the next person can re-derive it.** A figure measured
+  on a fixture that is not in the repository, or against a tool set that has since
+  changed, cannot be checked by anyone and quietly becomes folklore that later decisions
+  are built on. Replace it with a measurement taken on something the repo **ships**, and
+  name the command, so the claim is reproducible in one line. Where the old figure
+  supported a real conclusion, keep the conclusion and drop the arithmetic that no longer
+  reproduces — do not keep an unreproducible number because the sentence reads better
+  with it.
+- **Measuring can change the thing you measured.** A verification command that runs tools
+  over a fixture may write into it (`nix flake check` creates `flake.lock`), so the next
+  run scores a tree the first one altered. Check `git status` on the fixture after a
+  measurement pass, and if it moved, restore it before quoting either run.
+
 ## Stop condition
 
 Stop immediately when the acceptance proof is complete. Report the commands, their
