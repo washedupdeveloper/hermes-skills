@@ -53,8 +53,21 @@ effect. The chain and its consequences are stated once, in
 ## Verify
 
 ```bash
+nix flake check                    # the gate: eval + build + run tiers
 python3 scripts/claim-audit.py     # exit 1 on any false claim
 ```
+
+`nix flake check` is the whole gate. It is three tiers — what the tree *says*
+(`nix/tests.nix`, milliseconds), what the *shipped artifact* carries
+(`nix/checks.nix`, seconds), and *behaviour* (`setup.sh` against a stub, plus the
+prose claims). The rule is that an assertion belongs in the cheapest tier that can
+make it, so a new check goes in `nix/tests.nix` unless it needs an artifact or an
+interpreter.
+
+`nix flake check` sees only **git-tracked** files. A reference file that exists on
+disk and is not `git add`ed is absent from the store copy, so a skill pointing at
+it fails `skills-shipped` with a path that looks present — `git status` is the
+first check, and `git add` is the fix.
 
 It checks the mechanical claims in this repo's prose — counts, links, the description
 ceiling, the setup script's behaviour — and classifies each `PROVEN` / `FALSE` /

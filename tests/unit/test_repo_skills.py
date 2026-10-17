@@ -6,9 +6,21 @@ Standalone — no pytest required:
     python3 tests/unit/test_repo_skills.py
 
 Every check here was a hand-run command before it was a test. The properties are
-the ones that have actually broken in this repo: a description past the index
-window, a reference file that was promised and never written, a skill that
-shadows the repo from the live library.
+the ones that have actually broken in this repo: a reference file that was
+promised and never written, a skill that shadows the repo from the live library.
+
+WHAT MOVED TO NIX. Four tests that used to live here are now eval-tier
+assertions in `nix/tests.nix`, because they are pure functions of the tree and
+Nix names the skill, the field and both values when they fail:
+
+    test_frontmatter_is_complete            -> test_every_skill_declares_the_required_fields
+    test_description_fits_the_index_window  -> test_every_description_fits_the_index_window
+    test_name_matches_directory             -> test_the_name_matches_its_directory
+    test_no_crlf                            -> test_no_text_file_carries_crlf
+
+They were removed rather than duplicated: one property, one owner. What stays is
+what needs a real regex engine or a subprocess — the pointer heuristic below and
+the prose claims in `test_docs.py`. Run `nix flake check` for the whole gate.
 """
 from __future__ import annotations
 
@@ -19,12 +31,6 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 SKILLS = REPO / "skills"
 SUPPORT = ("references", "templates", "assets", "scripts")
-
-# The index truncates at 57 chars + "...", so the trigger must be self-contained
-# there. Past that, the only part loaded before a skill opens is cut mid-word.
-DESC_MAX = 57
-
-REQUIRED = ("name", "description", "version", "author", "license", "platforms")
 
 
 def skill_files() -> list[pathlib.Path]:
@@ -48,37 +54,6 @@ def parse(p: pathlib.Path) -> tuple[dict, str]:
         if mm:
             fm[mm.group(1)] = mm.group(2).strip().strip('"')
     return fm, text[m.end() + 3:]
-
-
-def test_frontmatter_is_complete():
-    missing = []
-    for p in skill_files():
-        fm, _ = parse(p)
-        for field in REQUIRED:
-            if field not in fm:
-                missing.append(f"{p.parent.name}:{field}")
-    assert not missing, f"missing frontmatter: {missing}"
-
-
-def test_description_fits_the_index_window():
-    """The description is the ONLY part in the index — every session pays it."""
-    bad = []
-    for p in catalog_files():
-        fm, _ = parse(p)
-        d = fm.get("description", "")
-        if len(d) > DESC_MAX:
-            bad.append(f"{p.parent.name}: {len(d)} chars (max {DESC_MAX})")
-    assert not bad, f"description past the index window: {bad}"
-
-
-def test_name_matches_directory():
-    """The skill registers as /<name>; the installer copies by directory name."""
-    bad = []
-    for p in skill_files():
-        fm, _ = parse(p)
-        if fm.get("name") != p.parent.name:
-            bad.append(f"{p.parent.name} != {fm.get('name')}")
-    assert not bad, f"name/directory mismatch: {bad}"
 
 
 def test_no_dead_references():
@@ -139,14 +114,6 @@ def test_related_skills_frontmatter_resolves():
                      "grounded", "wait", "claude", "codex", "opencode")):
                 bad.append(f"{p.parent.name} -> {ref}")
     assert not bad, f"related_skills names nothing known: {bad}"
-
-
-def test_no_crlf():
-    """A CRLF shebang fails on Linux; a CRLF/LF pair makes sync report drift."""
-    bad = [str(p.relative_to(REPO)) for p in REPO.rglob("*")
-           if p.is_file() and p.suffix in (".md", ".sh", ".py", ".yaml", ".yml", ".json")
-           and b"\r\n" in p.read_bytes()]
-    assert not bad, f"CRLF found: {bad}"
 
 
 def main() -> int:

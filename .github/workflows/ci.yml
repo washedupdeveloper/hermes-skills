@@ -4,10 +4,13 @@ name: ci
 # so a push could break any of them and nothing said so — including the docs gate,
 # which exists because the README had already drifted from reality twice.
 #
-# Three things are checked, and each is one the repo's own rules depend on:
+# Five things are checked, and each is one the repo's own rules depend on:
 #
-#   tests   — the unit suite, on all three OSes. It is stdlib-only, so the matrix
-#             needs nothing but pytest and is the portability claim, executed.
+#   gate    — `nix flake check`: the tree, the shipped artifact, and the two gates
+#             below under one pinned toolchain. It is the authoritative one; see
+#             nix/tests.nix for which tier each assertion belongs to.
+#   tests   — the retained Python suite, on all three OSes. It is stdlib-only, so the
+#             matrix needs nothing but pytest and is the portability claim, executed.
 #   audit   — scripts/claim-audit.py, which exits 1 when any mechanical claim in the
 #             prose is FALSE. That is the rule "a claim that can be measured MUST be
 #             measured", enforced rather than stated.
@@ -15,8 +18,10 @@ name: ci
 #             merge path is exercised without touching a real config. It is a bash
 #             script, so it runs where bash is the shell the script was written for.
 #
-# No nix. This repository has no flake and needs none: everything above is stdlib
-# Python plus that one shell script.
+# The `gate` job is the one that needs Nix. The other three deliberately do not:
+# they run on a machine with nothing but Python and bash, which is the no-Nix path
+# this repository promises its contributors. The properties that are pure functions
+# of the tree live in the gate and nowhere else, so there is one owner per property.
 
 on:
   push:
@@ -29,6 +34,21 @@ permissions:
   contents: read
 
 jobs:
+  # The tree's own gate, under one pinned toolchain. `nix flake check` builds every
+  # check in nix/checks.nix: the eval tier (milliseconds), the shipped artifact, and
+  # the two Python/bash gates below run again here — so a property has one owner and
+  # the other jobs remain the no-Nix path rather than a second implementation.
+  gate:
+    name: nix gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # composite action: no node runtime, so it is not part of the Node 20
+      # deprecation. v31 is the current major.
+      - uses: cachix/install-nix-action@v31
+      - name: nix flake check
+        run: nix flake check --keep-going
+
   # The portability guarantee, executed: nothing installed but pytest.
   tests:
     name: tests (${{ matrix.os }})

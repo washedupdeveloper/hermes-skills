@@ -192,18 +192,37 @@ upstream-managed: pull them from their source rather than hand-editing them here
 
 ## Checks
 
-Three gates, all run by CI on every push and pull request — and all runnable locally,
-because none of them needs anything but Python 3.11+ (and `bash` for the third):
+`nix flake check` is the gate. It has three tiers, and the tier is chosen by what
+the assertion needs:
+
+| tier | answers | cost |
+|---|---|---|
+| eval | what the tree **says** — frontmatter, the index window, names, encoding | milliseconds |
+| build | what the **shipped artifact** carries — self-containment, no caches, the whole tree | seconds |
+| run | **behaviour** — `setup.sh` against a stub, and the prose claims against the tree | seconds |
+
+`nix/tests.nix` holds the eval tier, `nix/checks.nix` the other two, and each
+explains why its assertions belong where they are. The rule: an assertion belongs
+in the cheapest tier that can make it, and an interpreter is only needed by the
+last one.
+
+The three commands below still work on a machine with no Nix, which is why they
+stay: they are the no-Nix path, not a second owner of the same property. The
+properties that moved to Nix were removed from `tests/unit/test_repo_skills.py`,
+and its docstring says which and why.
 
 ```bash
-python -m pytest tests/ -q        # the unit suite; the docs gate is part of it
+nix flake check                   # the gate: all three tiers
+python -m pytest tests/ -q        # the retained Python suite; the docs gate is part of it
 python scripts/claim-audit.py     # exit 1 on any claim in the prose that is FALSE
 bash tests/e2e/test_setup.sh      # setup.sh, against a STUBBED `hermes`
 ```
 
 | gate | what it enforces | where |
 |---|---|---|
-| `tests` | the unit suite, on **Linux, macOS and Windows** | `.github/workflows/ci.yml` |
+| `skills` | frontmatter complete and closed, name matches its directory, unique, description inside the index window, no CRLF | `nix/tests.nix` |
+| `skills-shipped` | a skill's own directory carries everything it points at, and nothing machine-generated ships | `nix/checks.nix` |
+| `tests` | the retained unit suite, on **Linux, macOS and Windows** | `.github/workflows/ci.yml` |
 | `claim audit` | every mechanical claim in the prose is checked, not asserted | same |
 | `setup.sh e2e` | the initializer merges rather than clobbers, and `--check` exits 1 on drift | same, Linux and macOS |
 
