@@ -279,6 +279,99 @@ def test_a_labelless_manifest_yields_no_threshold():
     assert out["sweep"] == [], "a one-class sweep must produce no rows"
 
 
+# --- alpha_t sensitivity ----------------------------------------------------
+#
+# M8 records the aggregate weights as uncalibrated, on the rule "reweight only with
+# evidence". Before looking for that evidence, measure the leverage: a weighted mean of
+# EQUAL values cannot move at all, so the spread across dimensions is the ceiling on
+# anything a reweighting could achieve.
+
+THRESHOLD = score.calibrated_threshold()
+
+
+def test_a_uniform_profile_cannot_move_at_all():
+    """Every dimension the same score: the weights are arithmetically irrelevant."""
+    scores = {d: 72.0 for d in score.WEIGHTS}
+    result = cal.weight_sensitivity(scores, THRESHOLD)
+    assert result["spread_across_dimensions"] == 0.0
+    assert result["max_single_weight_move"] == 0.0, result["max_single_weight_move"]
+    assert result["any_verdict_flips"] is False
+
+
+def test_a_divergent_profile_moves_but_need_not_flip():
+    """The golden defects fixture: 19.74 points of spread, and still no flip."""
+    scores = cal.profile_of(REPO / "tests" / "golden" / "rounds" / "defects", THRESHOLD)
+    result = cal.weight_sensitivity(scores, THRESHOLD)
+    assert result["spread_across_dimensions"] > 15, result["spread_across_dimensions"]
+    assert result["max_single_weight_move"] > 1.0, "a divergent profile must move"
+    assert result["any_verdict_flips"] is False, (
+        "if this flips, alpha_t IS load-bearing on the fixture and the doc must say so")
+
+
+def test_a_verdict_that_does_depend_on_a_weight_is_detected():
+    """Proves the flip detection works, rather than reporting `no` unconditionally.
+
+    One dimension at zero and the rest at 100: zeroing the failing dimension's weight
+    lifts the aggregate to 100, so the verdict must flip.
+    """
+    scores = {d: 100.0 for d in score.WEIGHTS}
+    scores["security"] = 0.0
+    result = cal.weight_sensitivity(scores, THRESHOLD)
+    assert result["any_verdict_flips"] is True, result["per_dimension"]
+
+    security = next(r for r in result["per_dimension"] if r["dimension"] == "security")
+    assert security["flips_verdict"] is True, security
+    assert security["aggregate_at_0"] > security["aggregate_at_max"], security
+
+
+def test_the_swept_weights_still_sum_to_one():
+    """A sweep that let the total drift would change the score by renormalisation
+    rather than by the weight, which would be measuring the wrong thing."""
+    scores = {d: 50.0 + i * 10 for i, d in enumerate(score.WEIGHTS)}
+    result = cal.weight_sensitivity(scores, THRESHOLD)
+    assert abs(sum(result["weights"].values()) - 1.0) < 1e-9, result["weights"]
+
+    # Zeroing a weight redistributes PROPORTIONALLY among the others, not equally:
+    # they keep their relative sizes. So the aggregate lands on the weighted mean of
+    # the remaining dimensions at their original proportions, not their plain mean.
+    security = next(r for r in result["per_dimension"] if r["dimension"] == "security")
+    others = {d: w for d, w in score.WEIGHTS.items() if d != "security"}
+    total = sum(others.values())
+    expected = sum(w * scores[d] for d, w in others.items()) / total
+    # `aggregate_at_0` is reported rounded to 4 dp, so compare at that resolution
+    # rather than against the full-precision value.
+    assert abs(security["aggregate_at_0"] - round(expected, 4)) < 1e-9, (
+        f"expected the proportional mean {round(expected, 4):.4f}, got "
+        f"{security['aggregate_at_0']:.4f}")
+
+
+def test_the_reported_aggregate_is_the_gates_own():
+    """The measurement must not re-derive the aggregate: it uses renormalized_aggregate."""
+    scores = cal.profile_of(REPO / "tests" / "golden" / "rounds" / "defects", THRESHOLD)
+    result = cal.weight_sensitivity(scores, THRESHOLD)
+    expected = score.renormalized_aggregate(
+        dict(score.WEIGHTS),
+        [{"dimension": d, "score": s} for d, s in scores.items()])
+    assert abs(result["aggregate"] - round(expected, 4)) < 1e-4, result["aggregate"]
+
+
+def test_margin_is_aggregate_minus_threshold():
+    scores = cal.profile_of(REPO / "tests" / "golden" / "rounds" / "defects", THRESHOLD)
+    result = cal.weight_sensitivity(scores, THRESHOLD)
+    assert abs(result["margin_to_threshold"]
+               - (result["aggregate"] - result["threshold"])) < 1e-3
+
+
+def test_a_directory_without_reviewer_files_is_refused():
+    with tempfile.TemporaryDirectory() as td:
+        assert cal.main(["--sensitivity", td]) == 2
+
+
+def test_the_flag_reports_the_fixture_it_was_given():
+    proc = cal.main(["--sensitivity", str(REPO / "tests" / "golden" / "rounds" / "defects")])
+    assert proc == 0
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

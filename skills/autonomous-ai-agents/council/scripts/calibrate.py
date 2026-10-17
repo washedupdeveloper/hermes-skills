@@ -451,6 +451,88 @@ def _read_manifest(path: str) -> Optional[Dict[str, Any]]:
     return doc
 
 
+def _scorer() -> Any:
+    """The gate's own scorer, loaded by path like every sibling module.
+
+    Loaded lazily so `calibrate --build-eval` does not pay for importing the scorer.
+    """
+    spec = _shared_util.spec_from_file_location("score_reviews", HERE / "score_reviews.py")
+    if spec is None or spec.loader is None:
+        raise ImportError("score_reviews.py")
+    module = _shared_util.module_from_spec(spec)
+    sys.modules["score_reviews"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def profile_of(round_dir: Path, threshold: float) -> Dict[str, float]:
+    """The per-dimension scores the gate produces for a round directory."""
+    scorer = _scorer()
+    result = scorer.evaluate(round_dir, threshold)
+    return {d["dimension"]: float(d["score"]) for d in result["per_dimension"]}
+
+
+def weight_sensitivity(scores: Dict[str, float], threshold: float,
+                       weights: Optional[Dict[str, float]] = None,
+                       max_factor: float = 3.0) -> Dict[str, Any]:
+    """How far the aggregate moves when one aggregate weight does.
+
+    M8 records `alpha_t` as uncalibrated, with the rule "reweight only with evidence".
+    This measures the leverage before anyone goes looking for that evidence: for each
+    dimension, sweep its weight from 0 to `max_factor` x its shipped value, scale the
+    others so the weights still sum to 1, and recompute the aggregate with the gate's
+    own `renormalized_aggregate`.
+
+    The ceiling on any weight effect is the SPREAD across dimension scores — a weighted
+    mean of equal values cannot move at all — so that is reported beside the sweep. If
+    no single weight change flips a verdict, `alpha_t` is not load-bearing on this
+    input, and calibrating it would buy nothing there.
+    """
+    scorer = _scorer()
+    weights = dict(weights or scorer.WEIGHTS)
+    present = {d: weights[d] for d in scores if d in weights}
+    pairs = [{"dimension": d, "score": s} for d, s in scores.items() if d in weights]
+    base = scorer.renormalized_aggregate(present, pairs)
+
+    def at(dim: str, factor: float) -> float:
+        target = weights[dim] * factor
+        others = {d: w for d, w in weights.items() if d != dim}
+        total = sum(others.values()) or 1.0
+        remaining = max(1.0 - target, 0.0)
+        swept = {d: (w / total) * remaining for d, w in others.items()}
+        swept[dim] = target
+        return scorer.renormalized_aggregate(
+            {d: swept[d] for d in scores if d in swept},
+            [{"dimension": d, "score": s} for d, s in scores.items() if d in swept])
+
+    rows: List[Dict[str, Any]] = []
+    for dim in weights:
+        if dim not in scores:
+            continue
+        lo, hi = at(dim, 0.0), at(dim, max_factor)
+        rows.append({
+            "dimension": dim,
+            "weight": round(weights[dim], 4),
+            "aggregate_at_0": round(lo, 4),
+            "aggregate_at_max": round(hi, 4),
+            "range": round(abs(hi - lo), 4),
+            "flips_verdict": (lo >= threshold) != (hi >= threshold),
+        })
+
+    return {
+        "threshold": round(threshold, 4),
+        "weights": {d: round(w, 4) for d, w in weights.items()},
+        "aggregate": round(base, 4),
+        "verdict": "satisfied" if base >= threshold else "not_satisfied",
+        "spread_across_dimensions": round(
+            max(scores.values()) - min(scores.values()), 4) if scores else 0.0,
+        "margin_to_threshold": round(base - threshold, 4),
+        "max_single_weight_move": round(max((r["range"] for r in rows), default=0.0), 4),
+        "any_verdict_flips": any(r["flips_verdict"] for r in rows),
+        "per_dimension": rows,
+    }
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="calibrate.py",
@@ -472,9 +554,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--seed", type=int, default=20261006)
     parser.add_argument("--k", type=float, default=1.2, help="Hill steepness")
     parser.add_argument("--out", default=None, help="Write the manifest here")
+    parser.add_argument("--sensitivity", metavar="ROUND_DIR",
+                        help="Measure how far the aggregate moves when one alpha_t "
+                             "weight does, for the round directory given")
     args = parser.parse_args(argv)
 
-    if args.build_eval:
+    if args.sensitivity:
+        round_dir = Path(args.sensitivity).expanduser().resolve()
+        if not round_dir.is_dir():
+            print(f"calibrate: not a directory: {round_dir}", file=sys.stderr)
+            return 2
+        scorer = _scorer()
+        threshold = scorer.calibrated_threshold()
+        scores = profile_of(round_dir, threshold)
+        if not scores:
+            print(f"calibrate: {round_dir} holds no <dimension>.json reviewer files",
+                  file=sys.stderr)
+            return 2
+        result = {"round": str(round_dir), **weight_sensitivity(scores, threshold)}
+    elif args.build_eval:
         if not args.base:
             print("calibrate: --build-eval needs --base", file=sys.stderr)
             return 2

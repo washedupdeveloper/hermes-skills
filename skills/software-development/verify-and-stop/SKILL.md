@@ -63,6 +63,17 @@ report, stop.
   over a fixture may write into it (`nix flake check` creates `flake.lock`), so the next
   run scores a tree the first one altered. Check `git status` on the fixture after a
   measurement pass, and if it moved, restore it before quoting either run.
+- **A test of a limit needs an input that crosses it.** A truncation test, a cap, a
+  pagination boundary, a "too long" branch — the fixture has to exceed the threshold, or
+  the branch under test never runs and the assertion passes for the reason that nothing
+  happened. Compute the fixture's real size against the limit before trusting the test,
+  and check whether an upstream bound makes the boundary unreachable from the input you
+  chose: a body that lists at most N items cannot reach a byte cap that N short entries
+  never fill, so the test silently stops testing. The same failure in miniature is a
+  placeholder assertion left in a file (`assert x or True`): it cannot fail, so it proves
+  nothing while reading as coverage. Delete it or make it assert — and when a test was
+  written around the wrong fixture, say that the test was wrong rather than that the code
+  passed it.
 
 ## Stop condition
 
