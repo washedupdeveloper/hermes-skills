@@ -288,6 +288,26 @@ Option names, defaults, deprecations and published guidance differ between the u
   **CWD then upwards**, offer `--repo <path>` to override, and keep the module's own
   location only as the last resort — which is exactly right for a sandboxed nix check
   that runs the file from a copy of the tree it should inspect.
+- **A store copy makes an experiment measure the OLD code only when the launcher's store
+  path is FIXED.** Editing a module in the working tree and re-running a launcher that was
+  installed or pinned earlier gives you the build from *before* the edit — it execs a store
+  path, not your file. Unlike the `__file__` case this raises nothing: the command runs,
+  prints plausible output, and the numbers match the pre-edit run, so an A/B reads as "my
+  change had no effect" and the natural next move is to doubt the change rather than the
+  harness. The tell is exactness — a result matching the previous run to the decimal is a
+  stale build, not a null result. Run the module from the working tree instead
+  (`python3 scripts/<mod>.py …`, plus whatever dispatch guard the CLI sets for direct
+  invocation), or rebuild before re-measuring.
+  **Which launchers are affected is measurable, so measure it rather than assuming.** It
+  applies to `nix profile install`, a pinned wrapper, or a store path captured in a
+  variable. It does NOT apply to `nix develop -c <launcher>`: that re-evaluates the flake
+  per invocation and, for a dirty tree, rebuilds from the working tree. Measured: a marker
+  prepended to the framework's own `council.py` appeared in the store path the devshell
+  launcher then exec'd (`grep -c MARKER <that path>/scripts/council.py` -> 1), so the edit
+  was live. Two ways to get this wrong, both hit while checking it: read the launcher's
+  store path instead of the file it execs, and conclude "stale" from a run that failed for
+  an unrelated reason — a marker inserted above `from __future__ import annotations` is a
+  `SyntaxError`, which looks exactly like a launcher ignoring your edit.
 - **Comments inside a `writeShellScript` / `runCommand` body are part of the derivation text**, so a comment-only edit there changes the store path and everything downstream of it (a systemd unit's `ExecStart`, the home-manager generation, `/etc`, `system.build.toplevel`). Consequences: (a) do not claim "the derivation is byte-identical" for a change that touches a script body -- check where the comment sits first; (b) when the derivation *does* move for a comment-only edit, prove the cause by swapping just that file back and forth and re-evaluating, rather than assuming something functional changed. Comments in a plain module (not a string) do not affect any derivation, which is why a flake refactor can leave `system.build.toplevel` byte-identical while a script comment cannot.
 - **`nix flake check` silently skips outputs it does not recognise.** It knows a fixed set of output names; anything else prints `warning: unknown flake output '<name>'` and is *not* evaluated. A broken `topology`, `clan` or `clanInternals` output therefore passes the check untouched -- infra carried a `topology` output that had never once evaluated, and the only visible symptom was a dangling `result` symlink. Pair every custom output with a `checks.<system>.<name>` entry pointing at it, so a regression fails the check instead of waiting to be discovered. Two corollaries decide whether a **build output** is verified at all:
   - **A check must BUILD the artifact, not merely name it.** Until a check builds it, the artifact is verified by whatever separate workflow builds it and by nothing else — so "it is a pure derivation, it must be fine" is inference, not evidence. A `dockerTools.buildLayeredImage` output is a gzipped tarball, so building it needs **no docker daemon** and can be an ordinary `runCommand` (`test -s ${mkContainer pkgs}`), which is what lets the image be covered by the gate; a test needing KVM or a daemon cannot be, and stays a manual `nix build .#<name>`. Where a build is cheap and daemonless, prefer the check and let the separate workflow do only what a check cannot (publishing).
