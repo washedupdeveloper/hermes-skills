@@ -42,10 +42,11 @@ jobs:
     name: nix gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       # composite action: no node runtime, so it is not part of the Node 20
-      # deprecation. v31 is the current major.
-      - uses: cachix/install-nix-action@v31
+      # deprecation. v31 is the current major, pinned to the commit that tag
+      # pointed at — see the note in `tests` for why a tag is not enough.
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
       - name: nix flake check
         run: nix flake check --keep-going
 
@@ -61,14 +62,17 @@ jobs:
     name: live hermes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
         with:
           python-version: "3.12"
       - name: install hermes
         run: |
-          nix profile install github:NousResearch/hermes-agent#minimal
+          # A rev, not a branch: `main` moves, so an unpinned install means this job
+          # tests a different product tomorrow without any change here. Bumping it is
+          # a one-line commit, and that is the point.
+          nix profile install github:NousResearch/hermes-agent/548091836760a67e331b8f5643be8e5c08fae1e6#minimal
           # `nix profile install` lands in ~/.nix-profile/bin, which the nix
           # action does not put on PATH.
           echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
@@ -86,10 +90,15 @@ jobs:
     steps:
       # checkout and setup-python must run on Node 24. Node 20 reached EOL in April
       # 2026 and was removed from the runners on 2026-09-23, so v4/v5 (the Node-20
-      # majors) are wrong here. Pinning the major, not a SHA, is this repo's sibling's
-      # convention — review-council's docs/CI.md records the trade-off.
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      # majors) are wrong here.
+      #
+      # Pinned to a COMMIT, not a major. `@v7` is a mutable tag: whoever can move it
+      # runs code here with this workflow's token, and no change to this repository
+      # is needed. The comment above each pin names the version it was chosen for, so
+      # a reader can tell how stale it is; `nix flake check` fails if any `uses:` is
+      # not a 40-hex SHA, which is what keeps this from drifting back.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
         with:
           python-version: "3.12"
       - name: install pytest
@@ -133,8 +142,8 @@ jobs:
     name: claim audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
         with:
           python-version: "3.12"
       - name: audit the claims in the prose
@@ -165,7 +174,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - name: exercise setup.sh against a stubbed hermes
         run: |
           # Annotated on failure for the same reason as the audit: the log is not

@@ -82,8 +82,110 @@ let
       lib.filter (name: entries.${name} == "directory") (builtins.attrNames entries)
     )
   ) (builtins.attrNames (builtins.readDir (src + "/skills")));
+
+  # --- workflow pins ------------------------------------------------------
+  # `uses: owner/action@vN` is a mutable reference: whoever can move the tag runs
+  # code in this repository's CI, with no change to this repo. A branch name in
+  # `nix profile install github:owner/repo#attr` is the same hazard. A commit SHA is
+  # the only form that cannot be moved, so it is a property of the source file and
+  # is asserted here rather than left to review.
+  workflowDir = src + "/.github/workflows";
+
+  workflowFiles =
+    if builtins.pathExists workflowDir then
+      lib.filter
+        (n: lib.hasSuffix ".yml" n || lib.hasSuffix ".yaml" n)
+        (builtins.attrNames (builtins.readDir workflowDir))
+    else
+      [ ];
+
+  # Every match of *pattern* in every workflow, as `file:line:value`. Comment lines
+  # are skipped: a comment may name a ref without being one ("`uses:` must be a SHA"),
+  # and scanning prose turns a documentation line into a false failure.
+  scan =
+    pattern:
+    let
+      one =
+        file:
+        let
+          lines = lib.splitString "\n" (builtins.readFile (workflowDir + "/${file}"));
+          numbered = lib.imap1 (i: line: { inherit i line; }) lines;
+          isComment = x: lib.hasPrefix "#" (lib.trim x.line);
+          pick =
+            x:
+            let
+              m = builtins.match pattern x.line;
+            in
+            if m == null then null else { name = "${file}:${toString x.i}"; value = builtins.head m; };
+        in
+        lib.filter (x: x != null) (map pick (builtins.filter (x: !isComment x) numbered));
+    in
+    lib.concatMap one workflowFiles;
+
+  usesRefs = scan ".*uses:[[:space:]]*([^[:space:]]+).*";
+  githubRefs = scan ".*(github:[^[:space:]]+).*";
+
+  hex40 = lib.concatStrings (lib.genList (_: "[0-9a-f]") 40);
+
+  # A local action is a directory in this repository: it moves with the commit.
+  isLocal = ref: lib.hasPrefix "./" ref;
+  isPinned = ref: builtins.match (".*@" + hex40) ref != null;
+  isRevPinned = ref: builtins.match ("github:[^/]+/[^/]+/" + hex40 + "(#.*)?") ref != null;
 in
 {
+  workflows = {
+    test_every_workflow_action_is_pinned_to_a_commit = {
+      expr = map (x: "${x.name}: ${x.value}") (
+        builtins.filter (x: !(isLocal x.value) && !(isPinned x.value)) usesRefs
+      );
+      expected = [ ];
+    };
+
+    test_every_github_install_is_pinned_to_a_rev = {
+      expr = map (x: "${x.name}: ${x.value}") (
+        builtins.filter (x: !(isRevPinned x.value)) githubRefs
+      );
+      expected = [ ];
+    };
+
+    # Negative controls. A predicate that accepts everything passes the checks
+    # above on any workflow at all, and the pass looks identical to a real one.
+    test_the_action_pin_gate_rejects_a_mutable_tag = {
+      expr = [
+        (isPinned "actions/checkout@v7")
+        (isPinned "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
+      ];
+      expected = [
+        false
+        true
+      ];
+    };
+
+    test_the_rev_pin_gate_rejects_a_branch = {
+      expr = [
+        (isRevPinned "github:NousResearch/hermes-agent#minimal")
+        (isRevPinned "github:NousResearch/hermes-agent/main#minimal")
+        (isRevPinned "github:NousResearch/hermes-agent/548091836760a67e331b8f5643be8e5c08fae1e6#minimal")
+      ];
+      expected = [
+        false
+        false
+        true
+      ];
+    };
+
+    test_a_local_action_needs_no_pin = {
+      expr = [
+        (isLocal "./.github/actions/build")
+        (isLocal "actions/checkout@v7")
+      ];
+      expected = [
+        true
+        false
+      ];
+    };
+  };
+
   skills = {
     # --- frontmatter --------------------------------------------------------
     test_every_skill_opens_with_frontmatter = {
