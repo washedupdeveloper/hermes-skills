@@ -1,8 +1,3 @@
----
-name: clan-sops-store-coherence
-description: "Audit a clan/sops store: markers, recipients, escrow."
----
-
 # Is the clan sops store wired the right way?
 
 "The secrets are encrypted" and "the store is coherent" are different claims. The second
@@ -47,12 +42,22 @@ creation rules need it; this layout does not.)
 
 ## Recipients must agree with the keys that actually exist
 
-Each encrypted file carries its recipients in the **plaintext** `.sops.age[].recipient`
-metadata, so reading them needs no key and no decryption:
+Each encrypted file carries its recipients in **plaintext** metadata, so reading them
+needs no key and no decryption. What that metadata *looks like* depends on the file's
+format, and the two shapes need different tools:
+
+| format | envelope | how the recipient reads |
+|---|---|---|
+| `binary` (what clan sets) | JSON: `{"data": "ENC[…]", "sops": {"age": […]}}` | `jq -r '.sops.age[]?.recipient'` |
+| `yaml` / `json` | `sops:` with an `age:` list, no quotes | `jq` **fails** (parse error); read it with `yq` or `grep` |
+
+So a check that hard-codes `jq` reports zero recipients on a YAML-format store and looks
+like "no recipients" rather than "could not read it". Read both shapes with `grep` — the
+recipients are public keys, so printing them is safe:
 
 ```bash
-# every recipient a file names -- jq reads the encrypted envelope directly
-jq -r '.sops.age[]?.recipient' <file>
+# recipients from any sops envelope, JSON or YAML
+grep -oE '(recipient: *|"recipient": *")age1[a-z0-9]+' <file> | sed 's/.*age1/age1/'
 
 # the machine's key derives to its registered recipient
 git ls-files -s vars/per-machine/<m>/<gen>/<file>/machines/<m>   # must print 120000
@@ -62,9 +67,8 @@ jq -r '.[0].publickey' sops/machines/<m>/key.json
 
 **Do not reach for `sops -d --extract '["sops"]["age"]'`.** `--extract` addresses the
 *decrypted data tree*, and sops strips the `sops` metadata block from its decrypted
-output — so on a clan var the branch fails and only the `jq` fallback ever runs. It also
-needs a key, which contradicts the whole point of a check that reads the envelope. `jq`
-on the encrypted file is the only command that works, and it needs no credentials.
+output — so on a clan var the branch fails and only a fallback ever runs. It also needs a
+key, which contradicts the whole point of a check that reads the envelope.
 
 A recipient count that matches the marker set (N user-readable, M machine-deployed) is
 the evidence that the layout and the crypto agree. If the machine's key does not derive
@@ -77,26 +81,30 @@ A `sops/secrets/<name>/secret` whose decrypted key is **not a recipient of any f
 the repository** is worse than absent: it is the file someone reaches for after losing
 `/var/lib/sops-nix/key.txt`, and installing it restores nothing.
 
-**Enumerate the encrypted files by CONTENT, not by name.** A glob like
+**Enumerate the encrypted files by CONTENT, and match both envelope shapes.** A glob like
 `git ls-files 'vars/*secret*' 'sops/*secret*'` collects only paths containing the word
 `secret`, so it misses every `vars/per-machine/<m>/<gen>/<file>/` blob — the files clan
-actually encrypts to machine and user recipients. A live escrow whose key appears in
-none of the collected files then reads as dead, and the next step deletes the only
-recovery path. Match on the sops envelope instead:
+actually encrypts to machine and user recipients. A live escrow whose key appears in none
+of the collected files then reads as dead, and the next step deletes the only recovery
+path. Match on the envelope instead, in **both** its forms — a quoted `"sops"` key is the
+JSON/binary shape, an unquoted `sops:` is YAML, and a pattern with only one of them
+silently skips half the store:
 
 ```bash
-# every tracked file carrying a sops envelope, found by its metadata key
-git grep -la -- '"sops"' -- vars sops
+# every tracked file carrying a sops envelope, either format
+git grep -laE '^sops:|"sops"' -- vars sops
 
-# the real recipient set, read from the envelope of each one
-git grep -la -- '"sops"' -- vars sops \
-  | while read -r f; do jq -r '.sops.age[]?.recipient' "$f" 2>/dev/null; done \
-  | sort | uniq -c
+# the real recipient set, format-independent; recipients are public keys
+git grep -laE '^sops:|"sops"' -- vars sops \
+  | while read -r f; do
+      grep -oE '(recipient: *|"recipient": *")age1[a-z0-9]+' "$f" | sed 's/.*age1/age1/'
+    done | sort | uniq -c
 
 # then: age-keygen -y on the decrypted escrow, and look for that key in the list
 ```
 
-`-l` prints paths only, so no recipient or ciphertext reaches the transcript.
+`-l` prints paths only, so no ciphertext reaches the transcript, and the recipient grep
+emits public keys, which are not secrets.
 
 If the escrow key is in none of them, the escrow is dead — but only after confirming the
 enumeration covered the tree. Either delete it (smallest correct action: removes a false

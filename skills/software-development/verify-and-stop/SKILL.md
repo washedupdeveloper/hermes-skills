@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.6.0
+version: 1.6.1
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -89,15 +89,20 @@ it is the one that gets skipped because the edit was "only a doc".
   ```
 
   **Read the right-hand number, not both.** The first count is commits `<target>` has that
-  `<branch>` does not; the second is what `<branch>` still has to land. `3<TAB>0` with a
-  clean fast-forward is a finished merge, and a reader applying a `0<TAB>0` test calls it
-  outstanding work forever. `0<TAB>0` is only the case where both branches sit on the same
-  commit.
+  `<branch>` does not; the second is what `<branch>` still has to land. So `0` on the
+  right means nothing is left to land, whatever the left says: `<target>` three ahead and
+  `<branch>` fully contained prints `3<TAB>0`, and the same pair *after* the fast-forward
+  prints `0<TAB>0`. Both are landed. A non-zero right-hand number is the outstanding work,
+  and `0<TAB>0` alone is only the state where both branches sit on one commit — treating
+  it as the sole pass condition reports a landed merge as unlanded.
 
-  **`git checkout` does not refuse a dirty tree — it carries the edits across**, so a
-  co-writer's ` M f.txt` follows you onto `<target>` and the gate then measures a tree that
-  exists on neither branch. Guard with `git status --porcelain` and stop, or clone at your
-  SHA (next bullet) instead of switching; never `git stash` their work.
+  **`git checkout` does not always refuse a dirty tree, and it is never safe to assume
+  either behaviour.** When a modified path is identical on both branches the edit is
+  carried across silently, so a co-writer's ` M f.txt` follows you onto `<target>` and the
+  gate then measures a tree that exists on neither branch. When the path differs between
+  the branches git refuses with `Your local changes to the following files would be
+  overwritten by checkout` and exits 1. Guard with `git status --porcelain` and stop, or
+  clone at your SHA (next bullet) instead of switching; never `git stash` their work.
 
   Report branch and SHA together — "18 checks pass on `main` at `<sha>`". A SHA alone is
   ambiguous when several branches share the commit, and "green at `<sha>`" read as "green
