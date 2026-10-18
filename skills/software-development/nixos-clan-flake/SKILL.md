@@ -424,7 +424,7 @@ T=$(mktemp -d) && chmod 700 "$T"     # never an unset $T: `> "$T/k"` would write
 trap 'rm -rf "$T"' EXIT              # fires on a failed step too, which a trailing `rm` does not
 umask 077
 sops -d --input-type binary <file> > "$T/k"
-stat -c%s "$T/k"                            # byte count, never content
+stat -c%s "$T/k" 2>/dev/null || stat -f%z "$T/k"   # byte count; -c is GNU, -f is BSD/macOS
 grep -c 'AGE-SECRET-KEY' "$T/k" || true     # marker count; 0 means "not this shape"
 age-keygen -y "$T/k"                        # derived PUBLIC key: safe to print, and the real proof
 ```
@@ -541,16 +541,12 @@ arrives: `references/adding-machines-to-a-clan.md`.
    When a verdict turns out to be stale rather than wrong, say which commit it was true
    at instead of defending it.
 
-   **Check the work is on the branch the user pulls.** A flake repo accumulates
-   long-lived branches while `main` sits behind them, so every gate can be green on
-   `feat/<name>` and `main` still be at the commit before the work began -- which is how
-   a session reports "merged" while nothing was merged.
-
-   The clan-specific half is that `git branch -a` comes first: the branch holding the
-   work may not be the one you were told about, and a long-lived `feat/*` branch is
-   normal here rather than a sign of an abandoned attempt. The commands, the count
-   semantics and the clean-tree guard live in `verify-and-stop` under "Name the branch,
-   not only the commit" — one home for that fact; do not restate them here.
+   **Check the work is on the branch the user pulls**, and check it with
+   `git branch -a` first: the branch holding the work may not be the one you were told
+   about, and a long-lived `feat/*` branch is normal here rather than a sign of an
+   abandoned attempt. The commands, the count semantics and the clean-tree guard live in
+   `verify-and-stop` under "Name the branch, not only the commit" — one home for that
+   fact; do not restate the reasoning or the commands here.
 
 ## References
 

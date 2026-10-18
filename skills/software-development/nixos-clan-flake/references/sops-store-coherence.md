@@ -20,10 +20,16 @@ machine only when a **symlink** exists at `sops/secrets/<name>/machines/<machine
 (or under `groups/<group>`, with `clan.core.sops.defaultGroups` naming the groups):
 
 ```
-sops/secrets/<name>/secret          the sops-encrypted blob
-sops/secrets/<name>/machines/<m> -> ../../machines/<m>    who may decrypt
-sops/secrets/<name>/users/<u>    -> ../../users/<u>
+sops/secrets/<name>/secret           the sops-encrypted blob
+sops/secrets/<name>/machines/<m> -> ../../../machines/<m>   who may decrypt
+sops/secrets/<name>/users/<u>    -> ../../../users/<u>
 ```
+
+**Three `..`, not two.** The link lives in `sops/secrets/<name>/machines/`, so
+`../../machines/<m>` resolves to `sops/secrets/machines/<m>` — one level short, and
+dangling. `../../../machines/<m>` is `sops/machines/<m>`, which is where `key.json`
+actually is. Verify a marker with `readlink -f`; a dangling link reads as present to
+`git ls-files -s` and absent to the module, which is the worst of both.
 
 The module reads the link type, not the target, so a **plain file or directory where a
 symlink belongs silently de-registers the secret** — the machine simply stops getting
