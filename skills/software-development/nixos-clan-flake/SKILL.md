@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.7.3
+version: 1.7.4
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -431,9 +431,11 @@ age-keygen -y "$T/k"                        # derived PUBLIC key: safe to print,
 
 Three things that make this block safe rather than merely well-meant:
 
-- **`$T` must be assigned in the same block that uses it.** An undefined `$T` expands to
-  empty and `> "$T/k"` becomes `> /k` — as root that is a plaintext secret at the
-  filesystem root, and the cleanup then shreds `/k` instead of the temp file.
+- **`$T` must be assigned in the same block that uses it, and `set -euo pipefail` is what
+  makes that safe.** `-u` aborts on an unset `$T`; `-e` aborts when `mktemp -d` itself
+  fails, which is the case `-u` cannot catch (a failed assignment leaves `T` set but
+  empty). Without those flags `> "$T/k"` is `> /k` — as root that is a plaintext secret at
+  the filesystem root, and the cleanup then shreds `/k` instead of the temp file.
 - **`trap … EXIT` is the cleanup, not `shred`.** A failing step (`age-keygen -y` on a
   non-age payload, which is exactly a broker password) returns before any trailing
   `shred` runs, leaving the plaintext on disk indefinitely.

@@ -66,10 +66,11 @@ format, and the two shapes need different tools:
 | format | envelope | how the recipient reads |
 |---|---|---|
 | `binary` (what clan sets) | JSON: `{"data": "ENC[…]", "sops": {"age": […]}}` | `jq -r '.sops.age[]?.recipient'` |
-| `yaml` / `json` | `sops:` with an `age:` list, no quotes | `jq` **fails** (parse error); read it with `yq` or `grep` |
+| `json` | the same shape, still valid JSON | `jq` reads it directly |
+| `yaml` | `sops:` with an `age:` list, no quotes | `jq` **fails** (parse error); read it with `yq` or `grep` |
 
 So a check that hard-codes `jq` reports zero recipients on a YAML-format store and looks
-like "no recipients" rather than "could not read it". Read both shapes with `grep` — the
+like "no recipients" rather than "could not read it". Read every shape with `grep` — the
 recipients are public keys, so printing them is safe:
 
 ```bash
