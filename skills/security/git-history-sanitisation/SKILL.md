@@ -1,7 +1,7 @@
 ---
 name: git-history-sanitisation
 description: "Use when publishing a branch, or sanitising history."
-version: 1.2.2
+version: 1.2.3
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -63,6 +63,13 @@ what catches a malformed replacements file, and it costs one command.
    recovery path below — object purge, repository recreate, `-old` deletion — for a
    problem that one pre-push rewrite would have avoided entirely. Establish which
    situation you are in before the first push, not after the user says "it's live".
+
+   **`filter-repo` needs `--force` in exactly this state**, because it expects a clone:
+   with no upstream it refuses with `(refs/heads/main exists, but refs/remotes/origin/main
+   not found) … use --force`. That is the one flag here that is safe to reach for, and
+   note what it also enables: step 8's `reset --hard` will discard uncommitted changes to
+   tracked files, so commit or bundle first. Take the backup before this step regardless —
+   `--force` plus a prune is not reversible.
 3. **Audit every blob.** Materialise each unique blob once and grep that, rather than
    running the pattern per commit:
    ```bash
@@ -169,11 +176,20 @@ what catches a malformed replacements file, and it costs one command.
    error: failed to push some refs to '…'
    ```
 
-   Confirm the mechanism before acting — `git log --oneline -- .pre-commit-config.yaml`
-   against `git log --oneline --all -- .pre-commit-config.yaml` shows whether the file
-   was dropped from history or merely never tracked. If the path filter dropped it,
-   restore it in the rewrite (`--path .pre-commit-config.yaml` or a fresh commit) and
-   push again, so the gate actually runs. **Do not reach for the bypass**
+   Confirm the mechanism **against the pre-rewrite backup**, not against the rewritten repo:
+   after a path filter drops a file, `git log --oneline -- <path>` and
+   `git log --oneline --all -- <path>` are both empty in the new history — identical to a
+   file that was never tracked, so that pair cannot tell the two apart (measured). Ask the
+   backup instead, where the answer is still there:
+
+   ```bash
+   git clone -q ../pre-rewrite.bundle /tmp/pre && \
+     git -C /tmp/pre log --oneline --all -- .pre-commit-config.yaml
+   ```
+
+   If the backup has commits for that path and the rewritten repo has none, the filter
+   dropped it: restore it (`--path .pre-commit-config.yaml` or a fresh commit) and push
+   again, so the gate actually runs. **Do not reach for the bypass**
    (`PRE_COMMIT_ALLOW_NO_CONFIG=1`, `--no-verify`, deleting the hook) to get past it: a
    rewrite is exactly when the gate is most worth having.
 9. **Tag** the release, and state in the tag message that the history was sanitised.

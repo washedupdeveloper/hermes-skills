@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.7.5
+version: 1.7.6
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -437,15 +437,17 @@ Three things that make this block safe rather than merely well-meant:
   chmod 700 "$T"` on a failed `mktemp` leaves the shell running with `T` empty, and the
   next line writes to `/k`. Measured — the `&&` form reaches the `sops` line with
   `T=[]` and exits 0; the same failure on its own line exits 1. With `T` empty,
-  `> "$T/k"` is `> /k`: as root that is a plaintext secret at the filesystem root, and the
-  cleanup then shreds `/k` instead of the temp file.
-- **`trap … EXIT` is the cleanup, not `shred`.** A failing step (`age-keygen -y` on a
-  non-age payload, which is exactly a broker password) returns before any trailing
-  `shred` runs, leaving the plaintext on disk indefinitely.
-- **`shred` guarantees little on a modern filesystem.** It overwrites the file, not the
-  journal, the CoW copy (btrfs/zfs), the tmpfs page, or the NTFS/WSL backing store — say
-  so instead of implying erasure. On such a host, decrypt into a `tmpfs` path and let
-  the unmount be the erasure, or accept that the file existed and say so.
+  `> "$T/k"` is `> /k`: as root that is a plaintext secret at the filesystem root, and
+  **nothing cleans it up** — `rm -rf ""` is a silent no-op, so the trap cannot help you
+  once `T` is empty. There is no `shred` in this block at all; the trap is the only
+  cleanup, and it needs a real path to remove.
+- **`trap … EXIT` is the cleanup.** A trailing `rm`/`shred` at the end of the block does
+  not run when an earlier step fails, and the step that fails here is `age-keygen -y` on a
+  non-age payload — exactly a broker password, which is then left on disk indefinitely.
+- **`shred` guarantees little on a modern filesystem.** If you use it, it overwrites the
+  file, not the journal, the CoW copy (btrfs/zfs), the tmpfs page, or the NTFS/WSL backing
+  store — say so instead of implying erasure. On such a host, decrypt into a `tmpfs` path
+  and let the unmount be the erasure, or accept that the file existed and say so.
 
 A derived public key is the strongest proof available and is not sensitive: it either
 matches the recipient you expected or it does not. `clan vars get … | wc -c` proves a

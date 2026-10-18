@@ -121,6 +121,12 @@ git grep -laE '^sops:|"sops"' -- vars sops \
 # then: age-keygen -y on the decrypted escrow, and look for that key in the list
 ```
 
+**Decrypting the escrow is the one step that writes a plaintext key to disk.** Use the
+mktemp + `umask 077` + `trap 'rm -rf "$T"' EXIT` block in the parent `SKILL.md` under
+"When you need to PROVE decryption works" — do not improvise a redirect here, because this
+is the file whose loss the escrow exists to survive, and a stray copy of it defeats the
+whole arrangement.
+
 `-l` prints paths only, so no ciphertext reaches the transcript, and the recipient grep
 emits public keys, which are not secrets.
 
