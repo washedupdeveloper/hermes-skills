@@ -1,7 +1,7 @@
 ---
 name: git-history-sanitisation
 description: "Use when publishing a branch, or sanitising history."
-version: 1.2.1
+version: 1.2.2
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -152,10 +152,14 @@ what catches a malformed replacements file, and it costs one command.
      That is the loss to check for, and `git status --ignored` cannot see it: the file
      is not ignored, it is gone from the commit.
    - **The irreversible step is the prune.** `reflog expire --expire=now` plus
-     `gc --prune=now` destroy the reflog and any stash that pointed at the old objects,
-     so `git fsck --lost-found` will not recover them. Take a `git bundle create
-     ../pre-rewrite.bundle --all` or a full clone **before** the rewrite; that backup is
-     the only undo.
+     `gc --prune=now` drop the reflog and every object nothing references any more, so
+     `git fsck --lost-found` will not recover them. Two corrections to the usual telling:
+     a **stash** is not collateral damage — filter-repo refuses to start when one exists
+     (`has stashed changes`) and, if one appears mid-run, rewrites it to the new commits
+     (`_write_stash`, which prints `Rewrote the stash`) before the `gc`. What the prune
+     really costs you is the reflog and any commit only the reflog still pointed at, so
+     take a `git bundle create ../pre-rewrite.bundle --all` or a full clone **before** the
+     rewrite; that backup is the only undo.
 
    The common failure is a push that dies on a hook rather than on git, because a
    tracked config the hook reads was excluded by the path filter:
