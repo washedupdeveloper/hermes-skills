@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.7.1
+version: 1.7.2
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]

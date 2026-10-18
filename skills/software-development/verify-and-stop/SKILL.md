@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.6.1
+version: 1.6.2
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -88,13 +88,20 @@ it is the one that gets skipped because the edit was "only a doc".
   <re-run the gate on <target>>
   ```
 
-  **Read the right-hand number, not both.** The first count is commits `<target>` has that
-  `<branch>` does not; the second is what `<branch>` still has to land. So `0` on the
-  right means nothing is left to land, whatever the left says: `<target>` three ahead and
-  `<branch>` fully contained prints `3<TAB>0`, and the same pair *after* the fast-forward
-  prints `0<TAB>0`. Both are landed. A non-zero right-hand number is the outstanding work,
-  and `0<TAB>0` alone is only the state where both branches sit on one commit — treating
-  it as the sole pass condition reports a landed merge as unlanded.
+  **The right-hand count is ancestry, not content.** The pair is `<target>`-only then
+  `<branch>`-only, so `0` on the right means no commit of `<branch>` is missing from
+  `<target>` — nothing left to land. Two consequences a reader gets wrong:
+
+  - **A no-op fast-forward changes nothing.** If `<target>` is already ahead, the pair
+    reads `3<TAB>0` *before* and `3<TAB>0` *after*; `git merge --ff-only` prints `Already
+    up to date` and exits 0. Re-reading the count after a correct no-op and expecting `0`
+    reports a landed merge as failed. `0<TAB>0` appears only when both refs point at one
+    commit.
+  - **A squash or rebase merge keeps the count non-zero with the content landed.** The
+    branch's original commits are not ancestors of `<target>`, so the pair stays `1<TAB>1`
+    while `git diff --stat <target> <branch>` is empty. Ancestry answers "were these
+    commits merged", not "is this change present" — for a squash merge, ask the PR's
+    merged state or diff the trees.
 
   **`git checkout` does not always refuse a dirty tree, and it is never safe to assume
   either behaviour.** When a modified path is identical on both branches the edit is

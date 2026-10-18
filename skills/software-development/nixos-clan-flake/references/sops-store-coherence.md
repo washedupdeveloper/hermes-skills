@@ -10,25 +10,31 @@ This one covers whether the store that results is actually wired correctly.
 ## Clan discovers secrets by DIRECTORY SHAPE, not by a config file
 
 `nixosModules/clanCore/sops.nix` builds `sops.secrets` by walking
-`<clan.core.settings.directory>/sops/secrets`, and a secret is registered for this
-machine only when a **symlink** exists at `sops/secrets/<name>/machines/<machine>`
-(or under `groups/<group>`, with `clan.core.sops.defaultGroups` naming the groups):
+`<clan.core.settings.directory>/sops/secrets`. A secret is registered for this machine
+only when a marker exists for **this machine**, in one of exactly two places
+(`containsMachineOrGroups`):
 
 ```
-sops/secrets/<name>/secret           the sops-encrypted blob
-sops/secrets/<name>/machines/<m> -> ../../../machines/<m>   who may decrypt
-sops/secrets/<name>/users/<u>    -> ../../../users/<u>
+sops/secrets/<name>/secret              the sops-encrypted blob
+sops/secrets/<name>/machines/<m>        registered for machine <m>
+sops/secrets/<name>/groups/<g>          registered for group <g>
 ```
 
-**Three `..`, not two.** The link lives in `sops/secrets/<name>/machines/`, so
-`../../machines/<m>` resolves to `sops/secrets/machines/<m>` — one level short, and
-dangling. `../../../machines/<m>` is `sops/machines/<m>`, which is where `key.json`
-actually is. Verify a marker with `readlink -f`; a dangling link reads as present to
-`git ls-files -s` and absent to the module, which is the worst of both.
+`groups` itself is `readDir sops/groups` filtered by whether the group directory contains
+`machines/<machine>` — so a group counts only if this machine is a member of it.
+`clan.core.sops.defaultGroups` is **not** the discovery mechanism: it is the default used
+when *encrypting*, so a group named there but absent from `sops/groups` discovers nothing.
 
-The module reads the link type, not the target, so a **plain file or directory where a
-symlink belongs silently de-registers the secret** — the machine simply stops getting
-it. `git ls-files -s <path>` prints `120000` for a symlink; anything else is the bug.
+**A `users/<u>` marker is not a registration marker.** It says who may *decrypt*, which is
+an encryption concern; only `machines/<m>` or `groups/<g>` makes the secret deploy. A
+secret with users but no machine marker encrypts correctly and never reaches the host.
+
+`containsSymlink` accepts `readFileType` in `{ directory, symlink }`, so either a real
+directory or a symlink registers — a plain **file** at that path does not, and the secret
+then silently stops deploying. `git ls-files -s <path>` prints `120000` for a symlink and
+`040000`/`100644` for a directory/file; check the type matches what the repo intends, and
+resolve a symlink with `readlink -f` because a dangling one reads as present to git and
+absent to the module, which is the worst of both.
 
 **A missing `.sops.yaml` is correct for clan, not an omission.** Clan does not use sops
 creation rules; its own template ships none and recipients live in
