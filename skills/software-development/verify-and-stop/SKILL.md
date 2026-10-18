@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.2.0
+version: 1.3.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -17,6 +17,46 @@ metadata:
 
 Translate the acceptance conditions into the **smallest sufficient proof set**, run it,
 report, stop.
+
+## Run the thing. A passing test is not the proof.
+
+**This is a standing rule, not a suggestion for some tasks.** Testing establishes that the
+code you wrote does what your assertions say. It does not establish that the *software
+works*, because the assertions are yours and the failure modes you did not think of are
+exactly the ones no test names. So after the suite is green, **execute the artifact and
+observe it**: boot the VM, run the binary, invoke the CLI verb, build the toplevel,
+`curl` the endpoint, open the file the generator produced. Report what came back.
+
+The gap this closes is not theoretical. Measured in one session:
+
+- a suite at **532 passed** on a repository whose e2e VM test had **never been run by
+  anyone or anything** — it passed when invoked by hand, and no gate or CI job named it;
+- `nix flake check` reported **all checks passed** while the machine toplevel was never
+  built, because the checks it knew about did not include one that builds it;
+- a machine added to a cluster passed `system`, `home` and `structure` — and its toplevel
+  **failed to build** on a missing generated secret. The tests were right; the software
+  was broken;
+- a guard I had just written passed in the exact case it was written to catch, because
+  the option it tested was set by an unrelated module. Only a mutation said so.
+
+What "run it" means, by artifact:
+
+| you built | the proof is |
+| --- | --- |
+| a CLI or script | the verb executes and prints the thing you changed |
+| a service | it starts, its unit is `active`, and its own config parses |
+| a NixOS/home-manager config | `system.build.toplevel` **builds**, and a VM boots it |
+| a library | a caller in another process imports and uses it |
+| a generator or copier | the output file exists and its content is what you claimed |
+| a container | the image builds and the entrypoint runs once |
+
+**A test that requires a fixture you cannot supply is a blocker, not a pass.** Say
+"unproven: needs `<thing>`", never "covered". And when the run contradicts the suite, the
+run wins — the suite is a model, the run is the system.
+
+**Run it again after the last edit.** A proof produced before the final change is a proof
+of a tree that no longer exists; this is the same rule as the stale-verdict one below, and
+it is the one that gets skipped because the edit was "only a doc".
 
 ## Rules
 
@@ -148,6 +188,45 @@ report, stop.
   written around the wrong fixture, say that the test was wrong rather than that the code
   passed it.
 
+## Auditing commits you did not write
+
+When the ask is "validate these commits" — another agent, another session, a collaborator —
+the subject is *claims*, not style. Re-derive each one; a commit message is a hypothesis.
+
+1. **Enumerate before reading.** `git log --oneline --format='%h %ad %an | %s' --date=format:'%H:%M' <base>..origin/master`.
+   Fetch first: the branch you were told about may not be the tip. **If you were given
+   the writer's session id, read that as well.** The commit message is a summary of a
+   measurement; the session holds the measurement and the intent, including what the
+   writer believed it had proved — and that belief, not the code, is the claim you are
+   testing. It also tells you which of their numbers were derived and which were quoted.
+2. **Scope every commit.** `git show --stat --format='' <c>` per commit. A subject naming
+   one concern that touches six files is a swept commit — say so, because the message is
+   then evidence about nothing.
+3. **Check revert pairs for net zero.** `git diff <A>^ <revert-of-A>` empty means the pair
+   is honest churn rather than dead code left behind. A non-empty diff means the revert is
+   partial and the tree carries both.
+4. **Re-run the gate and suite yourself at the tip.** A commit message that says "all
+   checks pass" is the least reliable input in the audit; it is also the cheapest thing to
+   falsify.
+5. **Re-derive every quantitative claim against its source record.** Where a figure appears
+   in a doc, a manifest and a run record, read all three: the record is the authority, and
+   the copies drift in the direction of the more impressive number. A summary that
+   contradicts a sentence two paragraphs later is the tell.
+6. **Read CI per job, by name.** With no `gh` available, the API is enough —
+   `curl -s .../actions/runs?per_page=30 | jq` to find the run by `head_sha`, then
+   `.../runs/<id>/jobs` for each job's `conclusion`. A run-level green hides a red job, and
+   when a log needs rights you do not have, `.../check-runs/<job_id>/annotations` is served
+   unauthenticated on a public repo and names the failing test.
+7. **Report per commit, and say whose defect it is.** "Sound", "defect in their claim",
+   "defect in mine" — the third happens and belongs in the report, not in a footnote: an
+   audit that only ever finds faults upstream is not an audit. Say what the fix is and
+   whether it is already in.
+
+**A claim you cannot measure is not validated by reading it.** Docs prose, "the release is
+published", "the image is downloadable" — each is one HTTP request or one grep away. The
+cheap checks are the ones that get skipped, and they are exactly where a fabricated or
+stale claim survives.
+
 ## Stop condition
 
 Stop immediately when the acceptance proof is complete. Report the commands, their
@@ -165,6 +244,9 @@ so look before escalating.
 ## Failure modes this prevents
 
 - **Scope growth** — turning a verification task into an implementation task.
+- **A suite reported as a working system** — `N passed` offered as proof that the software
+  runs, when no command ever executed it. The tests are your model of the software, so they
+  share your blind spots; the run does not. See "Run the thing" at the top.
 - **Stale proof** — citing a run from before the change being verified.
 - **Silent downgrade** — reporting a check that never ran as if it had passed, which
   is the failure `deterministic-quality-gates` names "absence is not cleanliness".
