@@ -28,6 +28,13 @@ TARGET = GOLDEN / "target"
 # aggregate is an implementation detail we do not want to freeze.
 TOLERANCE = 1e-6
 
+#: Directories under `tests/golden/` that hold the harness's own OUTPUT, not fixture
+#: inputs. Both are written by running something over the fixture tree: `__pycache__` by
+#: a test that imports a module there, `.review-council` by a review run. Pinning either
+#: makes `--check` fail on a tree nobody edited, and makes `--update` — whose stated
+#: contract is to be inert when nothing changed — rewrite a tracked fixture.
+NON_INPUT_DIRS = frozenset({"__pycache__", ".review-council"})
+
 
 def _load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -75,13 +82,25 @@ def hash_inputs() -> Dict[str, str]:
     for path in sorted(GOLDEN.rglob("*")):
         if not path.is_file() or path.name == EXPECT.name:
             continue
-        # Bytecode caches are not fixture INPUTS. They appear only because a test
-        # imported a module inside the fixture tree, and hashing one made this suite
-        # non-deterministic: the first run created `__pycache__/tool.cpython-3*.pyc`,
-        # the next `--update` pinned it, and from then on `--check` failed on a tree
-        # nobody had edited — while `--update`, whose whole contract is to be inert
-        # when nothing changed, silently rewrote a tracked fixture.
-        if "__pycache__" in path.parts or path.suffix in (".pyc", ".pyo"):
+        # Directories that are NOT fixture INPUTS. Both appear as side effects of
+        # running the harness over the fixture tree, and hashing either makes this
+        # suite non-deterministic in a way that is worse than noise:
+        #
+        #   __pycache__    a test imported a module inside the fixture, so the first
+        #                  run created `__pycache__/tool.cpython-3*.pyc`, the next
+        #                  `--update` pinned it, and from then on `--check` failed on
+        #                  a tree nobody had edited.
+        #   .review-council a review was run against the fixture, so the run directory
+        #                  appeared and got pinned the same way. Measured: one
+        #                  `council review tests/golden/target` added 14 run artefacts
+        #                  to expect.json, and the suite then went green against a
+        #                  contaminated fixture.
+        #
+        # The contract `--update` states for itself ("inert when nothing changed")
+        # only holds if what counts as a change excludes the harness's own output.
+        if any(part in NON_INPUT_DIRS for part in path.relative_to(GOLDEN).parts):
+            continue
+        if path.suffix in (".pyc", ".pyo"):
             continue
         rel = path.relative_to(GOLDEN).as_posix()
         out[rel] = hashlib.sha256(path.read_bytes()).hexdigest()[:16]

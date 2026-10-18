@@ -1,7 +1,7 @@
 ---
 name: council
 description: "Convene the code-review council on a repo."
-version: 3.3.0
+version: 3.4.0
 author: user
 license: MIT
 platforms: [linux, macos, windows]
@@ -185,11 +185,44 @@ finding entries collapsing to ~6 distinct issues — ~5× repetition, and it doe
 dedupe, because each sample cites a slightly different line range. Count distinct
 claims, never entries.
 
-**Verify every finding before applying it.** On that run roughly half the distinct
-findings were actionable. One filed as a `TypeError` crash was unreachable — the
-caller only returns runs that already satisfy the invariant — while the same line was
-a genuine type-checker gap. A finding is a claim about the code, not a fact: read the
-call path before editing.
+**Verify every finding before applying it.** On that run roughly half of the distinct
+findings were actionable. A finding is a claim about the code, not a fact — the procedure
+for turning claims into fixes or evidence-backed rejections is **Acting on findings**,
+below.
+
+## Acting on findings
+
+The loop's job is to convert claims into either a verified fix or a rejection with
+evidence. An edit made because the council said so is not a fix.
+
+1. **Reproduce first, using the finding's own `falsifiable_check`.** Run the command it
+   carries, or read the call path it names. The usual survivors are an unreachable branch
+   (a caller already guarantees the invariant), pre-existing behaviour the diff did not
+   touch, and a genuine gap described as a crash.
+2. **Reject in the commit, not in silence.** A wrong finding is information: say what was
+   claimed, what the reproduction returned, and why no edit followed. A silently dropped
+   finding returns next round from a different sample.
+3. **Check whether the finding is an artifact of the reviewer's own output encoding.** A
+   quoted `\"` that appears in a finding but not in the file is the JSON encoding of the
+   reviewer's tool output, not the file's bytes — and the "fix" that adds the escape
+   *creates* the defect the finding described. Grep the file for the byte before editing,
+   and expect the same shape elsewhere: a path reported with a `./` prefix the file lacks,
+   a line number taken from a 0-based API (`row`), a count that came from a summary line.
+4. **Fix the source, then sync, then test the deployment.** The deployed skill is a
+   mirror: `council setup skill`, then `council setup skill --check`, then run the suite
+   **in the deployed copy**. It legitimately skips the repo-only tests, and a pass there
+   is what proves the mirror rather than the checkout.
+5. **Re-run to converge, and read the trend in the files you fixed — not the aggregate.**
+   Each round reviews the previous round's fixes, so those files' finding count is the
+   measure: measured over eight rounds on one repository, 34 → 27 → 8 → 8 → 4 → 4 → 1 →
+   none above `info`. Stop there. A high aggregate does not mean done: it can sit above the
+   minimum while a blocker remains in a file you never touched, which is exactly what the
+   gate reports as `not_satisfied` beside a passing score.
+6. **A review of the council's own harness is a code review of the gate, and it finds the
+   classes the gate exists to catch.** Expect an off-by-one in a reported line, a path
+   normaliser that corrupts a path, and a scanner that ignores the harness's own skip
+   list. Those are the silent failures the `deterministic-quality-gates` skill catalogues
+   in its `silent-failure-patterns` reference — fix them there, not by weakening the rule.
 
 ## When to Use
 
@@ -477,3 +510,7 @@ The ablation, its pre-registered rule, the four arms, the scoring pitfalls and t
 injection rules are framework-author material and live in the repository that
 publishes this skill — not here. `council ablate` and `council corpus` are **dev**
 verbs: they exist in a checkout and the devshell, not in the shipped app or the image.
+
+From a checkout, `REVIEW_COUNCIL_AUDIENCE=dev` exposes the dev surface — `version`,
+`calibrate`, `golden`, `ablate`, `corpus`. Without it the CLI answers `not a verb, and no
+such path`, which reads like a missing module rather than a hidden verb.

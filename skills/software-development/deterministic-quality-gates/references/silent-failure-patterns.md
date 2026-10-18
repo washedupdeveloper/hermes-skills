@@ -107,3 +107,68 @@ another created for its own purpose.
 Detection: construct the negative case — the entity genuinely absent — and confirm the
 assertion fails. If it passes, the assertion is testing the container rather than the
 content, and it will pass in exactly the situation it was written to catch.
+
+## `set -e` does not abort on a failing `&&` operand
+
+Bash exempts every command of an `&&`/`||` list except the last, so a guard written as a
+chain guards nothing. `T=$(mktemp -d) && chmod 700 "$T"` continues with `T` **empty** when
+`mktemp` fails, and `git clone … && cd … && <gate>` falls through with the cwd still in the
+caller's tree — the gate then measures the tree you were already in and reports it as the
+thing you meant to check. Measured both ways: the chained form printed `FELL THROUGH` and
+exited **0**; the same failure on its own line exited **128**. Give each command its own
+line, or `|| { echo … >&2; exit 1; }` on the one that must not fail.
+
+Detection: break the FIRST command of every chain in the recipe and confirm the block still
+aborts. A recipe tested only on its happy path cannot show this.
+
+## `lstrip("./")` strips a character set, not a prefix
+
+`str(path).lstrip("./")` removes any leading run of `.` and `/` characters, so `.env`
+becomes `env`, `.review-council/x/council.log` becomes `review-council/x/council.log`, and
+`.github/workflows/ci.yml` becomes `github/workflows/ci.yml` — a path that exists nowhere,
+cited as the location of a real finding. Nothing errors: the string is valid, it just names
+a different file. Use `while text.startswith("./"): text = text[2:]`, and route every call
+site through one helper so the form cannot reappear in one module out of nine.
+
+Detection: a structural grep for `lstrip("./` in the source, asserted empty. The bug is
+invisible in output that looks like a plausible path, so the test has to read the code.
+
+## A 0-based index reported as a line number
+
+Tree-sitter and most JSON location APIs report `row`/`line` **0-based**; a report a human
+reads is 1-based. Used unshifted, every finding cites the line *above* its own — 44 for a
+`uses:` on line 45 — which points the reader at a comment and makes a true finding look
+false. Add one at the boundary where the coordinate enters your vocabulary, and name the
+convention in a comment there.
+
+Detection: the existing test is the trap. A test asserting `"7"` for `row: 7` was written to
+match the code's output, so it pinned the off-by-one and a green suite carried it. Assert
+the line the fixture actually puts the token on, read off the file, not off the parser.
+
+## `git ls-files -s <dir>` lists a directory's contents, never the entry
+
+Asking for the mode of a directory path returns one line per file **inside** it at
+`100644`, and `040000` never appears — so a check that distinguishes "a real directory" from
+"a plain file" by mode reads a correct directory as a file, or as absent for an empty one
+(git does not track empty directories at all). `git ls-tree HEAD <path>` reports the entry's
+own mode: `120000 blob` for a symlink, `040000 tree` for a directory, `100644 blob` for a
+file. Use `ls-files -s` for the symlink case only.
+
+Detection: create both markers — a real directory and a symlink — and assert the check
+accepts each. A fixture with only the symlink cannot show this.
+
+## A scanner that ignores the harness's own skip list
+
+A third-party scanner invoked on the tree root (`gitleaks detect --source .`) walks
+*everything*: it does not honour `.gitignore` and knows nothing about the framework's
+`SKIP_DIRS`, so the tool re-reports the run's own scratch — its logs, its quoted scanner
+output — as fresh findings. Measured on a 377-file repository: **274 hits, 270 of them
+ignored scratch**, burying the three real ones and deflating the score for a reason the code
+could not see. Configure the scanner from the same list the harness uses, and keep the
+scanner's shipped ruleset (`[extend] useDefault` in gitleaks) so only paths are excluded,
+never detection.
+
+Detection: assert the config and `SKIP_DIRS` cannot drift apart, and run the probe on a
+fixture holding one real defect plus a copy of it inside a skipped directory — the expected
+result is exactly one finding.
+

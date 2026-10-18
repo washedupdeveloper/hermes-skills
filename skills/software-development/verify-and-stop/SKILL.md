@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.6.2
+version: 1.6.3
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -110,7 +110,6 @@ it is the one that gets skipped because the edit was "only a doc".
   the branches git refuses with `Your local changes to the following files would be
   overwritten by checkout` and exits 1. Guard with `git status --porcelain` and stop, or
   clone at your SHA (next bullet) instead of switching; never `git stash` their work.
-
   Report branch and SHA together — "18 checks pass on `main` at `<sha>`". A SHA alone is
   ambiguous when several branches share the commit, and "green at `<sha>`" read as "green
   on main" is how work that was never merged gets reported as merged. A real merge, as
@@ -125,8 +124,11 @@ it is the one that gets skipped because the edit was "only a doc".
   there:
 
   ```bash
-  git clone -q . /tmp/clean-$$ && cd /tmp/clean-$$ && \
-    git log --oneline -1 && git status --short | wc -l && <the gate command>
+  set -euo pipefail
+  D=$(mktemp -d)                        # fresh path: a fixed one reuses a stale clone
+  git clone -q . "$D/clean"             # OWN LINE: inside an && chain a failure does not abort
+  cd "$D/clean"
+  git log --oneline -1; git status --short | wc -l; <the gate command>
   ```
 
   The clone carries only committed content, so a green run is a statement about your
@@ -175,6 +177,17 @@ it is the one that gets skipped because the edit was "only a doc".
   prerequisite), the number alone proves neither — inspect the reason. **A check that
   passes for a reason it did not establish is worse than one that failed**, because it
   is reported as a pass. Before quoting a result, say which condition produced it.
+
+- **`set -e` does not abort on a failing `&&` operand, so a guard written as a chain guards
+  nothing.** Bash exempts every command of an `&&`/`||` list except the last, so
+  `T=$(mktemp -d) && chmod 700 "$T"` continues with `T` **empty** when `mktemp` fails, and
+  `git clone … && cd … && <gate>` falls through with the cwd still in the caller's tree —
+  the gate then measures the tree you were already in and reports it as the thing you
+  meant to check. Give each command its own line, or `|| { echo … >&2; exit 1; }` on the
+  one that must not fail. Same family as the pipeline-status trap above: the failure is
+  real, the status never propagates, and the output reads as success. Measured both ways:
+  the chained form printed `FELL THROUGH` and exited **0**; the same failure on its own
+  line exited **128**.
 
 - **A number is evidence only if the next person can re-derive it.** A figure measured
   on a fixture that is not in the repository, or against a tool set that has since

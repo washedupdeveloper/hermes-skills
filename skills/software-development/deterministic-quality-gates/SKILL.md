@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.6.0
+version: 1.6.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -89,6 +89,14 @@ inferring it: a length rule is tested at the limit and one past it, because a `>
 for `>` rejects the last value that fits, and no real artifact sits on the boundary. A
 copy of the predicate written for the test proves nothing about the gate — extract it, so
 the test and the gate call one function.
+
+**A test whose expectation was copied from the code's output pins the bug.** An assertion
+written by running the code and pasting what it returned certifies the implementation, not
+the contract — so an off-by-one, a mangled path or a wrong axis survives a green suite
+forever. Derive the expected value from the *fixture* (the line the token is on, the bytes
+in the file) and state the convention it encodes; when a test and the docstring beside it
+disagree, the test is the thing that lied. Same rule as the negative control one step out:
+a test that cannot disagree with the code is not a test.
 
 **A gate can own the copy-vs-source invariant.** When a repository ships a copy of
 another tree, compare the copy against its source byte for byte, resolving the source

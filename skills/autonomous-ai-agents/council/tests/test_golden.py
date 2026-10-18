@@ -182,14 +182,29 @@ def test_the_cli_check_exits_zero():
     assert "reproduce exactly" in proc.stdout, proc.stdout
 
 
-def test_the_cli_update_refuses_to_rewrite_when_nothing_changed():
+def test_the_cli_update_refuses_to_rewrite_when_nothing_changed(tmp_path):
     """`--update` is the one command that can hide a regression by re-pinning it.
-    It must be inert when there is nothing to pin."""
-    proc = subprocess.run([sys.executable, str(REPO / "scripts" / "golden.py"),
-                           "--update"], capture_output=True, text=True, timeout=120,
-                          env=_as_dispatcher())
-    assert proc.returncode == 0, (proc.returncode, proc.stdout, proc.stderr)
-    assert "nothing changed" in proc.stdout, proc.stdout
+    It must be inert when there is nothing to pin.
+
+    It runs against a COPY of the pinned payload, not the tracked one. As written
+    before, this test invoked `--update` on the real `tests/golden/expect.json`: when
+    the fixture had drifted — which one `council review tests/golden/target` causes,
+    because the run directory lands inside the fixture tree — the test re-pinned the
+    tracked file as a side effect and then failed on its own assertion. The next run
+    passed, green against a fixture nobody had edited on purpose. A test that can
+    rewrite the artefact it is checking is not checking it.
+    """
+    pinned = tmp_path / "expect.json"
+    pinned.write_text(json.dumps(golden.compute(), indent=2, sort_keys=True) + "\n",
+                      encoding="utf-8")
+    before = pinned.read_bytes()
+    original = golden.EXPECT
+    setattr(golden, "EXPECT", pinned)
+    try:
+        assert golden.update() == 0
+    finally:
+        setattr(golden, "EXPECT", original)
+    assert pinned.read_bytes() == before, "--update rewrote a payload that had not changed"
 
 
 def test_the_module_refuses_to_run_without_the_dispatcher():
