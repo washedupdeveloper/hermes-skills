@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.4.0
+version: 1.6.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -73,6 +73,38 @@ it is the one that gets skipped because the edit was "only a doc".
   say so and re-measure in the same breath — a standing property cannot rest on one
   observation, and a green summary is the easiest thing in the world to keep repeating
   after it has stopped being true.
+- **Name the branch, not only the commit. A green run on one branch is not evidence about
+  another.** "Merged" is a claim with the same standing as "passes", and the cheap way to
+  be wrong is to prove the work on the branch it was written on and never look at the one
+  the user will pull. Ask the target directly, and re-run the proof there — a fast-forward
+  carries commits, not a verdict:
+
+  ```bash
+  git rev-parse --abbrev-ref HEAD                        # which branch you are actually on
+  git status --porcelain                                 # must be empty; `checkout` CARRIES edits across
+  git merge-base --is-ancestor <target> <branch>         # exit 0 = fast-forward is safe
+  git rev-list --left-right --count <target>...<branch>  # LEFT<TAB>RIGHT; RIGHT is what you land
+  git checkout <target> && git merge --ff-only <branch>
+  <re-run the gate on <target>>
+  ```
+
+  **Read the right-hand number, not both.** The first count is commits `<target>` has that
+  `<branch>` does not; the second is what `<branch>` still has to land. `3<TAB>0` with a
+  clean fast-forward is a finished merge, and a reader applying a `0<TAB>0` test calls it
+  outstanding work forever. `0<TAB>0` is only the case where both branches sit on the same
+  commit.
+
+  **`git checkout` does not refuse a dirty tree — it carries the edits across**, so a
+  co-writer's ` M f.txt` follows you onto `<target>` and the gate then measures a tree that
+  exists on neither branch. Guard with `git status --porcelain` and stop, or clone at your
+  SHA (next bullet) instead of switching; never `git stash` their work.
+
+  Report branch and SHA together — "18 checks pass on `main` at `<sha>`". A SHA alone is
+  ambiguous when several branches share the commit, and "green at `<sha>`" read as "green
+  on main" is how work that was never merged gets reported as merged. A real merge, as
+  opposed to a fast-forward, produces a tree neither branch had, so the target's own gate
+  run is the only evidence about it. Check `git branch -a` before concluding there is
+  nothing left to land: the branch holding the work may not be the one you were told about.
 - **When a shared tree is red for someone else's reason, prove YOUR commit in a clone.**
   A co-writer's uncommitted files break the gate for everybody: an untracked file a check
   references, a half-finished edit, a staged experiment. Do not stash their work, do not
@@ -279,6 +311,10 @@ so look before escalating.
   runs, when no command ever executed it. The tests are your model of the software, so they
   share your blind spots; the run does not. See "Run the thing" at the top.
 - **Stale proof** — citing a run from before the change being verified.
+- **A merge reported from the source branch** — the work proved on `feat/x` and described as
+  landed, while the target branch still points at the commit before it. Every number in the
+  report is true and the claim is false, which is why it survives review: nothing you ran
+  was wrong, you simply never ran it where it mattered.
 - **Silent downgrade** — reporting a check that never ran as if it had passed, which
   is the failure `deterministic-quality-gates` names "absence is not cleanliness".
 - **A proof nobody triggers** — a suite that passes when run by hand and is named by no

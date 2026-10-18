@@ -1,7 +1,7 @@
 ---
 name: git-history-sanitisation
 description: "Use when publishing a branch, or sanitising history."
-version: 1.0.0
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -53,6 +53,16 @@ what catches a malformed replacements file, and it costs one command.
    — 404 unauthenticated means private or absent. A rewrite is fully effective only
    while it is private; commits that have already been public are NOT recalled by a
    force-push.
+
+   **An empty remote is the cheapest moment there will ever be — sanitise before the
+   first push.** If the repository exists but advertises no refs (`git ls-remote origin`
+   exits 0 with empty output) and the local tree has no upstream, then nothing has been
+   published, so a rewrite costs a force-push of nothing, needs no recreate, and leaves
+   no objects for the host to purge. Audit and rewrite *first*, then push once. The
+   order is what makes it free: push, notice, rewrite, and you are in the private→public
+   recovery path below — object purge, repository recreate, `-old` deletion — for a
+   problem that one pre-push rewrite would have avoided entirely. Establish which
+   situation you are in before the first push, not after the user says "it's live".
 3. **Audit every blob.** Materialise each unique blob once and grep that, rather than
    running the pattern per commit:
    ```bash
@@ -68,6 +78,40 @@ what catches a malformed replacements file, and it costs one command.
    messages** too — a path in a message is as public as one in a file. A secret scanner
    over full history (`gitleaks detect`) is a good second opinion, never the only one:
    it matches generic patterns, not your identifiers.
+
+   **Password hashes are their own scan class, and no secret scanner flags them.** A
+   crypt(3) digest — `$6$…` (sha512-crypt), `$5$…`, `$2b$…` / `$2y$…` (bcrypt, which is
+   what `htpasswd -B` writes), `$y$…` (yescrypt), `$apr1$…` (htpasswd MD5), `$argon2…` —
+   is not credential-shaped, so gitleaks reports `no leaks found` over a history that
+   carries one. It is still a publishing blocker: the hash is crackable offline,
+   permanently, and a weak or reused password makes that minutes of work. Scan the
+   **blobs materialised in step 3**, not `git log -p` output, and print **paths only**:
+
+   ```bash
+   # -l prints the blob id, never the digest: the match IS the secret.
+   grep -rlaE '\$[0-9a-z]{1,10}\$[A-Za-z0-9./]|hashedPassword|initialHashedPassword' b/
+   git grep -lE '\$[0-9a-z]{1,10}\$[A-Za-z0-9./]' -- .   # the current tree
+   ```
+
+   `$[0-9a-z]{1,10}\$` is the general crypt-format shape. Measured against every form
+   that matters — `$1$`, `$2b$`, `$2y$`, `$5$`, `$6$`, `$y$`, `$apr1$`, `$argon2id$` — it
+   matches all eight and does not match ordinary prose or shell (`$5 per item`, `$HOME/x`,
+   `$1 and $2` all score zero). A hand-written `[56y]` character class silently misses
+   `$2b$` (bcrypt, `htpasswd -B`) and `$argon2id$`, which are the two a modern password
+   store is most likely to hold. Two reasons the blob scan is the only one that counts
+   here:
+
+   - **`git log -p` cannot see a binary blob.** For any file git treats as binary or
+     `-diff` — an `htpasswd` file with a NUL byte, a `.db` — `-p` prints `Binary files
+     differ` instead of content, so the grep exits 1 and a clean result means "not
+     scanned", not "clean".
+   - **`grep -n` prints the whole line.** A matched `hashedPassword = "$6$…$<full hash>"`
+     lands in the transcript, and step 4 of this same procedure forbids exactly that.
+     Count or list; never echo.
+
+   A literal hash that is gone from the tree but present in history is exactly the
+   shape that survives a "the working tree is clean" check, so scan history even when
+   `grep` over the checkout finds nothing.
 4. **Verify a suspected credential by hash and length, never by printing it.** Identify
    the candidate and the live value the same way — length, sha256 prefix, first few
    characters only:
@@ -93,7 +137,40 @@ what catches a malformed replacements file, and it costs one command.
    remote-tracking refs and the `origin` tracking branch.
 7. **Re-audit the rewritten history** with the same blob scan. Every pattern must be
    zero, and every residual the scanner still reports must be explainable.
-8. **Fix what the rewrite breaks**, then run the project's own gates.
+8. **Fix what the rewrite breaks**, then run the project's own gates. Be exact about
+   what filter-repo actually does, because the wrong mechanism sends you hunting a
+   deletion that never happened:
+
+   - **It does not touch ignored or untracked files.** Its `cleanup()` runs only
+     `git reset --hard`, `git reflog expire --expire=now --all` and
+     `git gc --prune=now` — there is no `git clean` in it. With untracked changes
+     present it refuses to start (`you have untracked changes`) unless you pass
+     `--force`; it never deletes them.
+   - **What does disappear is a *tracked* file the path filter excluded** — plus, under
+     `--force`, uncommitted changes to tracked files, which `reset --hard` discards.
+     That is the loss to check for, and `git status --ignored` cannot see it: the file
+     is not ignored, it is gone from the commit.
+   - **The irreversible step is the prune.** `reflog expire --expire=now` plus
+     `gc --prune=now` destroy the reflog and any stash that pointed at the old objects,
+     so `git fsck --lost-found` will not recover them. Take a `git bundle create
+     ../pre-rewrite.bundle --all` or a full clone **before** the rewrite; that backup is
+     the only undo.
+
+   The common failure is a push that dies on a hook rather than on git, because a
+   tracked config the hook reads was excluded by the path filter:
+
+   ```text
+   No .pre-commit-config.yaml file was found
+   error: failed to push some refs to '…'
+   ```
+
+   Confirm the mechanism before acting — `git log --oneline -- .pre-commit-config.yaml`
+   against `git log --oneline --all -- .pre-commit-config.yaml` shows whether the file
+   was dropped from history or merely never tracked. If the path filter dropped it,
+   restore it in the rewrite (`--path .pre-commit-config.yaml` or a fresh commit) and
+   push again, so the gate actually runs. **Do not reach for the bypass**
+   (`PRE_COMMIT_ALLOW_NO_CONFIG=1`, `--no-verify`, deleting the hook) to get past it: a
+   rewrite is exactly when the gate is most worth having.
 9. **Tag** the release, and state in the tag message that the history was sanitised.
    Check the tree first: a rewrite does not stop other writers, and a background curator
    can patch a skill or create one *after* you finish — landing in the profile-local
@@ -262,6 +339,26 @@ repository -- "the repos" is not one unit, and one of them may have no remote at
    ```
    Both numbers must be `0`. Compare the SHAs too, and say in the report which
    repository received what -- a range like `c2bc808..758363e` is the receipt.
+
+   **Then prove the published repository works by cloning it anonymously.** A ref that
+   matches says the objects arrived; it says nothing about whether a stranger can build
+   what they now have. Clone over **HTTPS with no credentials** into a fresh directory,
+   confirm the file and commit counts match the local tree, re-run the sanitisation scan
+   on that clone, and run the project's own gates there:
+
+   ```bash
+   set -euo pipefail
+   D=$(mktemp -d)                      # a fresh path each run: a fixed one reuses a stale clone
+   git clone -q https://github.com/<owner>/<repo>.git "$D/published" \
+     && cd "$D/published" \
+     && git ls-files | wc -l && git rev-list --count HEAD   # must equal the local tree
+   # <the project's gate command>, run here
+   ```
+
+   The clone is the only check that exercises what was actually published — an
+   authenticated remote can serve from a different cache, and a working tree can differ
+   from its own committed blobs. Report the clone's result, not the local gate's, when
+   the question is whether the *published* thing is sound.
 
 Report the commit range per repo, and what was deliberately left unpushed. A branch
 kept local on purpose is a result, not an omission.

@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.4.0
+version: 1.7.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -412,6 +412,46 @@ a wrong "fix" that broke the build, and a review that signed off on both.
 the command; do not run it. Same for anything that would paste a credential, key, or
 hash into the conversation.
 
+**When you need to PROVE decryption works, prove it without the value — this is the
+moment the rule gets broken.** "Does the store actually decrypt?" is a real question
+with a real answer, and reaching for `clan vars get` to answer it is the natural move;
+that is how a broker password ends up in a transcript. Every property worth knowing is
+checkable from the shape of the output, never its content:
+
+```bash
+set -euo pipefail
+T=$(mktemp -d) && chmod 700 "$T"     # never an unset $T: `> "$T/k"` would write to /k
+trap 'rm -rf "$T"' EXIT              # fires on a failed step too, which a trailing `rm` does not
+umask 077
+sops -d --input-type binary <file> > "$T/k"
+stat -c%s "$T/k"                            # byte count, never content
+grep -c 'AGE-SECRET-KEY' "$T/k" || true     # marker count; 0 means "not this shape"
+age-keygen -y "$T/k"                        # derived PUBLIC key: safe to print, and the real proof
+```
+
+Three things that make this block safe rather than merely well-meant:
+
+- **`$T` must be assigned in the same block that uses it.** An undefined `$T` expands to
+  empty and `> "$T/k"` becomes `> /k` — as root that is a plaintext secret at the
+  filesystem root, and the cleanup then shreds `/k` instead of the temp file.
+- **`trap … EXIT` is the cleanup, not `shred`.** A failing step (`age-keygen -y` on a
+  non-age payload, which is exactly a broker password) returns before any trailing
+  `shred` runs, leaving the plaintext on disk indefinitely.
+- **`shred` guarantees little on a modern filesystem.** It overwrites the file, not the
+  journal, the CoW copy (btrfs/zfs), the tmpfs page, or the NTFS/WSL backing store — say
+  so instead of implying erasure. On such a host, decrypt into a `tmpfs` path and let
+  the unmount be the erasure, or accept that the file existed and say so.
+
+A derived public key is the strongest proof available and is not sensitive: it either
+matches the recipient you expected or it does not. `clan vars get … | wc -c` proves a
+decrypt succeeded without revealing anything. If none of that answers the question,
+say the property is unverified rather than spending a secret on it — and if one does
+escape, tell the user in the same reply and treat it as disclosed, because it is.
+
+**Verifying that a clan/sops secret store is wired the RIGHT way is its own audit** —
+symlink markers, recipient↔key agreement, and the orphaned-escrow check that catches a
+recovery path which recovers nothing: `references/sops-store-coherence.md`.
+
 **Confirm scope before a consequential change.** Rotating a credential, changing a
 host key, or deleting state has an operational tail: a device or a client needs to
 know. Ask first, then state the follow-up in the commit body and in your reply.
@@ -493,13 +533,24 @@ arrives: `references/adding-machines-to-a-clan.md`.
    became three lines of `command not found`, and the commit succeeded anyway. Write
    the body to a file and pass `-F <file>`, or use a quoted heredoc (`<<'MSG'`), then
    read it back with `git log -1 --format=%B` before pushing.
-6. **Re-verify LAST, and name the snapshot.** A verdict is a claim about one commit
-   at one instant. On a tree another process can write, `HEAD` moves between the
-   measurement and the report, so a green gate reported from a `git log` taken
-   minutes earlier describes a tree that no longer exists. Re-run the gate after the
-   final write, and state the commit and the time alongside the result. When a
-   verdict turns out to be stale rather than wrong, say which commit it was true at
-   instead of defending it.
+6. **Re-verify LAST, and name the snapshot -- branch included.** A verdict is a claim
+   about one commit on one branch at one instant. On a tree another process can write,
+   `HEAD` moves between the measurement and the report, so a green gate reported from a
+   `git log` taken minutes earlier describes a tree that no longer exists. Re-run the
+   gate after the final write, and state the commit and the time alongside the result.
+   When a verdict turns out to be stale rather than wrong, say which commit it was true
+   at instead of defending it.
+
+   **Check the work is on the branch the user pulls.** A flake repo accumulates
+   long-lived branches while `main` sits behind them, so every gate can be green on
+   `feat/<name>` and `main` still be at the commit before the work began -- which is how
+   a session reports "merged" while nothing was merged.
+
+   The clan-specific half is that `git branch -a` comes first: the branch holding the
+   work may not be the one you were told about, and a long-lived `feat/*` branch is
+   normal here rather than a sign of an abandoned attempt. The commands, the count
+   semantics and the clean-tree guard live in `verify-and-stop` under "Name the branch,
+   not only the commit" — one home for that fact; do not restate them here.
 
 ## References
 
@@ -507,6 +558,9 @@ arrives: `references/adding-machines-to-a-clan.md`.
   a pin correctly.
 - `references/clan-vars-generators.md` — authoring a `clan.core.vars.generators`
   entry, generating it without rotating anything else, and verifying that.
+- `references/sops-store-coherence.md` — is the store wired right: clan's
+  symlink-marker discovery, recipient↔key agreement, the orphaned-escrow check, and
+  why a missing `.sops.yaml` is correct here.
 - `references/testing-a-clan-flake.md` — `lib.runTests` and clan's `clanTest`,
   the ports pair, deployability checks, and how the gate wires into git hooks.
 - `references/adding-machines-to-a-clan.md` — growing a clan from one machine to
