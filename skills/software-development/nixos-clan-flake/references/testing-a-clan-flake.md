@@ -336,3 +336,70 @@ module* (which the VM tests apply, so their nodes rebuild and both VMs re-run)
 ~114s. A minutes-long commit loop is a real cost; say the numbers out loud
 rather than promising "it's fast".
 
+## Designing the e2e tier
+
+A VM test is expensive enough that its assertions get read as proof of whatever
+the surrounding document claims. These are the ways one passes while proving less
+than it appears to.
+
+**A test double must be able to express the case under test.** A stub standing in
+for a model or a CLI that carries its own copy of the system's configuration table
+silently caps what the suite can prove: with five dimensions hardcoded in the stub,
+a six-dimension round is *unrepresentable*, so adding a dimension can never be
+tested and the resulting failure looks like a defect in the product rather than in
+the double. Parameterise the double's inputs from the environment (the round's own
+dimension set, a variable naming which case to inject) and keep one table, not two.
+Any list the double restates is a second copy that will drift.
+
+**Assert participation, not presence.** A per-unit output file existing proves the
+unit was *produced*; only the score moving proves it is *wired in*. Assert the
+expected aggregate against the rebalanced weights with a tolerance, plus a
+`< max` guard so a unit that is merely present fails loudly:
+
+```python
+assert verdict == "satisfied", six
+assert aggregate < 99.9,      f"the added dimension did not move the aggregate: {six}"
+assert abs(aggregate - 95.8) < 1.0, f"not the rebalanced weighted mean: {six}"
+```
+
+Both halves matter: the exact number catches a unit wired into the round but
+weighted wrong, and the inequality catches one that is registered everywhere and
+influences nothing.
+
+**Read a VM test's assertions out of `nix log`, not out of the output directory.**
+`nix build .#<test>` leaves `$out` empty — the per-step `machine:` lines, including
+every `machine.log(...)` and the assertion that failed, are in the derivation log:
+`nix log .#<attr>`, or `nix build -L .#<attr>` to stream them. Grepping the result
+path for evidence of what the guest did returns nothing and reads as "the test ran
+nothing".
+
+**Count with the tool's own predicate, never a regex over the file.** A grep for
+`^\s+test_\w+ =` counted 53 assertions where the framework's own rule
+(`lib.runTests` runs attributes whose name starts with `test`) gives 54; the number
+then gets published in a document as a fact. Derive a count the way the consumer
+derives it — `attrNames` + `hasPrefix "test"` for `runTests`, or whatever the tool
+prints — because a hand-rolled pattern encodes your guess about the file's
+formatting and fails silently on the one line that differs.
+
+**A unit registered in N places needs a test that the lists agree, in BOTH
+directions.** Adding a dimension, a language or a reviewer means naming it in the
+round's spec, in the gate's tables, and in whatever explicit list the *installer*
+reads. Miss the last one and nothing errors: the unit fans out, gets no rubric or
+no tool mapping, reports nothing, and the run looks quiet rather than
+misconfigured. Assert `set(units) == set(registrations)` from both sides — a unit
+with no registration, and a registration naming no unit — so a half-done addition
+fails the suite instead of shipping.
+
+Two habits that make that class of defect findable at all:
+
+- **A document that says "the tool globs X, so no edit is needed" is a claim about
+the code, and it is the claim most likely to be stale.** Verify the mechanism
+before following the procedure; an explicit list that replaced a glob leaves the
+prose behind, and the doc then describes an installer that does not exist. When you
+find one, fix the doc AND add the agreement test, because the doc will rot again.
+- **A test that exists but nothing runs is a demo.** A VM test needing KVM cannot
+live in `nix flake check`, which is correct — but then name the CI job that runs it
+(`grep -rn '<attr>' .github/workflows/`). An e2e proof invoked only when a human
+remembers the command is the weakest-exercised thing in a repository that cites it
+in its acceptance criteria.
+

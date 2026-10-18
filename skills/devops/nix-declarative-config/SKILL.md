@@ -1,7 +1,7 @@
 ---
 name: nix-declarative-config
 description: "Use when making declarative Nix or home-manager changes."
-version: 1.0.0
+version: 1.1.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -174,7 +174,14 @@ copy keeps the old files, and both look complete.
    state rather than discover: an uncommitted change in the source tree SHOULD show as a
    difference, because a copier vendors committed content, so that is not drift; and the
    sync's source is one specific commit, so name it -- `HEAD` moving afterwards makes "in
-   sync" true of a tree that no longer exists.
+   sync" true of a tree that no longer exists. **A drift report is not permission to sync.**
+   Read the drifted file before running the copier: if it is another writer's uncommitted
+   edit, syncing ships their unfinished work into the deployed artifact, and the drift is
+   transient rather than a defect. Separate the two cases by comparing the deployed copy
+   against the committed blob -- `git show HEAD:<path> > /tmp/head && cmp -s /tmp/head
+   <deployed>/<path>` -- because that distinguishes "the artifact is stale" (differs, sync
+   it) from "someone is mid-edit" (matches, leave it). Report which one you found instead
+   of resolving it silently in either direction.
 6. **Stage only the vendored path**, and say what you left alone. Where the user has
    other work in progress, an unrelated unstaged file is theirs: report it, do not
    revert it, and commit with `--only -- <path>`.

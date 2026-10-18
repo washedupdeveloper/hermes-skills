@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.1.0
+version: 1.2.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -37,6 +37,17 @@ report, stop.
   cheaper to run.
 - Distinguish **pass / fail / unavailable / blocked** exactly. "Could not run" is not
   "passed", and an absent tool is not a clean result.
+- **An acceptance clause is proven by a command that something runs, and a harness that
+  cannot express the clause is a blocker rather than an excuse.** A test can exist, pass,
+  and be invoked by nobody: an attribute deliberately kept out of the main gate (a VM test
+  needing KVM) with no CI job naming it either, so it runs only when a human remembers the
+  command — and a document citing it as acceptance evidence is citing something nobody
+  triggers. Before reporting a clause as covered, name the command **and** the thing that
+  invokes it on every change (`grep -rn '<attr>' .github/workflows/`). When a clause has no
+  test at all, inspect the harness before writing "not covered": a test double that carries
+  its own copy of the system's configuration table makes the new case *unrepresentable*, so
+  the double is the defect. Parameterise it and the clause becomes testable; declaring it
+  unprovable instead ships the gap and records it as a decision.
 - Do **not** edit product code unless the verification request explicitly includes
   fixes.
 - Do **not** add polish, cleanup, or unrelated tests once the criteria pass.
@@ -157,6 +168,9 @@ so look before escalating.
 - **Stale proof** — citing a run from before the change being verified.
 - **Silent downgrade** — reporting a check that never ran as if it had passed, which
   is the failure `deterministic-quality-gates` names "absence is not cleanliness".
+- **A proof nobody triggers** — a suite that passes when run by hand and is named by no
+  gate and no workflow. Coverage that exists in the tree and nowhere in the process, so
+  every later change is verified by the one thing that was never wired up.
 - **Post-pass polish** — more edits after the criteria are met, which invalidates the
   proof that was just produced.
 - **Phantom fixes** — editing code to satisfy a report that was never reproduced. The

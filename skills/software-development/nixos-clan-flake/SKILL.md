@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.2.0
+version: 1.3.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -426,6 +426,11 @@ demonstrated nothing.
   A stub is acceptable only where the real thing is genuinely unavailable (network,
   a model, a second host) -- and then name what it stands in for and validate its
   contract against the real interface.
+- **Name the command that runs it, and the thing that invokes that command.** A
+  check can exist, pass, and be wired to nothing: an attribute deliberately outside
+  `checks` (a VM test needing KVM), with no CI job naming it either, runs only when
+  a human remembers the command. Before a suite is cited as proof of anything, say
+  which invocation produces it on every change. A proof nobody triggers is a demo.
 - **Report which mode produced the verdict.** "Checks pass" over cached results, over
   zero executions, or over a pipeline whose status is the last stage's, is not
   evidence. Say whether anything actually ran.
@@ -435,7 +440,12 @@ demonstrated nothing.
 gate/git-hook wiring are in `references/testing-a-clan-flake.md`. Read it before
 adding or debugging a test, or before touching `modules/flake/git-hooks.nix`. It
 also carries the three-tier rule -- eval for a value, build for a rendered file, e2e
-for what a running machine does -- and why Python belongs only in the last one.
+for what a running machine does -- and why Python belongs only in the last one. For
+the e2e tier it has the design rules: a test double must not carry its own copy of
+the system's table (or the new case becomes unrepresentable), an assertion must check
+that a unit MOVED the score rather than that its file exists, `nix log` is where a
+VM test's assertions are, and a unit registered in several places needs a
+two-direction agreement test.
 
 ## Procedure
 

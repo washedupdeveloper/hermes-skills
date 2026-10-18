@@ -191,6 +191,17 @@ caller only returns runs that already satisfy the invariant — while the same l
 a genuine type-checker gap. A finding is a claim about the code, not a fact: read the
 call path before editing.
 
+**`council` from the devshell runs the BUILT tree, not your working copy.** The launcher is
+a `symlinkJoin` into `packages.dev-framework`, so a script or data file you just edited in
+the checkout is not what executes: `council gate` reads the store's `calibration.json` and
+the store's `score_reviews.py`. Editing a parameter and re-running the verb therefore
+appears to change nothing, which reads as "the change had no effect" rather than "the
+change was not loaded" — and that misreading can send you chasing a defect that is not
+there. To exercise an edit, run the module through the interpreter
+(`"$PY" scripts/score_reviews.py <round-dir> --repo <repo>`) or rebuild the package. Treat
+an unchanged result after an edit as evidence you are running the old tree before treating
+it as evidence the edit was wrong.
+
 ## When to Use
 
 - `/council`, or a request for a multi-specialist review of a repo, diff or feature

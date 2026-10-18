@@ -113,6 +113,35 @@ factor), members sitting at a floor or sentinel value drag the pooled statistic 
 that floor and collapse every score. Exclude them from the pool while keeping their
 per-component value for per-component scoring.
 
+**A curve must be anchored on the population it scores.** A scale parameter (`d*`, a
+half-point, a typical density) derived from one producer and applied to another's output is
+two different measurements sharing a name. Measured on one repository: the analyzers reported
+under 2 findings/KLOC while the agent reviewer reported 4.4 at one sample and 57 at five, so
+the curve returned **1.66** where a correctly anchored one returns ~50. The term was
+penalising the reviewer *for finding things*, and it dragged every dimension into the 30s, so
+no member of any class could reach the threshold. Derive each parameter from the same producer
+whose output it scores — and when that producer is an agent, the labelled set must be **agent
+runs at the shipped configuration**, not analyzer runs and not a synthetic defect ladder. The
+diagnostic signature is unmistakable and worth memorising: **every member of every class
+scores far below the threshold at once**, and lowering the threshold does not help because
+the whole population is compressed. Reach for the anchor before the threshold.
+
+**A fallback that borrows another population's anchor must be reported, never applied
+silently.** An uncalibrated parameter needs a default so the tool still runs, but a default
+that is really a different measurement makes the output wrong in a way nothing announces —
+and "no anchor yet" then reads exactly like "measured, and it scored 61". Fall back *and*
+append the gap to the same channel an analyzer uses when it did not run, so it surfaces
+wherever the score is printed. Ship the fallback inert (no anchor written ⇒ behaviour
+unchanged) so existing fixtures keep their pinned verdicts until a real anchor exists.
+
+**A "known-good lands mid-scale" anchoring rule is a discrimination rule, not an absolute
+one.** It pins that member's contribution at **50 by construction**, which in a weighted
+composite caps a pristine member near 81 — so nothing can clear a higher threshold and every
+score drops together. Before adopting such a rule, compute what a pristine member scores under
+it: if it is not near the top of the scale, the rule belongs only in the separating
+comparison. A rule that drops every member and passes none is a rescaling, not a calibration.
+See `references/calibration-evidence.md`.
+
 **Derive a classification threshold from the labels, not from the sweep.** Sweeping
 for the value that best separates the two classes is the mistake that looks correct
 and is not.
@@ -143,6 +172,38 @@ until you have tested its weakest input** — a member landing outside it reopen
 question, and so does the member nearest the line turning out to move more between runs
 than its distance to it; the next two rules are that test, and they are not optional before
 the word "proven" is written down.
+
+**A band is only as tight as the class that fails on the thing you are calibrating.** A member
+that fails on a separate criterion — an open blocking finding, a check that did not run —
+carries no information about where the threshold belongs: it fails at every value, including
+one below its own score. When most of the failing class fails that way, adding members cannot
+narrow the interval, and the honest report is the **one-sided bound you have** (an upper bound
+from the cleanest member, no floor) plus the population ratio. The stronger claim is worth
+stating: if the aggregate is load-bearing only for members with no blocking findings, the
+threshold **cannot be calibrated by collecting more repositories at all**. Worked numbers and
+the screening procedure: `references/calibration-evidence.md`.
+
+**When the clean class is empty, stop measuring and change what the parameter is for.** A
+sample of nine respected real projects produced **one** clean member: the rest each carried
+3–54 confirmed blocking findings — an action pinned to a mutable tag inside a job holding a
+cache write token, a privileged trigger with no author guard, a fetch whose integrity hash was
+optional. That distribution is a property of common practice, not of the sample, so further
+candidates reproduce it. The decision that follows is not "lower the threshold": it is that
+the numeric threshold was never able to be absolute, and the binary criterion already is.
+Keep the number as a **regression detector** against each member's own history (a baseline
+mode usually already exists) and say plainly, in the docs and in the tool's own output, that
+the binary gate carries the absolute judgement — a reader who assumes a passing score is a
+clean bill of health will otherwise treat a compressed scale as a verdict.
+
+**A check that lives only in the test cannot prevent the drift it detects.** A policy test
+that greps prose for a stale version reports the drift *after* the operation that causes it,
+and the operation cannot consult a pattern it does not own — so every release needs a manual
+fix that the enforcing check could never have prevented. Put the definition in the code path
+that both validates and mutates: one function the checker calls to report and the mutator
+calls to rewrite, so the two cannot disagree. A copy of the pattern in the test is a third
+definition to keep in step; have the test call the production function instead of restating
+it. The general form: when a check and the operation that violates it are separate code, the
+operation must own the definition, or the check is a report rather than a gate.
 
 **Probe a band edge with the real gate, never from a printed score.** The comparison is
 exact (`aggregate >= threshold`) while the printed score is rounded, so a member displayed
@@ -218,10 +279,16 @@ code, and document that deleting the file restores uncalibrated behaviour.
    known-good revision is rung 0, and each higher rung seeds a known number of
    defects drawn deterministically from a seed, so ground truth is known by
    construction rather than by inspection. Build it with a script, not by hand.
+   **Pre-screen real-world candidates** for the dominant failure class with a cheap check
+   before spending a full measurement on each — and print that screen's raw distribution, per
+   the pitfall below. A graded ladder tells you where a defect sits on the scale; real
+   repositories tell you whether the scale means anything on code that was not built for it.
 3. **Measure every rung with the real tooling.** Never hand-compute a score you
    could run; the whole point is that the number is reproducible.
-4. **Derive curve parameters from the known-good baseline**, then select the
-   threshold against the labels.
+4. **Derive curve parameters from the known-good baseline of the population that curve
+   scores** — an analyzer's baseline for a curve over analyzer output, known-good *agent
+   runs* for a curve over agent output, measured at the shipped configuration — then select
+   the threshold against the labels.
 5. **Record** the parameters, the measured points, and the caveats in the manifest.
    Include the caveats — a calibration that overstates its coverage is worse than none.
 6. **Re-verify after any model change.** Changing weights or a curve silently moves
@@ -296,6 +363,15 @@ happened to mention first.
   it. Grep for the figure and for the *claim* it supported, and mark the old record as a
   record rather than deleting it — a superseded measurement that stays visible, labelled,
   is what stops the next session re-deriving it.
+- **A pre-screen that reports zero is indistinguishable from one that is broken.** A cheap
+  screen for the dominant failure class saves most of a per-candidate measurement cost — but a
+  check that returns nothing looks exactly like a clean population. Print the **raw
+  distribution beside the count**, and validate the screen against one candidate whose answer
+  you know. Real screens fail on *shape*, not logic, and each such failure returns zero for
+  every input: a JSON tool emitting a **top-level array** where the query indexed an object
+  field; an enum whose values are **capitalised** (`High`) compared against lowercase; a
+  **prefix pattern that also matches a config file** (`.env` matching `.envrc`). Shapes and
+  the screening recipe: `references/calibration-evidence.md`.
 - **Reading a plateau off the sweep.** A sweep over observed scores cannot see the
   interior of the gap between classes; the plateau it reports is an artifact of
   rounding. Compute the separating interval from the labels.
