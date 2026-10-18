@@ -643,7 +643,7 @@ def test_the_advice_says_not_run_rather_than_install():
 
 # --- scoring accuracy: dimension-aware blocking ----------------------------------
 #
-# Eight well-regarded repositories produced 93 of 94 blocking findings in security and
+# Nine well-regarded repositories produced 93 of 94 blocking findings in security and
 # correctness. Those two are the hard requirements; the rest move the score without
 # vetoing a merge, and a `critical` anywhere still blocks so no dimension loses its floor.
 
@@ -687,10 +687,52 @@ def test_critical_blocks_in_every_dimension():
 
 
 def test_an_unknown_dimension_gets_the_strict_floor():
-    """A dimension nobody classified must not pass on a `high`."""
+    """A dimension nobody classified must not pass on a `high`.
+
+    This test used to assert `not open_blocking(... "high")` — the opposite of its own
+    docstring — and passed because `DEFAULT_BLOCKING` was `{"critical"}`. Code, comment
+    and test therefore agreed on the lenient behaviour while all three prose statements
+    described the strict one. The assertion now says what the docstring says.
+    """
     mod = _gate_mod()
-    assert not mod.open_blocking(_one_finding("brand_new", "high"))
+    assert mod.open_blocking(_one_finding("brand_new", "high")), \
+        "an unclassified dimension is not a licence to pass on a high"
     assert mod.open_blocking(_one_finding("brand_new", "critical"))
+    assert not mod.open_blocking(_one_finding("brand_new", "medium"))
+
+
+def test_a_blocking_finding_is_not_offered_as_an_improvement():
+    """Section 4 skips findings section 1 already lists as required.
+
+    The skip compared a SEVERITY against a dict keyed by DIMENSION
+    (`sev in BLOCKING_SEVERITIES`), so it never fired and a blocking finding appeared
+    twice in the plan: once as "must be fixed before this can pass", once as "improves
+    the review". A reader told both things about one finding cannot tell which is true.
+    """
+    mod = _gate_mod()
+    finding = {
+        "id": "SEC-0001", "dimension": "security", "severity": "high", "status": "open",
+        "claim": "hardcoded token", "location": {"path": "a.py", "line_range": "1"},
+    }
+    result = {
+        "aggregate": 90.0,
+        "threshold": 80.0,
+        "blocking": [dict(finding)],
+        "per_dimension": [
+            {"dimension": "security", "score": 90.0, "beta": 1.0, "det": 90.0,
+             "llm": 90.0, "findings": [dict(finding)]},
+        ],
+    }
+    ops = mod.improvement_opportunities(result, target=80.0)
+    naming = [o for o in ops if "SEC-0001" in str(o)]
+    assert len(naming) == 1, f"listed {len(naming)} times: {[o.get('kind') for o in naming]}"
+    assert naming[0]["kind"] == "blocking", naming[0]["kind"]
+
+    # ...and a non-blocking finding in the same dimension is still offered.
+    soft = dict(finding, id="SEC-0002", severity="low")
+    result["per_dimension"][0]["findings"].append(soft)
+    ops = mod.improvement_opportunities(result, target=80.0)
+    assert any(o.get("id") == "SEC-0002" and o["kind"] == "finding" for o in ops), ops
 
 
 # --- scoring accuracy: beta measures the code the repo is MADE OF ----------------

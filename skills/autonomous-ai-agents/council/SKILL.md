@@ -382,7 +382,7 @@ in security or correctness, `critical` anywhere else.
 
 Security and correctness are the hard requirements. A `high` there blocks, because the
 observed cost of getting one wrong is a supply-chain compromise or a build that does not
-work — eight well-regarded repositories produced 93 of 94 blocking findings in exactly
+work — nine well-regarded repositories produced 93 of 94 blocking findings in exactly
 those two dimensions. Performance, readability and architecture block only at `critical`:
 they move the score without vetoing a merge, while a `critical` anywhere still blocks.
 

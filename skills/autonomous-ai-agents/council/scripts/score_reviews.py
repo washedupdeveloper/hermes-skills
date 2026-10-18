@@ -336,7 +336,7 @@ DEFAULT_THRESHOLD = 80.0
 # Severities that block satisfaction outright (FRAMEWORK §6, §5), per dimension.
 #
 # Security and correctness are the HARD requirements: the observed cost of getting one
-# wrong is a supply-chain compromise or a build that does not work, and eight
+# wrong is a supply-chain compromise or a build that does not work, and nine
 # well-regarded repositories produced 93 of 94 blocking findings in exactly these two
 # dimensions. Everything else blocks only at `critical`, so a readability or performance
 # defect moves the score without vetoing a merge — while a `critical` anywhere still
@@ -350,7 +350,13 @@ BLOCKING_SEVERITIES: Dict[str, frozenset] = {
 }
 # An unrecognised dimension gets the strict floor, not the lenient one: a dimension
 # nobody classified should not be able to pass on a `high`.
-DEFAULT_BLOCKING: frozenset = frozenset({"critical"})
+#
+# This said `{"critical"}` while the comment, the commit message and the test's own
+# docstring all said "strict floor" — and the test asserted `not open_blocking(...)`,
+# i.e. it was written to match the code rather than the intent. Three statements of
+# intent against one line of code, so the code moved: `high` blocks in a dimension
+# nobody has classified, exactly as it does in security and correctness.
+DEFAULT_BLOCKING: frozenset = frozenset({"high", "critical"})
 
 # Severity weights for the density term (§3: "severity-weighted findings per
 # KLOC"). The density numerator is a WEIGHTED count, not a raw one.
@@ -731,7 +737,7 @@ def open_blocking(reviews: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     defect should move the score, not veto a merge the way a security hole does. A
     `critical` anywhere still blocks, so no dimension loses its absolute floor.
 
-    Measured against eight well-regarded repositories: 93 of 94 blocking findings were
+    Measured against nine well-regarded repositories: 93 of 94 blocking findings were
     security or correctness, so this narrows an untested path rather than loosening the
     rule that actually fired.
     """
@@ -1072,9 +1078,16 @@ def improvement_opportunities(result: Dict[str, Any],
 
     # 4. Remaining non-blocking findings, worst first.
     for d in per_dim:
+        blocking_sev = BLOCKING_SEVERITIES.get(d["dimension"], DEFAULT_BLOCKING)
         for finding in d.get("findings") or []:
             sev = str(finding.get("severity") or "").lower()
-            if sev in BLOCKING_SEVERITIES:
+            # `sev in BLOCKING_SEVERITIES` tested a SEVERITY against a dict keyed by
+            # DIMENSION, so it was false for every finding and the skip never fired: a
+            # blocking finding was listed here as an improvement opportunity while
+            # section 1 already listed it as required. Measured on a security/high
+            # finding: two entries naming `SEC-0001`, one "Fix ... must be fixed before
+            # this can pass" and one "Address ... improves the review".
+            if sev in blocking_sev:
                 continue      # already covered as blocking
             status = str(finding.get("status") or "open").lower()
             if status in {"fixed", "wontfix", "accepted", "closed"}:
