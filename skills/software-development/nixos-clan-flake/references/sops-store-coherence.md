@@ -7,6 +7,47 @@ that de-registers, a recipient nobody holds, an escrow that restores nothing.
 The sibling reference `clan-vars-generators.md` covers authoring and generating a var.
 This one covers whether the store that results is actually wired correctly.
 
+## Proving decryption without the value
+
+"Does the store actually decrypt?" is answerable from the *shape* of the output. Decrypt
+into a private temp dir, assert on counts, print only the derived public key, and let a
+trap do the cleanup — in a subshell, so the `umask` and the trap do not follow the caller
+around:
+
+```bash
+(
+set -euo pipefail
+T=$(mktemp -d)          # its OWN line: `T=$(mktemp -d) && chmod …` does NOT abort (see below)
+chmod 700 "$T"
+trap 'rm -rf "$T"' EXIT # fires on a failed step too, which a trailing `rm` does not
+umask 077
+sops -d --input-type binary <file> > "$T/k"
+stat -c%s "$T/k" 2>/dev/null || stat -f%z "$T/k"   # byte count; -c is GNU, -f is BSD/macOS
+grep -c 'AGE-SECRET-KEY' "$T/k" || true            # marker count; 0 means "not this shape"
+age-keygen -y "$T/k"                               # derived PUBLIC key: safe to print
+)
+```
+
+Three things that make the block safe rather than merely well-meant:
+
+- **The assignment is its own line, and that is load-bearing.** `set -e` does **not** exit
+  when the failing command is the non-final operand of an `&&` list: `T=$(mktemp -d) &&
+  chmod 700 "$T"` on a failed `mktemp` leaves the shell running with `T` empty, and the
+  next line writes to `/k`. Measured — the `&&` form reaches the `sops` line with `T=[]`
+  and exits 0; the same failure on its own line exits 1. With `T` empty, `> "$T/k"` is
+  `> /k`: as root that is a plaintext secret at the filesystem root, and **nothing cleans
+  it up** — `rm -rf ""` is a silent no-op, so the trap cannot help once `T` is empty.
+- **The subshell is not cosmetic.** Pasted into a session shell, the block would leave
+  `set -euo pipefail`, `umask 077` and an `EXIT` trap in the caller: measured, the umask
+  stayed `0077` after the block and a later file was created `600`. Inside `( … )` the
+  caller keeps `0022`.
+- **`trap … EXIT` is the cleanup, and `shred` guarantees little.** A trailing `rm`/`shred`
+  does not run when an earlier step fails — and the step that fails here is `age-keygen -y`
+  on a non-age payload, exactly a broker password, left on disk indefinitely. If you use
+  `shred` anyway, it overwrites the file but not the journal, the CoW copy (btrfs/zfs), the
+  tmpfs page or the NTFS/WSL backing store; on such a host decrypt into a `tmpfs` path and
+  let the unmount be the erasure.
+
 ## Clan discovers secrets by DIRECTORY SHAPE, not by a config file
 
 `nixosModules/clanCore/sops.nix` builds `sops.secrets` by walking
@@ -110,10 +151,10 @@ silently skips half the store:
 
 ```bash
 # every tracked file carrying a sops envelope, either format
-git grep -laE '^sops:|"sops"' -- vars sops
+git grep -laE '^sops:|"sops"' -- <clandir>/vars <clandir>/sops
 
 # the real recipient set, format-independent; recipients are public keys
-git grep -laE '^sops:|"sops"' -- vars sops \
+git grep -laE '^sops:|"sops"' -- <clandir>/vars <clandir>/sops \
   | while read -r f; do
       grep -oE '(recipient: *|"recipient": *")age1[a-z0-9]+' "$f" | sed 's/.*age1/age1/'
     done | sort | uniq -c
@@ -122,13 +163,15 @@ git grep -laE '^sops:|"sops"' -- vars sops \
 ```
 
 **Decrypting the escrow is the one step that writes a plaintext key to disk.** Use the
-mktemp + `umask 077` + `trap 'rm -rf "$T"' EXIT` block in the parent `SKILL.md` under
-"When you need to PROVE decryption works" — do not improvise a redirect here, because this
-is the file whose loss the escrow exists to survive, and a stray copy of it defeats the
-whole arrangement.
+subshell block in [Proving decryption without the value](#proving-decryption-without-the-value)
+above — do not improvise a redirect here, because this is the file whose loss the escrow
+exists to survive, and a stray copy of it defeats the whole arrangement.
 
 `-l` prints paths only, so no ciphertext reaches the transcript, and the recipient grep
-emits public keys, which are not secrets.
+emits public keys, which are not secrets. **`<clandir>` is
+`clan.core.settings.directory`, not necessarily the repo root** — with the store in a
+subdirectory, a `-- vars sops` rooted at the repo returns zero files and reads as an empty
+store.
 
 If the escrow key is in none of them, the escrow is dead — but only after confirming the
 enumeration covered the tree. Either delete it (smallest correct action: removes a false

@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.7.6
+version: 1.8.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -413,47 +413,19 @@ the command; do not run it. Same for anything that would paste a credential, key
 hash into the conversation.
 
 **When you need to PROVE decryption works, prove it without the value — this is the
-moment the rule gets broken.** "Does the store actually decrypt?" is a real question
-with a real answer, and reaching for `clan vars get` to answer it is the natural move;
-that is how a broker password ends up in a transcript. Every property worth knowing is
-checkable from the shape of the output, never its content:
+moment the rule gets broken.** "Does the store actually decrypt?" is a real question with
+a real answer, and reaching for `clan vars get` to answer it is the natural move; that is
+how a broker password ends up in a transcript. Every property worth knowing is checkable
+from the shape of the output, never its content — a byte count, a marker count, and the
+**derived public key** (`age-keygen -y`), which is not sensitive and either matches the
+recipient you expected or does not.
 
-```bash
-set -euo pipefail
-T=$(mktemp -d)                       # its OWN line: `T=$(mktemp -d) && chmod …` does NOT abort (see below)
-chmod 700 "$T"
-trap 'rm -rf "$T"' EXIT              # fires on a failed step too, which a trailing `rm` does not
-umask 077
-sops -d --input-type binary <file> > "$T/k"
-stat -c%s "$T/k" 2>/dev/null || stat -f%z "$T/k"   # byte count; -c is GNU, -f is BSD/macOS
-grep -c 'AGE-SECRET-KEY' "$T/k" || true     # marker count; 0 means "not this shape"
-age-keygen -y "$T/k"                        # derived PUBLIC key: safe to print, and the real proof
-```
-
-Three things that make this block safe rather than merely well-meant:
-
-- **The assignment is its own line, and that is load-bearing.** `set -e` does **not** exit
-  when the failing command is the non-final operand of an `&&` list: `T=$(mktemp -d) &&
-  chmod 700 "$T"` on a failed `mktemp` leaves the shell running with `T` empty, and the
-  next line writes to `/k`. Measured — the `&&` form reaches the `sops` line with
-  `T=[]` and exits 0; the same failure on its own line exits 1. With `T` empty,
-  `> "$T/k"` is `> /k`: as root that is a plaintext secret at the filesystem root, and
-  **nothing cleans it up** — `rm -rf ""` is a silent no-op, so the trap cannot help you
-  once `T` is empty. There is no `shred` in this block at all; the trap is the only
-  cleanup, and it needs a real path to remove.
-- **`trap … EXIT` is the cleanup.** A trailing `rm`/`shred` at the end of the block does
-  not run when an earlier step fails, and the step that fails here is `age-keygen -y` on a
-  non-age payload — exactly a broker password, which is then left on disk indefinitely.
-- **`shred` guarantees little on a modern filesystem.** If you use it, it overwrites the
-  file, not the journal, the CoW copy (btrfs/zfs), the tmpfs page, or the NTFS/WSL backing
-  store — say so instead of implying erasure. On such a host, decrypt into a `tmpfs` path
-  and let the unmount be the erasure, or accept that the file existed and say so.
-
-A derived public key is the strongest proof available and is not sensitive: it either
-matches the recipient you expected or it does not. `clan vars get … | wc -c` proves a
-decrypt succeeded without revealing anything. If none of that answers the question,
-say the property is unverified rather than spending a secret on it — and if one does
-escape, tell the user in the same reply and treat it as disclosed, because it is.
+The runnable block, the shell traps that make it safe (a `set -e` rule that does not
+behave the way it reads, the `trap` that is the only cleanup, and what `shred` does not
+guarantee), and the escrow step that decrypts: `references/sops-store-coherence.md`.
+If no property answers the question, say the property is unverified rather than spending a
+secret on it — and if one does escape, tell the user in the same reply and treat it as
+disclosed, because it is.
 
 **Verifying that a clan/sops secret store is wired the RIGHT way is its own audit** —
 symlink markers, recipient↔key agreement, and the orphaned-escrow check that catches a
