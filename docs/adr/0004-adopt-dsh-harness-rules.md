@@ -29,8 +29,9 @@ rejected, with the reason.
   rebuild Hermes around a second runtime; every rule above is a discipline this repo can
   keep without it.
 - **Per-file 100% coverage on `src/`.** dsh pays for it across 342 packages in 58
-  groups. Here the eval tier plus one negative control per rule covers the same claims
-  at milliseconds.
+  groups (`ls -d packages/*/*/src | wc -l`, `ls packages | wc -l` in its checkout).
+  Here the eval tier plus one negative control per rule covers the same claims at
+  milliseconds.
 - **Bilingual documentation pairs.** Two files per fact is a second home for the fact, and
   only the pairing gate keeps them equal — exactly the drift ADR-0003 records.
 - **Branded ids at every boundary.** Worth it at dsh's package count; overhead in a tree of
