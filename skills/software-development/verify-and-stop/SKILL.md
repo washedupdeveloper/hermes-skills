@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.3.0
+version: 1.4.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -240,6 +240,18 @@ the subject is *claims*, not style. Re-derive each one; a commit message is a hy
    "defect in mine" — the third happens and belongs in the report, not in a footnote: an
    audit that only ever finds faults upstream is not an audit. Say what the fix is and
    whether it is already in.
+8. **Read the intent statements against the code, and treat a test that agrees with the
+   code but not with its own docstring as a defect marker.** A change ships several
+   descriptions of what it does — a docstring, a comment beside the constant, the commit
+   message, a changelog line, the test's own name — plus the code. When they disagree,
+   count which side has more statements: four descriptions of "strict floor" against one
+   line that is lenient means the **code** is the bug, not the prose. The tell that this
+   survived review is an assertion contradicting the docstring directly above it —
+   `"""must not pass on a high"""` over `assert not blocks(..., "high")` — because the
+   test was written to match the implementation rather than the intent, so a green suite
+   certifies the wrong behaviour. Read each assertion against its docstring and each
+   constant against the comment above it before accepting that a passing suite means the
+   change does what it claims.
 
 **A claim you cannot measure is not validated by reading it.** Docs prose, "the release is
 published", "the image is downloadable" — each is one HTTP request or one grep away. The
@@ -279,6 +291,10 @@ so look before escalating.
   that cannot be reached and cannot be explained.
 - **A count quoted instead of measured** — repeating a number from a report as if it were
   a measurement. Quote the number you ran.
+- **A test that certifies the implementation instead of the intent** — an assertion written
+  to match the code it sits beside, under a docstring that describes something else. It
+  passes, it reads as coverage, and it locks in the wrong behaviour; the disagreement is
+  visible only by comparing the two sentences.
 - **A green run on one platform reported as a green suite** — the suite's own exit code on
   your machine says nothing about the other targets, and the tests most likely to differ are
   the ones you just wrote. Measured: two tests asserting `str(path.relative_to(root))`

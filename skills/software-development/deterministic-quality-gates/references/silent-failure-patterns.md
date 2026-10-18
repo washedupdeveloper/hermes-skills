@@ -81,3 +81,29 @@ Testing `(doc.parent / target).exists()` against a link written `README.md#secti
 reports a valid link broken — the fragment is not part of the path. Split on `#` first.
 In a gate that exits non-zero on failure, a false positive is a false alarm that trains
 the reader to ignore the gate.
+
+## A membership test against a table keyed by a different axis
+
+`sev in BLOCKING_SEVERITIES` reads as a membership test and is one — against a mapping
+keyed by **dimension**. Every lookup returns `False`, so a `continue` written to skip
+already-handled findings never fires and the same item is listed twice: once as required,
+once as an optional improvement. Nothing errors, because the expression is valid and a
+miss is indistinguishable from "not present".
+
+Detection: for every `x in TABLE`, name TABLE's key type out loud. If it is a different
+axis than `x`, the test is a constant. The behavioural tell is a branch that never runs —
+a skip, a filter, a dedupe — so prove it with an input where the condition *is* true and
+assert the branch's effect, not just that no exception was raised.
+
+## An existence test satisfied by a stub
+
+`config.users.users ? name` reads as "the account exists" and is true on every machine
+regardless, because a base module assigns `users.users.<name>.shell` for the login shell.
+The account was never created; the attribute exists. Any "does X exist" assertion over a
+merged configuration has to test a field only the real thing sets (`isNormalUser = true`),
+never the presence of the key — merged configs are full of stubs that one module or
+another created for its own purpose.
+
+Detection: construct the negative case — the entity genuinely absent — and confirm the
+assertion fails. If it passes, the assertion is testing the container rather than the
+content, and it will pass in exactly the situation it was written to catch.

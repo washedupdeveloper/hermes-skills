@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.4.0
+version: 1.5.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -204,6 +204,13 @@ manifest and the run record drifts in exactly that direction, and the run record
 says `not reviewed` beside that member -- is the authority when the three disagree. The
 overstated count is not cosmetic: it is the denominator a reader quotes back, and it can
 contradict the very conclusion drawn two paragraphs later.
+**When one count appears with two values across copies, suspect two populations before
+arithmetic.** The copies disagree because they describe different sets that were never
+named: a ratio attributed to "eight repositories" in four places while the document that
+lists them names nine, and the ninth is a member the other analysis does not contain. The
+fix is not to pick the number the majority of copies carry — it is to name the set inline
+wherever the figure is printed, so the two figures stop being comparable and start being
+what they are. A count without its population is the shape that lets this happen twice.
 
 **A check that lives only in the test cannot prevent the drift it detects.** A policy test
 that greps prose for a stale version reports the drift *after* the operation that causes it,
