@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.3.0
+version: 1.4.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -43,6 +43,8 @@ converts *unmeasured* into *passed*. Carry the distinction in the data structure
 (`ran: false`), and let a coverage fraction (how many expected analyzers actually
 ran and parsed) carry that uncertainty into the final score rather than inventing
 a value for it.
+
+**An inapplicable check is a vacuous pass, not a missing tool.** The rule above has a mirror image. When a probe's *precondition* is absent — no CI workflows to cache, no manifest to pin — the property it asserts is vacuously true, so reporting `ran: false` counts it as missing and depresses coverage on an artifact that had nothing to fix. Measured: two new CI-hygiene probes reported "did not run" for a repository with zero files under `.github/`, which dropped the coverage fraction on the one clean member in the sample and pushed it below the threshold. Distinguish three states, not two: **ran**, **could not run** (a tool is absent — this is a gap), and **did not apply** (the input is absent — this is a pass with a reason). Collapsing the third into the second makes a clean artifact look under-measured.
 
 **A rate with an empty denominator is `null` with a reason, not `0`.** The same rule one
 step out, where the missing input is a person rather than a tool: a reported rate
@@ -184,7 +186,8 @@ threshold **cannot be calibrated by collecting more repositories at all**. Worke
 the screening procedure: `references/calibration-evidence.md`.
 
 **When the clean class is empty, stop measuring and change what the parameter is for.** A
-sample of nine respected real projects produced **one** clean member: the rest each carried
+sample of eight respected real projects, scored at the shipped configuration, produced
+**one** clean member: the other seven each carried
 3–54 confirmed blocking findings — an action pinned to a mutable tag inside a job holding a
 cache write token, a privileged trigger with no author guard, a fetch whose integrity hash was
 optional. That distribution is a property of common practice, not of the sample, so further
@@ -194,6 +197,13 @@ Keep the number as a **regression detector** against each member's own history (
 mode usually already exists) and say plainly, in the docs and in the tool's own output, that
 the binary gate carries the absolute judgement — a reader who assumes a passing score is a
 clean bill of health will otherwise treat a compressed scale as a verdict.
+**Count only members you actually scored.** A candidate that was pre-screened for the
+dominant failure class and then never measured belongs in the population description as a
+separate line, never folded into "N reviewed": the same figure restated in the doc, the
+manifest and the run record drifts in exactly that direction, and the run record -- which
+says `not reviewed` beside that member -- is the authority when the three disagree. The
+overstated count is not cosmetic: it is the denominator a reader quotes back, and it can
+contradict the very conclusion drawn two paragraphs later.
 
 **A check that lives only in the test cannot prevent the drift it detects.** A policy test
 that greps prose for a stale version reports the drift *after* the operation that causes it,
@@ -259,6 +269,12 @@ passing one in a green run, so this failure mode is silent by construction. Wher
 derives its expectation by extraction — parsing a list out of another file, grepping a
 manifest — assert the extraction is non-empty first (`test -s`), or a broken pattern
 compares two empty results and passes.
+**When the fix has redundant layers, the mutation has to remove all of them.** A guard
+built from two independent filters -- a directory name and a file suffix -- still fires
+when only one is deleted, so the test passes and reads as "no teeth" when the truth is
+that the mutation was too small. Delete every layer, or mutate the one the test actually
+names, and confirm the failure you get is the one you predicted: a mutation that leaves
+the code working is evidence about the mutation, not about the test.
 
 **A claim that also lives in code has to change in the code.** Correcting a documented
 statement is not one edit: CLI output, wizard text, a generated config comment and the
@@ -324,6 +340,7 @@ happened to mention first.
 
 ## Pitfalls
 
+- **Changing an input where it is READ when the run recorded it.** A run bakes its inputs into metadata — detected stacks, sample count, scope — and the scorer treats the recorded value as authoritative, correctly, because a re-score must reproduce the run it describes. So a fix applied only in the reader has **no effect on any existing run**, and re-scoring stored runs cannot measure it: the change has to land where the value is *written*. The trap is that re-scoring then shows a real movement caused by a *different* change in the same commit (a new expected tool lowers coverage, and a lower coverage fraction pulls a hybrid score toward the reviewer's more generous number), and the delta is easy to attribute to the fix that did nothing. Before crediting a movement to a change, confirm the changed code is on the path the measurement exercises; if the input is recorded, re-run end to end.
 - **A missing analyzer scoring as clean.** The highest-cost bug in this class.
   Assert on a fixture with a known defect that each probe still reports it — a
   probe that silently returns zero findings passes every test you would think to write.
