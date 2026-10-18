@@ -1,7 +1,7 @@
 ---
 name: git-history-sanitisation
 description: "Use when publishing a branch, or sanitising history."
-version: 1.2.3
+version: 1.2.4
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -370,11 +370,17 @@ repository -- "the repos" is not one unit, and one of them may have no remote at
    ```bash
    set -euo pipefail
    D=$(mktemp -d)                      # a fresh path each run: a fixed one reuses a stale clone
-   git clone -q https://github.com/<owner>/<repo>.git "$D/published" \
-     && cd "$D/published" \
-     && git ls-files | wc -l && git rev-list --count HEAD   # must equal the local tree
+   git clone -q https://github.com/<owner>/<repo>.git "$D/published"   # own line: a failed clone must abort
+   cd "$D/published"
+   git ls-files | wc -l; git rev-list --count HEAD      # must equal the local tree
    # <the project's gate command>, run here
    ```
+
+   **Keep the clone on its own line.** Chained as `git clone … && cd … && <gate>`, a failed
+   clone is the non-final operand of an `&&` list, so `set -e` does not abort — the shell
+   falls through with the cwd still in the caller's tree, and the counts and the gate then
+   describe the local checkout instead of the published one, which is the stale-proof
+   failure this file warns about elsewhere.
 
    The clone is the only check that exercises what was actually published — an
    authenticated remote can serve from a different cache, and a working tree can differ
