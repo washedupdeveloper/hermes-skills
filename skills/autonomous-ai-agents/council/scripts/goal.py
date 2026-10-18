@@ -86,7 +86,7 @@ def contract(repo: Path, threshold: float, gate_cmd: str) -> Dict[str, Any]:
 
 def render(repo: Path, cfg: Dict[str, Any], gate_cmd: str,
            goal_cmd: str) -> List[str]:
-    threshold = float((cfg.get("review") or {}).get("threshold", 87.1141))
+    threshold = float((cfg.get("review") or {}).get("threshold", 80.0))
     fields = contract(repo, threshold, gate_cmd)
     review = cfg.get("review") or {}
 
@@ -158,7 +158,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"  - {problem}", file=sys.stderr)
         return 2
 
-    threshold = float((cfg.get("review") or {}).get("threshold", 87.1141))
+    threshold = float((cfg.get("review") or {}).get("threshold", 80.0))
     gate_cmd = f"{_council_command()} gate --latest --repo {repo}"
     goal_cmd = f"Raise {repo} to the council's bar"
 

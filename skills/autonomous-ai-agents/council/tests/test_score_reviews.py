@@ -434,17 +434,21 @@ def test_calibrated_threshold_degrades_on_a_malformed_manifest(tmp_path):
         mod._CALIBRATION_LOADED = False
 
 
-def test_a_score_above_80_but_below_the_calibration_now_fails(tmp_path):
-    """Behavioural proof that the default really moved.
+def test_a_score_just_below_the_calibrated_threshold_fails(tmp_path):
+    """The gate enforces `calibrated_threshold()`, and an explicit --threshold overrides it.
 
-    A run scoring ~85 cleared the old hardcoded 80 and must NOT clear the
-    calibrated threshold — that is the whole point of calibrating it.
+    This used to prove the default had moved off a hardcoded 80 by scoring 85 and expecting
+    a failure. The re-derived default IS 80.0 now (`docs/CALIBRATION.md`), so the fixture
+    moves just under it: the point of the test is that the number comes from the manifest
+    and is overridable, not that any particular number is hardcoded here.
     """
-    run = _write_run(tmp_path, {"security": 85, "correctness": 85, "readability": 85,
-                                "architecture": 85, "performance": 85})
+    run = _write_run(tmp_path, {"security": 79.5, "correctness": 79.5, "readability": 79.5,
+                                "architecture": 79.5, "performance": 79.5})
     result = json.loads(_gate(run, "--json").stdout)
-    assert 80.0 < result["aggregate"] < result["threshold"], result["aggregate"]
-    assert _gate(run).returncode == 1, "85 must not satisfy the calibrated threshold"
+    assert result["threshold"] == 80.0, result["threshold"]
+    assert result["aggregate"] < result["threshold"], result["aggregate"]
+    assert _gate(run).returncode == 1, "79.5 must not satisfy the calibrated threshold"
+    assert _gate(run, "--threshold", "79").returncode == 0
 
 
 def test_an_explicit_threshold_still_overrides(tmp_path):
@@ -635,3 +639,129 @@ def test_the_advice_says_not_run_rather_than_install():
     assert "not run" in action, action
     assert "install" not in action, action
     assert "ruff, mypy" in action, action
+
+
+# --- scoring accuracy: dimension-aware blocking ----------------------------------
+#
+# Eight well-regarded repositories produced 93 of 94 blocking findings in security and
+# correctness. Those two are the hard requirements; the rest move the score without
+# vetoing a merge, and a `critical` anywhere still blocks so no dimension loses its floor.
+
+def _one_finding(dimension: str, severity: str):
+    return {dimension: {"score": 95, "findings": [{
+        "id": "X-1", "severity": severity, "status": "open",
+        "location": {"path": "a.nix", "line_range": "1"},
+        "claim": "fixture", "falsifiable_check": "true",
+    }]}}
+
+
+def test_security_high_blocks():
+    mod = _gate_mod()
+    assert mod.open_blocking(_one_finding("security", "high")), \
+        "security is a hard requirement: a high must block"
+
+
+def test_correctness_high_blocks():
+    mod = _gate_mod()
+    assert mod.open_blocking(_one_finding("correctness", "high")), \
+        "correctness is a hard requirement: a high must block"
+
+
+def test_readability_high_does_not_block():
+    """A readability defect moves the score; it does not veto a merge."""
+    mod = _gate_mod()
+    assert not mod.open_blocking(_one_finding("readability", "high"))
+
+
+def test_performance_high_does_not_block():
+    """Measured on naersk: an IFD finding is real, and it is not a merge veto."""
+    mod = _gate_mod()
+    assert not mod.open_blocking(_one_finding("performance", "high"))
+
+
+def test_critical_blocks_in_every_dimension():
+    """The floor is not lost: a critical anywhere still blocks."""
+    mod = _gate_mod()
+    for dim in ("security", "correctness", "readability", "architecture", "performance"):
+        assert mod.open_blocking(_one_finding(dim, "critical")), dim
+
+
+def test_an_unknown_dimension_gets_the_strict_floor():
+    """A dimension nobody classified must not pass on a `high`."""
+    mod = _gate_mod()
+    assert not mod.open_blocking(_one_finding("brand_new", "high"))
+    assert mod.open_blocking(_one_finding("brand_new", "critical"))
+
+
+# --- scoring accuracy: beta measures the code the repo is MADE OF ----------------
+
+def test_incidental_stack_does_not_add_expected_tools(tmp_path):
+    """Two Python files in a Nix repository used to make pytest/ruff/mypy/bandit
+    expected, depressing beta on a repo with nothing to test in Python.
+
+    Measured on nix-direnv: nix 77%, shell 23%, python dropped.
+    """
+    mod = _gate_mod()
+    root = tmp_path / "mixed"
+    (root / "nix").mkdir(parents=True)
+    (root / "scripts").mkdir()
+    (root / "flake.nix").write_text("{\n" + "  # nix\n" * 200 + "}\n", encoding="utf-8")
+    (root / "scripts" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (root / "scripts" / "b.py").write_text("y = 2\n", encoding="utf-8")
+
+    present = mod.detect_stacks(root)
+    assert "python" in present, present
+    assert "python" not in mod.relevant_stacks(root), mod.relevant_stacks(root)
+    assert "nix" in mod.relevant_stacks(root)
+
+
+def test_a_meaningful_second_stack_is_kept(tmp_path):
+    """zero-to-nix is 49% nix and 43% javascript; both must count."""
+    mod = _gate_mod()
+    root = tmp_path / "polyglot"
+    (root / "src").mkdir(parents=True)
+    (root / "flake.nix").write_text("{\n" + "  # nix\n" * 100 + "}\n", encoding="utf-8")
+    # Two files: detect_stacks needs at least two before it calls a language present.
+    for name in ("a.ts", "b.ts"):
+        (root / "src" / name).write_text("let x = 1;\n" * 45, encoding="utf-8")
+    kept = mod.relevant_stacks(root)
+    assert "nix" in kept and "javascript" in kept, kept
+
+
+def test_stack_shares_are_fractions_that_sum_to_one(tmp_path):
+    mod = _gate_mod()
+    root = tmp_path / "r"
+    root.mkdir()
+    (root / "a.nix").write_text("x\n" * 75, encoding="utf-8")
+    (root / "b.py").write_text("y\n" * 25, encoding="utf-8")
+    shares = mod.stack_shares(root)
+    assert abs(sum(shares.values()) - 1.0) < 1e-9, shares
+    assert 0.70 < shares["nix"] < 0.80, shares
+
+
+def test_relevant_stacks_never_returns_empty(tmp_path):
+    """A marker-only repository keeps its stack rather than falling back to generic."""
+    mod = _gate_mod()
+    root = tmp_path / "mk"
+    root.mkdir()
+    (root / "Makefile").write_text("all:\n\techo hi\n", encoding="utf-8")
+    assert mod.relevant_stacks(root), "must not be empty"
+
+
+def test_a_checkout_under_a_skipped_name_still_counts(tmp_path):
+    """`_SKIP_DIRS` must apply to the path RELATIVE to the repo root.
+
+    The check used the absolute path's parts, so a checkout at
+    `/somewhere/build/my-repo` had every file skipped: stacks came back empty and beta
+    lost its denominator. Same latent bug in `detect_stacks`, fixed together.
+    """
+    mod = _gate_mod()
+    root = tmp_path / "build" / "target" / "my-repo"
+    root.mkdir(parents=True)
+    (root / "flake.nix").write_text("{\n" + "  # nix\n" * 120 + "}\n", encoding="utf-8")
+    (root / "a.nix").write_text("{ x = 1; }\n", encoding="utf-8")
+    (root / "b.nix").write_text("{ y = 2; }\n", encoding="utf-8")
+
+    assert "nix" in mod.detect_stacks(root), "absolute path parts leaked into the skip check"
+    shares = mod.stack_shares(root)
+    assert shares and shares.get("nix") == 1.0, shares

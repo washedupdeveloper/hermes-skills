@@ -104,11 +104,16 @@ STACK_TOOLS: Dict[str, Dict[str, List[str]]] = {
     },
     "performance": {
         "python": ["complexity"],
-        "nix": ["nix-eval-time"],
+        # Four signals, because one was not enough: `nix-eval-time` is informational
+        # without a pinned baseline, so performance had no measured input at all and was
+        # scored entirely from the reviewer's findings. These three are absolute and
+        # cheap — IFD breaks eval caching, a missing store cache rebuilds every run, and
+        # a missing concurrency key wastes superseded runs.
+        "nix": ["ifd", "ci-cache", "ci-concurrency", "nix-eval-time"],
         "javascript": ["bundle-size"],
         "rust": ["cargo-bench"],
         "go": ["go-bench"],
-        "shell": [],
+        "shell": ["ci-cache", "ci-concurrency"],
     },
     "architecture": {
         "python": ["dep-graph", "declared-rules"],
@@ -125,6 +130,8 @@ STACK_TOOLS: Dict[str, Dict[str, List[str]]] = {
 # on a bare machine.
 BUILTIN_TOOLS: frozenset = frozenset({
     "secret-grep", "py-compile", "bash-n", "complexity", "dep-graph", "declared-rules",
+    # Pure text over the repository; they need no toolchain, so they run everywhere.
+    "ci-cache", "ci-concurrency",
 })
 
 # Tools implemented as probes.py wrappers around the PINNED nix toolchain. They
@@ -139,6 +146,9 @@ BUILTIN_TOOLS: frozenset = frozenset({
 NIX_PROBE_TOOLS: frozenset = frozenset({
     "statix", "deadnix", "nixfmt", "flake-check", "nix-eval", "nix-eval-time",
     "ruff", "mypy", "bandit", "osv-scanner", "pytest",
+    # Needs `nix` (it asks Nix to evaluate with IFD disabled), unlike the two CI text
+    # probes, which are BUILTIN.
+    "ifd",
 })
 
 # Tools expected regardless of stack — cheap, always-applicable checks.
@@ -217,7 +227,9 @@ def detect_stacks(root: Path, max_files: int = 4000) -> List[str]:
                 break
             if not path.is_file():
                 continue
-            if any(part in _SKIP_DIRS for part in path.parts):
+            # Relative to *root*, not the absolute path: a checkout under a directory
+            # named `build` or `target` would otherwise have every file skipped.
+            if any(part in _SKIP_DIRS for part in path.relative_to(root).parts):
                 continue
             seen += 1
             suffix = path.suffix.lower()
@@ -233,6 +245,69 @@ def detect_stacks(root: Path, max_files: int = 4000) -> List[str]:
             found.append(stack)
 
     return found or ["generic"]
+
+
+def stack_shares(root: Path, max_files: int = 4000) -> Dict[str, float]:
+    """Each detected stack's share of the repository's SOURCE LINES.
+
+    `detect_stacks` answers "is this language present", which is the right question for
+    display and the wrong one for beta. A repository with two incidental Python files
+    made `pytest`, `ruff`, `mypy` and `bandit` *expected*, so beta fell to 0.667 and the
+    deterministic half was reported as incomplete when it had covered everything that
+    mattered. Measured on `nix-direnv`: a Nix+shell project, scored as if a third of its
+    obligations were Python.
+
+    Lines, not file count: one 900-line module is a bigger commitment than nine
+    three-line scripts.
+    """
+    lines: Dict[str, int] = {}
+    seen = 0
+    if not root.is_dir():
+        return {}
+    for path in root.rglob("*"):
+        if seen >= max_files:
+            break
+        if not path.is_file():
+            continue
+        if any(part in _SKIP_DIRS for part in path.relative_to(root).parts):
+            continue
+        seen += 1
+        suffix = path.suffix.lower()
+        for stack, exts in STACK_EXTENSIONS.items():
+            if suffix in exts:
+                try:
+                    n = sum(1 for _ in path.open("rb"))
+                except OSError:
+                    break
+                lines[stack] = lines.get(stack, 0) + n
+                break
+    total = sum(lines.values())
+    if total <= 0:
+        return {}
+    return {stack: n / total for stack, n in lines.items()}
+
+
+def relevant_stacks(root: Path, min_share: float = 0.10) -> List[str]:
+    """The stacks that carry enough of the code to justify expecting tools for them.
+
+    A stack must own at least *min_share* of the source lines. When nothing clears the
+    bar — a Makefile-only repository has a marker but almost no counted source — the
+    marker-detected stacks are kept, so a real project is never scored as `generic`.
+    """
+    present = detect_stacks(root)
+    shares = stack_shares(root)
+    if not shares:
+        return present
+    kept = [s for s in present if shares.get(s, 0.0) >= min_share]
+    if kept:
+        # Order by weight: the dominant stack first, so `expected_tools` reads naturally.
+        return sorted(kept, key=lambda s: -shares.get(s, 0.0))
+    # Nothing cleared the bar: keep the largest stack, and any marker-detected one that
+    # at least owns some lines, rather than falling back to `generic` and losing beta.
+    fallback = [s for s in present if shares.get(s, 0.0) > 0]
+    if fallback:
+        return sorted(fallback, key=lambda s: -shares.get(s, 0.0))
+    return present
 
 
 def expected_tools(dimension: str, stacks: List[str]) -> List[str]:
@@ -258,8 +333,24 @@ HILL_N = 1.2
 # uncalibrated checkout still runs.
 DEFAULT_THRESHOLD = 80.0
 
-# Severities that block satisfaction outright (FRAMEWORK §6, §5).
-BLOCKING_SEVERITIES = {"high", "critical"}
+# Severities that block satisfaction outright (FRAMEWORK §6, §5), per dimension.
+#
+# Security and correctness are the HARD requirements: the observed cost of getting one
+# wrong is a supply-chain compromise or a build that does not work, and eight
+# well-regarded repositories produced 93 of 94 blocking findings in exactly these two
+# dimensions. Everything else blocks only at `critical`, so a readability or performance
+# defect moves the score without vetoing a merge — while a `critical` anywhere still
+# blocks, which keeps an absolute floor in every dimension.
+BLOCKING_SEVERITIES: Dict[str, frozenset] = {
+    "security": frozenset({"high", "critical"}),
+    "correctness": frozenset({"high", "critical"}),
+    "readability": frozenset({"critical"}),
+    "architecture": frozenset({"critical"}),
+    "performance": frozenset({"critical"}),
+}
+# An unrecognised dimension gets the strict floor, not the lenient one: a dimension
+# nobody classified should not be able to pass on a `high`.
+DEFAULT_BLOCKING: frozenset = frozenset({"critical"})
 
 # Severity weights for the density term (§3: "severity-weighted findings per
 # KLOC"). The density numerator is a WEIGHTED count, not a raw one.
@@ -632,15 +723,27 @@ def score_dimension(review: Dict[str, Any], dimension: str,
 # --- Aggregation ------------------------------------------------------------
 
 def open_blocking(reviews: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Open findings at a blocking severity, across every reviewer."""
+    """Open findings at a blocking severity for their dimension.
+
+    Security and correctness are the hard requirements: a `high` there blocks, because
+    the observed cost of getting one wrong is a supply-chain compromise or a broken
+    build. The other dimensions block only at `critical` — a readability or performance
+    defect should move the score, not veto a merge the way a security hole does. A
+    `critical` anywhere still blocks, so no dimension loses its absolute floor.
+
+    Measured against eight well-regarded repositories: 93 of 94 blocking findings were
+    security or correctness, so this narrows an untested path rather than loosening the
+    rule that actually fired.
+    """
     out: List[Dict[str, Any]] = []
     for dimension, review in reviews.items():
+        blocking_sev = BLOCKING_SEVERITIES.get(dimension, DEFAULT_BLOCKING)
         for finding in review.get("findings") or []:
             severity = str(finding.get("severity") or "").strip().lower()
             status = str(finding.get("status") or "open").strip().lower()
             if status in {"fixed", "wontfix", "accepted", "closed"}:
                 continue
-            if severity in BLOCKING_SEVERITIES:
+            if severity in blocking_sev:
                 out.append({"dimension": dimension, **finding})
     return out
 
@@ -691,7 +794,12 @@ def resolve_stacks(run_dir: Path, repo: Optional[Path] = None) -> List[str]:
                 target = parent
                 break
     if target is not None and target.is_dir():
-        return detect_stacks(target)
+        # relevant_stacks, not detect_stacks: beta should ask "did the tools for the
+        # languages this repo is MADE OF run", not "did every tool for every language
+        # that appears twice run". An incidental Python file used to make pytest, ruff,
+        # mypy and bandit expected, which depressed beta on repos that had nothing to
+        # test in Python.
+        return relevant_stacks(target)
     return ["generic"]
 
 

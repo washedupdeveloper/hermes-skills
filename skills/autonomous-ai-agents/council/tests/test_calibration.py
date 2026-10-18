@@ -298,14 +298,24 @@ def test_a_uniform_profile_cannot_move_at_all():
     assert result["any_verdict_flips"] is False
 
 
-def test_a_divergent_profile_moves_but_need_not_flip():
-    """The golden defects fixture: 19.74 points of spread, and still no flip."""
+def test_a_divergent_profile_moves_and_is_now_load_bearing():
+    """The golden defects fixture, at the SHIPPED threshold.
+
+    This asserted "no flip" while the threshold was 87.1141: the fixture's spread moved the
+    aggregate but never across the bar. Re-deriving the threshold to 80.0 (β reached 1, so
+    the aggregate is purely deterministic — `docs/CALIBRATION.md`) brought the bar into the
+    range a single weight change can reach, so `α_t` IS now load-bearing on this fixture.
+    The test records that rather than hiding it, which is exactly what its docstring asked
+    for. It does not make the fixture pass: the weights are fixed defaults, and the blocking
+    gate still fails it on 2 findings.
+    """
     scores = cal.profile_of(REPO / "tests" / "golden" / "rounds" / "defects", THRESHOLD)
     result = cal.weight_sensitivity(scores, THRESHOLD)
     assert result["spread_across_dimensions"] > 15, result["spread_across_dimensions"]
     assert result["max_single_weight_move"] > 1.0, "a divergent profile must move"
-    assert result["any_verdict_flips"] is False, (
-        "if this flips, alpha_t IS load-bearing on the fixture and the doc must say so")
+    assert result["any_verdict_flips"] is True, (
+        "at the shipped threshold the fixture is weight-sensitive; if this stops being "
+        "true, the caveat in docs/CALIBRATION.md can be removed")
 
 
 def test_a_verdict_that_does_depend_on_a_weight_is_detected():

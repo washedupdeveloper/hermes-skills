@@ -142,12 +142,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("  The shipped value is PROVISIONAL — a REGRESSION DETECTOR, not an")
     print("  absolute bar: nine well-regarded repos were reviewed and one is clean,")
     print("  so there is no known-good class to calibrate against.")
-    raw = _ask("threshold", str(review.get("threshold", 87.1141)), assume_yes)
+    raw = _ask("threshold", str(review.get("threshold", 80.0)), assume_yes)
     try:
         threshold = float(raw)
     except ValueError:
         print(f"    {raw!r} is not a number; keeping {review.get('threshold')}")
-        threshold = float(review.get("threshold", 87.1141))
+        threshold = float(review.get("threshold", 80.0))
 
     # ── the run ───────────────────────────────────────────────────────────────
     _banner("3. How a run behaves")

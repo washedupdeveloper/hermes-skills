@@ -568,6 +568,164 @@ def load_eval_baseline(root: Path) -> Tuple[Optional[float], Optional[Path]]:
     return None, None
 
 
+def _workflows(root: Path) -> List[Path]:
+    """Every GitHub Actions workflow file, or [] when there are none."""
+    wf = root / ".github" / "workflows"
+    if not wf.is_dir():
+        return []
+    return sorted([p for p in wf.iterdir()
+                   if p.is_file() and p.suffix.lower() in {".yml", ".yaml"}])
+
+
+# A workflow "builds Nix" if it installs nix or invokes a nix command. Kept as a small
+# explicit list rather than a regex soup, so a new action is a visible edit.
+_NIX_BUILD_MARKERS = (
+    "install-nix-action", "nix-installer", "determinate-nix-action", "cachix",
+    "nix build", "nix develop", "nix flake", "nix-shell", "nix-build", "nix eval",
+)
+# Ways a workflow reuses a Nix store between runs. A bare `/nix/store` mention is NOT
+# enough: `nix-store -qR` or a `path-info` call names that path without caching anything,
+# and counting it would report a cache that does not exist. `actions/cache` only counts
+# when it is actually pointed at the store.
+_STORE_CACHE_MARKERS = (
+    "cachix/cachix-action", "nix-community/cache-nix-action", "cache-nix-action",
+)
+
+
+def _caches_the_store(low: str) -> bool:
+    if any(marker in low for marker in _STORE_CACHE_MARKERS):
+        return True
+    return "actions/cache" in low and "/nix/store" in low
+
+
+def probe_ci_cache(root: Path) -> Dict[str, Any]:
+    """Do the workflows that build Nix reuse a binary cache?
+
+    Measured, not assumed: `nix-direnv` runs a stable+latest matrix on every push with
+    no `cachix` and no `actions/cache` on `/nix/store`, so each run rebuilds from
+    source. That is the single largest recurring cost a Nix repository can have in CI,
+    and it is decidable from the workflow text.
+
+    Signal is the cached FRACTION of Nix-building workflows, mapped to [40, 100]: an
+    absent cache is a real recurring cost, not a defect, so it must not zero the
+    dimension the way a broken build would.
+    """
+    files = _workflows(root)
+    if not files:
+        # The property is "every Nix-building workflow reuses a store cache". With no
+        # workflows that is vacuously true, so this is a pass, not a missing tool: a
+        # probe that cannot apply must not depress beta.
+        return result("ci-cache", True, 100.0, [],
+                      "no .github/workflows — nothing to cache")
+    building, cached, uncached = 0, 0, []
+    for path in files:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        low = text.lower()
+        if not any(m in low for m in _NIX_BUILD_MARKERS):
+            continue
+        building += 1
+        if _caches_the_store(low):
+            cached += 1
+        else:
+            uncached.append(path.relative_to(root).as_posix())
+    if not building:
+        return result("ci-cache", True, 100.0, [],
+                      "no workflow builds Nix — no cache to configure")
+    ratio = cached / building
+    findings = [{
+        "severity": "low", "status": "open",
+        "location": {"path": rel, "line_range": ""},
+        "claim": ("builds Nix with no store cache (no cachix-action, no cache-nix-action, "
+                  "and no actions/cache pointed at /nix/store), so every run rebuilds "
+                  "from source"),
+        "falsifiable_check": ("grep -nE 'cachix/cachix-action|cache-nix-action|"
+                              "actions/cache' " + rel),
+    } for rel in uncached]
+    return result("ci-cache", True, round(40 + 60 * ratio, 2), findings,
+                  f"{cached}/{building} Nix-building workflow(s) configure a store cache")
+
+
+def probe_ci_concurrency(root: Path) -> Dict[str, Any]:
+    """Does every workflow supersede its own superseded runs?
+
+    Without `concurrency:`, two pushes in quick succession both run to completion and
+    the older result is discarded when it lands — measured on `nix-direnv`, whose matrix
+    is stable+latest across two platforms. Cheap to check, pure text.
+
+    Signal is the fraction of workflows declaring it, mapped to [60, 100]: wasted runner
+    minutes are real but minor next to a cache miss.
+    """
+    files = _workflows(root)
+    if not files:
+        # Same reasoning as ci-cache: "every workflow supersedes its own runs" is
+        # vacuously true when there are none, so this is a pass.
+        return result("ci-concurrency", True, 100.0, [],
+                      "no .github/workflows — nothing to serialise")
+    with_conc, missing = 0, []
+    for path in files:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if re.search(r"^concurrency:", text, re.M):
+            with_conc += 1
+        else:
+            missing.append(path.relative_to(root).as_posix())
+    ratio = with_conc / len(files)
+    findings = [{
+        "severity": "low", "status": "open",
+        "location": {"path": rel, "line_range": ""},
+        "claim": ("no `concurrency:` key, so a superseded push runs to completion and "
+                  "its result is discarded when it lands"),
+        "falsifiable_check": f"grep -n '^concurrency:' {rel}",
+    } for rel in missing]
+    return result("ci-concurrency", True, round(60 + 40 * ratio, 2), findings,
+                  f"{with_conc}/{len(files)} workflow(s) declare concurrency")
+
+
+def probe_ifd(root: Path) -> Dict[str, Any]:
+    """Does evaluation require import-from-derivation (IFD)?
+
+    IFD builds a derivation DURING evaluation. It defeats `--option
+    allow-import-from-derivation false`, breaks evaluation caching, and makes `nix eval`
+    as slow as a build. `naersk` does it: `readTOML` calls `builtins.readFile` on
+    `Cargo.toml` during evaluation, and a reviewer found it from the source. This
+    measures the property rather than the pattern.
+
+    The probe asks Nix directly with IFD disabled. If the flake does not evaluate for
+    some OTHER reason the probe reports `ran: false` with that reason instead of
+    claiming IFD — a wrong reason is worse than no answer.
+    """
+    if not (root / "flake.nix").exists():
+        return result("ifd", False, None, [],
+                      "no flake.nix — import-from-derivation does not apply",
+                      parsed=False)
+    rc, out = _bridge(
+        root,
+        ["nix", "flake", "check", "--no-build", "--keep-going",
+         "--option", "allow-import-from-derivation", "false"],
+        timeout=600,
+    )
+    if rc == 127:
+        return result("ifd", False, None, [], out[:200], parsed=False)
+    low = out.lower()
+    if "allow-import-from-derivation" in low or "import from derivation" in low:
+        return result("ifd", True, 30.0, [{
+            "severity": "medium", "status": "open",
+            "location": {"path": "flake.nix", "line_range": ""},
+            "claim": ("evaluation requires import-from-derivation: with "
+                      "`--option allow-import-from-derivation false` the flake fails, "
+                      "so evaluation builds derivations and cannot be cached"),
+            "falsifiable_check": ("nix flake check --no-build --option "
+                                  "allow-import-from-derivation false"),
+        }], "evaluation requires IFD")
+    if rc != 0:
+        # Some other failure: say so rather than attributing it to IFD.
+        first = next((line.strip() for line in out.splitlines()
+                      if "error:" in line.lower()), "")
+        return result("ifd", False, None, [],
+                      f"flake does not evaluate, so IFD is unmeasurable: {first[:140]}",
+                      parsed=False)
+    return result("ifd", True, 100.0, [], "evaluates with IFD disabled")
+
+
 def probe_nix_eval_time(root: Path) -> Dict[str, Any]:
     """`nix eval` wall-clock, as a REGRESSION RATIO against a pinned baseline.
 
@@ -1163,6 +1321,11 @@ PROBES: Dict[str, Callable[[Path], Dict[str, Any]]] = {
     "flake-check": probe_flake_check,
     "nix-eval": probe_nix_eval,
     "nix-eval-time": probe_nix_eval_time,
+    # The three performance signals the nine reference repositories actually exhibited:
+    # IFD (naersk), no store cache in CI (nix-direnv), no concurrency key (nix-direnv).
+    "ifd": probe_ifd,
+    "ci-cache": probe_ci_cache,
+    "ci-concurrency": probe_ci_concurrency,
     "ruff": probe_ruff,
     "mypy": probe_mypy,
     "bandit": probe_bandit,

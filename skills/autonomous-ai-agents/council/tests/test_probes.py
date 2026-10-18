@@ -630,3 +630,127 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# --- the performance probes taken from the nine reference repositories -------------
+#
+# Each of these three was an actual finding: naersk reads Cargo.toml during evaluation
+# (IFD); nix-direnv builds Nix in CI with no store cache and no concurrency key.
+
+def test_ci_cache_reports_missing_cache(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "test.yml").write_text(
+        "jobs:\n  t:\n    steps:\n      - uses: cachix/install-nix-action@v31\n"
+        "      - run: nix build .#x\n", encoding="utf-8")
+    d = probes.probe_ci_cache(tmp_path)
+    assert d["ran"] is True
+    assert d["signal"] == 40.0, d          # 0 of 1 cached -> the documented floor
+    assert d["findings"] and d["findings"][0]["severity"] == "low"
+
+
+def test_ci_cache_reports_a_configured_cache(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "test.yml").write_text(
+        "jobs:\n  t:\n    steps:\n      - uses: cachix/cachix-action@v16\n"
+        "      - run: nix build .#x\n", encoding="utf-8")
+    d = probes.probe_ci_cache(tmp_path)
+    assert d["signal"] == 100.0, d
+    assert not d["findings"]
+
+
+def test_ci_cache_ignores_a_workflow_that_does_not_build_nix(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "lint.yml").write_text("jobs:\n  t:\n    steps:\n      - run: echo hi\n",
+                                 encoding="utf-8")
+    d = probes.probe_ci_cache(tmp_path)
+    assert d["ran"] is True and d["signal"] == 100.0, d
+
+
+def test_ci_cache_without_workflows_is_a_vacuous_pass(tmp_path):
+    """No workflows means "every Nix-building workflow has a cache" is vacuously true.
+
+    Reporting `ran: false` here made the tool count as missing and depressed beta on a
+    repository with no CI to fix — the same class of error as an incidental language
+    stack making tools expected that had nothing to run on.
+    """
+    d = probes.probe_ci_cache(tmp_path)
+    assert d["ran"] is True and d["signal"] == 100.0, d
+    assert not d["findings"]
+    assert "workflows" in d["note"]
+
+
+def test_ci_concurrency_without_workflows_is_a_vacuous_pass(tmp_path):
+    d = probes.probe_ci_concurrency(tmp_path)
+    assert d["ran"] is True and d["signal"] == 100.0, d
+    assert not d["findings"]
+
+
+def test_ci_concurrency_counts_missing_keys(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "a.yml").write_text("on: push\njobs:\n  t:\n    steps: []\n", encoding="utf-8")
+    (wf / "b.yml").write_text("on: push\nconcurrency:\n  group: x\njobs:\n  t:\n    steps: []\n",
+                              encoding="utf-8")
+    d = probes.probe_ci_concurrency(tmp_path)
+    assert d["signal"] == 80.0, d          # 1 of 2 -> 60 + 40*0.5
+    assert len(d["findings"]) == 1
+    assert d["findings"][0]["location"]["path"] == ".github/workflows/a.yml"
+
+
+def test_ifd_is_not_applicable_without_a_flake(tmp_path):
+    d = probes.probe_ifd(tmp_path)
+    assert d["ran"] is False and d["signal"] is None, d
+    assert "flake.nix" in d["note"]
+
+
+def test_the_performance_probes_are_expected_for_nix():
+    """The gate must expect them, or beta will never count them."""
+    expected = score.expected_tools("performance", ["nix"])
+    for tool in ("ifd", "ci-cache", "ci-concurrency"):
+        assert tool in expected, (tool, expected)
+    assert "ifd" in score.NIX_PROBE_TOOLS
+    assert "ci-cache" in score.BUILTIN_TOOLS
+    assert "ci-concurrency" in score.BUILTIN_TOOLS
+
+
+def test_a_bare_store_mention_is_not_a_cache(tmp_path):
+    """`nix-store -qR` names /nix/store without caching anything.
+
+    Counting a bare `/nix/store` mention reported a cache that did not exist. Only
+    `actions/cache` actually pointed at the store counts.
+    """
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "a.yml").write_text(
+        "jobs:\n  t:\n    steps:\n      - uses: cachix/install-nix-action@v31\n"
+        "      - run: nix-store -qR result | grep /nix/store\n", encoding="utf-8")
+    d = probes.probe_ci_cache(tmp_path)
+    assert d["signal"] == 40.0, d          # not cached, despite the /nix/store mention
+    assert len(d["findings"]) == 1
+
+
+def test_actions_cache_pointed_at_the_store_is_a_cache(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "a.yml").write_text(
+        "jobs:\n  t:\n    steps:\n      - uses: cachix/install-nix-action@v31\n"
+        "      - uses: actions/cache@v4\n        with:\n          path: /nix/store\n"
+        "      - run: nix build .#x\n", encoding="utf-8")
+    d = probes.probe_ci_cache(tmp_path)
+    assert d["signal"] == 100.0, d
+    assert not d["findings"]
+
+
+def test_the_ci_cache_finding_names_a_check_that_matches_the_logic(tmp_path):
+    """The falsifiable_check must grep for what the probe actually looks for."""
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "a.yml").write_text(
+        "jobs:\n  t:\n    steps:\n      - run: nix build .#x\n", encoding="utf-8")
+    d = probes.probe_ci_cache(tmp_path)
+    check = d["findings"][0]["falsifiable_check"]
+    assert "cachix/cachix-action" in check and "actions/cache" in check, check
+    assert "/nix/store" not in check.split("grep")[1], check

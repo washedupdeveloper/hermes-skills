@@ -366,7 +366,7 @@ runs the gate. A round prints one line per dimension (`ok` / `NO FILE`).
 | `--mode` | `full` | `full` auto-applies fixes; `semi` asks before each edit; `advisory` reports only |
 | `--scope` | `working-tree` | `diff` / `working-tree` / `whole-repo` |
 | `--baseline` | `off` | `auto` (newest qualifying run) or a run-root path: read only what changed since that whole-repo run, carrying its findings for the rest |
-| `--threshold` | calibrated (`87.1141`) | **Minimum** aggregate required to pass — the requirement |
+| `--threshold` | calibrated (`80.0`) | **Minimum** aggregate required to pass — the requirement |
 | `--min-rounds` | `1` | Always attempt at least this many rounds |
 | `--max-rounds` | `8` | Hard safety cap, not the normal stopping mechanism |
 | `--budget-seconds` | `0` | Wall-clock budget (`0` = unlimited); when spent, stop and hand over the plan |
@@ -377,7 +377,14 @@ runs the gate. A round prints one line per dimension (`ok` / `NO FILE`).
 met *and* gains stall, or when the budget/cap/terminators fire. Exit 0 = satisfied,
 1 = escalated, 2 = error (including "not anchored"). The verdict comes from
 `score_reviews.py` reading reviewer JSON — never from orchestrator prose. Gate exit 0
-requires `aggregate >= threshold` **and** no open high/critical finding.
+requires `aggregate >= threshold` **and** no open blocking finding: `high` or `critical`
+in security or correctness, `critical` anywhere else.
+
+Security and correctness are the hard requirements. A `high` there blocks, because the
+observed cost of getting one wrong is a supply-chain compromise or a build that does not
+work — eight well-regarded repositories produced 93 of 94 blocking findings in exactly
+those two dimensions. Performance, readability and architecture block only at `critical`:
+they move the score without vetoing a merge, while a `critical` anywhere still blocks.
 
 For the design rationale behind the gates, weighting and calibration, load
 `deterministic-quality-gates`; this skill is its operational side.

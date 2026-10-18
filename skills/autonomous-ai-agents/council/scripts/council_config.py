@@ -98,7 +98,7 @@ DEFAULTS: Dict[str, Any] = {
         # The gate. Lower is stricter. A REGRESSION DETECTOR, not an absolute bar:
         # of nine well-regarded repos reviewed at --samples 5, one is clean, so
         # there is no known-good class to calibrate against. docs/CALIBRATION.md.
-        "threshold": 87.1141,
+        "threshold": 80.0,
         # How many reviewer samples per round. More is more recall, more time.
         "samples": 5,
         # advisory = report only; semi = fix with confirmation; full = fix and

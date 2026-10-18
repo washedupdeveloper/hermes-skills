@@ -1713,7 +1713,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Facts the harness owns, resolved once: the revision under review, the
     # detected stacks, and the deterministic probe results.
     sha = git_sha(repo)
-    stacks = _gate_module().detect_stacks(repo)
+    stacks = _gate_module().relevant_stacks(repo)
     print(f"target revision: {sha}")
     print(f"detected stacks: {', '.join(stacks) or 'none'}")
     print("running deterministic probes (once, for the whole run)…", flush=True)

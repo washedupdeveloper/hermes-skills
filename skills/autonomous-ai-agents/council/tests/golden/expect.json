@@ -51,7 +51,7 @@
           ]
         },
         "performance": {
-          "beta": 1.0,
+          "beta": 0.25,
           "findings": 0,
           "score": 95.0,
           "tools_run": [
@@ -112,7 +112,7 @@
           "score": 100.0
         },
         "performance": {
-          "beta": 1.0,
+          "beta": 0.25,
           "det": 100.0,
           "llm": 100.0,
           "score": 100.0
@@ -137,8 +137,8 @@
       "status": "satisfied"
     },
     "defects": {
-      "aggregate": 55.16,
-      "blocking": 3,
+      "aggregate": 57.92,
+      "blocking": 2,
       "per_dimension": {
         "architecture": {
           "beta": 0.0,
@@ -153,10 +153,10 @@
           "score": 53.63
         },
         "performance": {
-          "beta": 1.0,
+          "beta": 0.25,
           "det": 35.27,
           "llm": 72.0,
-          "score": 35.27
+          "score": 62.82
         },
         "readability": {
           "beta": 0.6667,
@@ -178,6 +178,6 @@
       "status": "not_satisfied"
     }
   },
-  "threshold": 87.1141,
+  "threshold": 80.0,
   "tolerance": 1e-06
 }

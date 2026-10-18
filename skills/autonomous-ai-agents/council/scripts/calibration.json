@@ -1,5 +1,5 @@
 {
-  "method": "research/deterministic-quality-tooling.md \u00a77",
+  "method": "research/deterministic-quality-tooling.md §7",
   "calibrated_with": "scripts/calibrate.py",
   "provenance": {
     "eval_set": "a graded defect ladder built from this repository",
@@ -324,23 +324,39 @@
     }
   ],
   "threshold": {
-    "recommended": 87.1141,
+    "recommended": 80.0,
+    "shipped_default": 80.0,
     "separable": true,
-    "plateau": [
-      79.8409,
-      94.3873
-    ],
-    "margin": 7.2732,
-    "precision": 1.0,
-    "recall": 1.0,
-    "f1": 1.0,
-    "shipped_default": 87.1141,
-    "shipped_is_in_plateau": true
+    "basis": "clean baseline 82.31 measured at beta=1, minus 2.31 (1.4x the measured 1.64 run-to-run stdev at 1 sample; the shipped configuration uses 5, where noise is smaller, so the margin is conservative)",
+    "measured": {
+      "clean": {
+        "repo": "numtide/treefmt-nix",
+        "aggregate": 82.31,
+        "blocking": 0,
+        "beta": 1.0
+      },
+      "defective": {
+        "repo": "nix-community/nix-direnv",
+        "aggregate": 34.39,
+        "blocking": 14,
+        "beta": 1.0
+      }
+    },
+    "superseded": {
+      "value": 87.1141,
+      "plateau": [
+        79.8409,
+        94.3873
+      ],
+      "margin": 7.2732,
+      "why": "calibrated at beta<1, where the reviewer's self-assigned score entered the aggregate through (1-beta) and pulled it up. Fixing stack relevance drove beta to 1.0, which removes that term: the same repository now scores on a lower, purely deterministic scale."
+    },
+    "follow_up": "re-run the labelled set at this configuration and replace the margin-derived value with choose_threshold's midpoint of (best_bad, worst_good]. The blocking gate remains the absolute judgement in the meantime."
   },
   "caveats": [
     "Calibrated from ONE known-good sample (this repository at HEAD). The plateau's upper edge is that single sample's score, so the recommended threshold is determined by one data point and is PROVISIONAL. It is a REGRESSION DETECTOR, not an absolute quality bar: eight well-regarded repositories were reviewed at the shipped default (--samples 5) and ONE is clean -- the other seven have 3 to 54 confirmed blocking findings each -- and a ninth (disko) was pre-screened only, so there is no known-good class to calibrate an absolute bar against. The blocking-finding gate is the absolute control. Use this value as the bar for a repository's first run and a regression line thereafter (--baseline auto). See docs/CALIBRATION.md, 'The clean class is empty'.",
     "d* for tools that found nothing on the clean baseline is floored at 0.05 findings/KLOC rather than 0, because d*=0 collapses the Hill curve to a step at the origin. Floored entries are marked; the aggregate curve anchors only on tools with a real baseline reading.",
     "This calibrates the DETERMINISTIC half only. The LLM half is not calibrated here; that needs labelled real council runs, ~9 min each.",
-    "Weights (alpha_t) remain the working defaults. \u00a77 says reweight only with evidence, and there is not yet evidence that any dimension's findings track real defects better than another's."
+    "Weights (alpha_t) remain the working defaults. §7 says reweight only with evidence, and there is not yet evidence that any dimension's findings track real defects better than another's."
   ]
 }
