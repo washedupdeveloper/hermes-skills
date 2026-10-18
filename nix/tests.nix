@@ -108,7 +108,7 @@ in
     # so a mismatch installs one skill under another's slug.
     test_the_name_matches_its_directory = {
       expr = map (x: "${rel x.path}: ${x.fields.name or "(none)"}") (
-        builtins.filter (x: (x.fields.name or null) != x.dir) parsed
+        builtins.filter (x: !(L.nameMatches x.dir (x.fields.name or ""))) parsed
       );
       expected = [ ];
     };
@@ -116,9 +116,7 @@ in
     # Two catalog skills with one name: the second silently shadows the first in
     # the index, and nothing says so.
     test_every_catalog_name_is_unique = {
-      expr = lib.filter (
-        n: n != "" && lib.count (x: (x.fields.name or "") == n) catalog > 1
-      ) (lib.unique (map (x: x.fields.name or "") catalog));
+      expr = lib.filter (n: n != "") (L.duplicates (map (x: x.fields.name or "") catalog));
       expected = [ ];
     };
 
@@ -180,10 +178,84 @@ in
         builtins.filter (
           p:
           lib.any (e: lib.hasSuffix e (toString p)) textExts
-          && lib.hasInfix "\r" (builtins.readFile p)
+          && L.hasCrlf (builtins.readFile p)
         ) (lib.filesystem.listFilesRecursive src)
       );
       expected = [ ];
+    };
+
+    # --- negative controls --------------------------------------------------
+    # One per predicate the checks above depend on. The invalid case must be
+    # REJECTED through the same code the check calls: a predicate that accepts
+    # everything passes every positive test above and fails exactly here. Each
+    # pair also carries the valid case, so a predicate stuck on `false` fails too.
+    test_the_frontmatter_gate_rejects_a_missing_fence = {
+      expr = [ (L.parseText "name: x\n---\n").startsWithFence (L.parseText "---\nname: x\n---\n").startsWithFence ];
+      expected = [
+        false
+        true
+      ];
+    };
+
+    test_the_frontmatter_gate_rejects_an_unclosed_fence = {
+      expr = [ (L.parseText "---\nname: x\n").closed (L.parseText "---\nname: x\n---\n").closed ];
+      expected = [
+        false
+        true
+      ];
+    };
+
+    # The completeness check is only meaningful while the parser has a real blind
+    # spot: a key the field regex cannot read must still be counted in `keys`, or
+    # the check would agree with the parser and prove nothing.
+    test_the_completeness_gate_rejects_a_key_the_parser_cannot_read = {
+      expr =
+        let
+          p = L.parseText "---\nx-tag: 1\n---\nbody\n";
+        in
+        [
+          (builtins.length p.keys)
+          (builtins.hasAttr "x-tag" p.fields)
+          (builtins.hasAttr "x_tag" (L.parseText "---\nx_tag: 1\n---\nbody\n").fields)
+        ];
+      expected = [
+        1
+        false
+        true
+      ];
+    };
+
+    test_the_identity_gate_rejects_a_name_mismatch = {
+      expr = [
+        (L.nameMatches "alpha" "alpha")
+        (L.nameMatches "alpha" "beta")
+      ];
+      expected = [
+        true
+        false
+      ];
+    };
+
+    test_the_uniqueness_gate_rejects_a_duplicate = {
+      expr = [
+        (L.duplicates [ "a" "a" "b" ])
+        (L.duplicates [ "a" "b" ])
+      ];
+      expected = [
+        [ "a" ]
+        [ ]
+      ];
+    };
+
+    test_the_encoding_gate_rejects_a_crlf = {
+      expr = [
+        (L.hasCrlf "a\nb")
+        (L.hasCrlf "a\r\nb")
+      ];
+      expected = [
+        false
+        true
+      ];
     };
   };
 }

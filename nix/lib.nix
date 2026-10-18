@@ -51,10 +51,14 @@ rec {
   # Deliberately not a YAML parser: every SKILL.md in this repo opens with
   # `---`, carries flat `key: value` lines, and closes with `---`. A real parser
   # would be a dependency the repo does not otherwise have.
-  parse =
-    path:
+  #
+  # `parseText` is the whole parser and `parse` only reads the file, so a
+  # negative control can drive the SAME code with a synthetic document. A
+  # predicate exercised through a copy of itself proves nothing about the gate.
+  parseText =
+    text:
     let
-      lines = lib.splitString "\n" (builtins.readFile path);
+      lines = lib.splitString "\n" text;
       isFence = l: lib.trim l == "---";
       startsWithFence = lines != [ ] && isFence (builtins.head lines);
       afterOpen = if lines == [ ] then [ ] else builtins.tail lines;
@@ -98,4 +102,18 @@ rec {
       # +2: past the closing fence and its newline.
       body = lib.concatStringsSep "\n" (lib.drop (builtins.length inner + 2) lines);
     };
+
+  parse = path: parseText (builtins.readFile path);
+
+  # The identity rule: a skill registers as /<name> and installs by directory
+  # name, so a mismatch installs one skill under another's slug.
+  nameMatches = dir: name: name == dir;
+
+  # Values occurring more than once, in first-seen order. A second catalog entry
+  # with one name silently shadows the first in the index.
+  duplicates = xs: lib.unique (lib.filter (x: lib.count (y: y == x) xs > 1) xs);
+
+  # A CRLF shebang fails on Linux, and a CRLF/LF pair makes a sync report drift
+  # that is not there.
+  hasCrlf = text: lib.hasInfix "\r" text;
 }

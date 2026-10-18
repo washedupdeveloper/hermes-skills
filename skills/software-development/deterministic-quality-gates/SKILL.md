@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.5.0
+version: 1.6.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -79,6 +79,16 @@ part of the path. When a check fails, the first hypothesis is the check.
 **Bound everything the gate executes.** A gate with an unbounded child process hangs
 forever, and a hung gate is indistinguishable from a slow one — the run never reports
 at all. Pass an explicit timeout to every subprocess a gate spawns.
+
+**Every acceptance rule needs a negative control.** A check that cannot fail is not a
+gate: a predicate that silently matches everything passes its own test, and that pass
+looks identical to a real one. For each rule, drive one deliberately invalid input
+through the **same** code the gate calls and assert it is rejected — plus the valid case
+beside it, so a predicate stuck on `false` fails too. Exercise the boundary rather than
+inferring it: a length rule is tested at the limit and one past it, because a `>=` written
+for `>` rejects the last value that fits, and no real artifact sits on the boundary. A
+copy of the predicate written for the test proves nothing about the gate — extract it, so
+the test and the gate call one function.
 
 **A gate can own the copy-vs-source invariant.** When a repository ships a copy of
 another tree, compare the copy against its source byte for byte, resolving the source

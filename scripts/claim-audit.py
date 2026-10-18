@@ -35,21 +35,32 @@ def skill_files() -> list[pathlib.Path]:
 
 
 # ── counts the README states ─────────────────────────────────────────────────
+# The numbers' home is README.md, so the audit PARSES the claim out of it and
+# compares it with the tree. An earlier version repeated the expected pair as a
+# literal here: adding one skill then failed the audit twice over, because the
+# gate carried a second copy of a fact README already owned.
+readme = (R / "README.md").read_text(encoding="utf-8")
 total = len(list(SK.rglob("SKILL.md")))
 catalog = len(skill_files())
 rubrics = len(list(SK.rglob("assets/rubrics/*/SKILL.md")))
-claim("README: '41 SKILL.md across 35 skills'",
-      "PROVEN" if (total, catalog) == (41, 35) else "FALSE",
+
+m = re.search(r"^(\d+) `SKILL\.md` across (\d+) skills", readme, re.M)
+stated = (int(m.group(1)), int(m.group(2))) if m else None
+claim(f"README: 'N SKILL.md across N skills' — stated {stated}",
+      "PROVEN" if stated == (total, catalog) else "FALSE",
       f"actual: {total} SKILL.md across {catalog} catalog skills")
-claim("README: 'Six of the 41 are the council's reviewer rubrics'",
+claim("README: 'Six of the N are the council's reviewer rubrics'",
       "PROVEN" if rubrics == 6 else "FALSE", f"actual: {rubrics}")
 
 not_win = [p for p in skill_files()
            if not re.search(r"^platforms:.*windows", p.read_text(encoding="utf-8"),
                             re.M)]
-claim("README: '34 load on Windows'",
-      "PROVEN" if len(skill_files()) - len(not_win) == 34 else "FALSE",
-      f"actual: {len(skill_files()) - len(not_win)} load; "
+m = re.search(r"(\d+) load on Windows", readme)
+stated_win = int(m.group(1)) if m else None
+loads = len(skill_files()) - len(not_win)
+claim(f"README: 'N load on Windows' — stated {stated_win}",
+      "PROVEN" if stated_win == loads else "FALSE",
+      f"actual: {loads} load; "
       f"skipped: {[p.parent.name for p in not_win]}")
 
 # ── the description ceiling the repo enforces on itself ──────────────────────

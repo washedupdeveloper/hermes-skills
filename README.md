@@ -113,10 +113,10 @@ soul/                       caveman-voice.md — the always-on SOUL.md fragment
 setup.sh                    the initializer: declares and applies the settings
 ```
 
-41 `SKILL.md` across 35 skills — 34 load on Windows; `hermes-s6-container-supervision`
+42 `SKILL.md` across 36 skills — 35 load on Windows; `hermes-s6-container-supervision`
 declares `platforms: [linux]` and is correctly skipped here.
 
-Six of the 41 are the council's reviewer rubrics
+Six of the 42 are the council's reviewer rubrics
 (`council/assets/rubrics/reviewer-*/SKILL.md`). They carry SKILL.md frontmatter, but
 `assets/` is one of Hermes's `SKILL_SUPPORT_DIRS` (`references`, `templates`, `assets`,
 `scripts`), so they are **not** separate catalog skills. They travel with the council and

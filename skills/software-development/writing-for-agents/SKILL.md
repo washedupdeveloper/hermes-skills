@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: "Write documents agents read: skills, AGENTS.md, docs."
-version: 1.1.0
+version: 1.2.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -92,6 +92,29 @@ pointer's own line. Material with no pointer at all rides entirely on the human.
    and restatements of the obvious are pure cost.
 5. **Co-locate a rule with the concept it governs.** A rule filed under a different
    heading is a rule the agent will not find when it needs it.
+
+## One home per fact
+
+A fact written in two places is a fact that drifts in one of them. Give each fact one
+home, and let every other document link to it:
+
+| The fact is | Its home |
+|---|---|
+| a rule an agent needs every session | the standing orders file (`AGENTS.md`, the identity slot) |
+| how the parts fit together | the architecture map |
+| a type, a semantic, an interface | the subsystem or package reference |
+| why a decision was made, and what it gave up | the decision record |
+| a rule review enforces | the review checklist, one line each |
+| the contract of one component | that component's README |
+
+When a document needs a fact from another home, it links. Restating it buys one reader's
+convenience and costs every later reader a stale copy.
+
+**Name the mechanism, not a metaphor.** Write the exact check, type, API, field or
+command. Words like *surface*, *seam*, *vocabulary* and *gate* read as precise and name
+nothing a reader can find in the code; reserve them for a term the project defines, and
+otherwise say `response fields`, `JSON validation`, `ESM exports`. A metaphor survives
+review because it sounds like an answer.
 
 ## Compressing an existing document
 
