@@ -40,6 +40,11 @@ RELEASE_RE = re.compile(r"^## \[(\d+\.\d+\.\d+)\]\s+[—–-]\s+(\d{4}-\d{2}-\d{
 UNRELEASED = "## [Unreleased]"
 PARTS = ("major", "minor", "patch")
 
+# Prose that quotes the release, and the files allowed to. Excluded: CHANGELOG.md is the
+# history rather than a claim about now, and runs/ records a past moment.
+PROSE_VERSION = re.compile(r"[Cc]urrent release\s+\*{0,2}v(\d+\.\d+\.\d+)\*{0,2}")
+PROSE_FILES = ("README.md", "docs")
+
 
 class Release(NamedTuple):
     version: str
@@ -194,6 +199,12 @@ def check(tag: Optional[str] = None, path_changelog: Optional[Path] = None,
         if wanted != version:
             problems.append(f"tag {tag} does not match pyproject.toml {version}")
 
+    # Prose that quotes the release is a checkable claim (`docs/VERSIONING.md`), and it
+    # is the one that kept rotting: pyproject, CHANGELOG and tags all agreed while a doc
+    # still advertised a superseded version. Derived from path_pyproject's own parent so
+    # a caller pointing at a fixture tree validates that tree.
+    problems.extend(stale_prose_claims(path_pyproject.parent))
+
     return problems
 
 
@@ -248,6 +259,54 @@ def cmd_check(args: argparse.Namespace) -> int:
     suffix = f" (tag {args.tag})" if args.tag else ""
     print(f"  version {version} is consistent{suffix}")
     return 0
+
+
+def prose_version_claims(root: Path) -> List[Tuple[Path, str]]:
+    """Every "current release vX.Y.Z" claim in the prose, as (path, version).
+
+    A claim that can be measured must be measured (`docs/VERSIONING.md`), and this is
+    the one nobody was checking: pyproject, CHANGELOG and tags all agreed at 1.5.2 while
+    `docs/MILESTONES.md` still advertised v1.5.0.
+
+    It lives here rather than in the test because TWO callers need the same definition:
+    `check` validates the claims, and `bump` rewrites them. A second copy in the test
+    would let the two drift, which is the failure this function exists to catch.
+    """
+    claims: List[Tuple[Path, str]] = []
+    for name in PROSE_FILES:
+        target = root / name
+        paths = sorted(target.rglob("*.md")) if target.is_dir() else [target]
+        for path in paths:
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for match in PROSE_VERSION.finditer(text):
+                claims.append((path, match.group(1)))
+    return claims
+
+
+def stale_prose_claims(root: Path) -> List[str]:
+    """Problems for prose claims that name a release other than the current one."""
+    current = read_pyproject_version(root / "pyproject.toml")
+    problems: List[str] = []
+    for path, claimed in prose_version_claims(root):
+        if claimed != current:
+            rel = path.relative_to(root).as_posix()
+            problems.append(f"{rel}: claims v{claimed} but the release is {current}")
+    return problems
+
+
+def rewrite_prose_versions(root: Path, new: str) -> List[Path]:
+    """Point every "current release" claim at *new*. Returns the files changed."""
+    changed: List[Path] = []
+    for path in sorted({p for p, _ in prose_version_claims(root)}):
+        text = path.read_text(encoding="utf-8")
+        replaced = PROSE_VERSION.sub(
+            lambda m: m.group(0).replace(m.group(1), new), text)
+        if replaced != text:
+            path.write_text(replaced, encoding="utf-8", newline="\n")
+            changed.append(path)
+    return changed
 
 
 def cmd_bump(args: argparse.Namespace) -> int:
@@ -307,7 +366,12 @@ def cmd_bump(args: argparse.Namespace) -> int:
 
     changelog.write_text("\n".join(lines) + "\n", encoding="utf-8")
     write_pyproject_version(new, pyproject)
+    # Same commit, same command: prose that quotes the release would otherwise rot until
+    # the test caught it, which it did three releases running.
+    touched = rewrite_prose_versions(root, new)
     print(f"  released {new} on {date}; pyproject.toml updated")
+    for path in touched:
+        print(f"  prose claim updated: {path.relative_to(root).as_posix()}")
     print(f"  next:  git tag -a v{new} -m \"v{new}\"  &&  git push origin v{new}")
     return 0
 

@@ -150,7 +150,10 @@ def test_find_files_skips_host_caches():
         (root / "stray.pyc").write_bytes(b"\x00")
         (root / ".pytest_cache").mkdir()
         (root / ".pytest_cache" / "CACHEDIR.TAG").write_text("x\n", encoding="utf-8")
-        found = sorted(os.path.relpath(p, root) for p in sync.find_files(td))
+        # as_posix(): relpath() yields OS separators, and this asserts WHICH files
+        # were found, not how the platform spells a path.
+        found = sorted(Path(os.path.relpath(p, root)).as_posix()
+                       for p in sync.find_files(td))
         assert found == ["scripts/real.py"], found
 
 

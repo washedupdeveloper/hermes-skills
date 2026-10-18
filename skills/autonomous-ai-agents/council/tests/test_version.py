@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import importlib.util
 import os
-import re
 import sys
 import tempfile
 import types
@@ -123,28 +122,18 @@ def test_the_real_repository_is_consistent():
 
 # "Current release **v1.5.0**" is a checkable claim, and it is the one nobody
 # was checking: pyproject, CHANGELOG and tags all agreed at 1.5.2 while
-# docs/MILESTONES.md still advertised v1.5.0. The policy in docs/VERSIONING.md
-# says a claim that can be measured must be measured; this is that measurement.
-_PROSE_VERSION = re.compile(r"[Cc]urrent release\s+\*{0,2}v(\d+\.\d+\.\d+)\*{0,2}")
-
-# Files that speak about the release to a reader. Excluded: CHANGELOG.md (it is
-# the history, not a claim about now) and runs/ (records of a past moment).
-_PROSE_FILES = ("README.md", "docs")
+# docs/MILESTONES.md still advertised v1.5.0. The pattern and the file list now live
+# in version.py, because `bump` rewrites those claims and `check` validates them;
+# a copy here would be a third definition to keep in step.
 
 
 def _prose_version_claims(root: Path = REPO) -> list[tuple[str, str]]:
     """(where, version) for every "current release" claim in the prose."""
-    claims: list[tuple[str, str]] = []
-    for name in _PROSE_FILES:
-        target = root / name
-        paths = sorted(target.rglob("*.md")) if target.is_dir() else [target]
-        for path in paths:
-            if not path.is_file():
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-            for match in _PROSE_VERSION.finditer(text):
-                claims.append((str(path.relative_to(root)), match.group(1)))
-    return claims
+    # Delegates to version.py. `check` validates these claims and `bump` now rewrites
+    # them, so a second copy of the pattern here would let the test and the tool drift
+    # apart -- which is the exact failure this check exists to catch.
+    return [(path.relative_to(root).as_posix(), claimed)
+            for path, claimed in version.prose_version_claims(root)]
 
 
 def _wrong_claims(root: Path = REPO) -> list[tuple[str, str]]:
@@ -206,6 +195,50 @@ def test_a_historical_version_is_not_a_current_claim():
         assert _wrong_claims(root) == []
 
 
+# --- `bump` rewrites the claims, so the test must not be the only defence ----
+# `version.rewrite_prose_versions` is called from `cmd_bump` and nowhere else, and it
+# had no test: the behaviour that makes the check above survivable was unproven. A
+# bump that silently failed to rewrite would leave the release commit red for the
+# next person, which is exactly what happened three releases running.
+
+def test_a_bump_rewrites_every_prose_claim():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _prose_tree(root, pyproject_version="1.5.2",
+                    readme="Current release **v1.5.2**.\n"
+                           "Current release v1.5.2, plain spelling.\n",
+                    milestone="Current release **v1.5.0**.\n"
+                              "Release v1.2.0 scored 74.00.\n")
+        touched = version.rewrite_prose_versions(root, "2.0.0")
+
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        milestone = (root / "docs" / "MILESTONES.md").read_text(encoding="utf-8")
+        # every claim moved, in both spellings, with the emphasis kept
+        assert "**v2.0.0**" in readme, readme
+        assert "Current release v2.0.0, plain spelling." in readme, readme
+        assert "**v2.0.0**" in milestone, milestone
+        # a historical mention is not a current claim, so it must not be touched
+        assert "Release v1.2.0 scored 74.00." in milestone, milestone
+        # both files changed, reported by POSIX path on every platform
+        assert sorted(p.relative_to(root).as_posix() for p in touched) == [
+            "README.md", "docs/MILESTONES.md"], touched
+
+        # and the point of rewriting: `check` now agrees with the new version
+        (root / "pyproject.toml").write_text(
+            '[project]\nname = "review-council"\nversion = "2.0.0"\n', encoding="utf-8")
+        assert version.stale_prose_claims(root) == []
+
+
+def test_a_claim_already_current_is_not_reported_as_changed():
+    """`changed` is what `bump` prints, so a no-op must not claim work."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _prose_tree(root, pyproject_version="2.0.0",
+                    readme="Current release **v2.0.0**.\n",
+                    milestone="Current release v2.0.0.\n")
+        assert version.rewrite_prose_versions(root, "2.0.0") == []
+        assert (root / "README.md").read_text(encoding="utf-8") == \
+            "Current release **v2.0.0**.\n"
 
 
 # --- each way the file can lie ----------------------------------------------
