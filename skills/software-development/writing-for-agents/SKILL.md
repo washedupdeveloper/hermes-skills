@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: "Write documents agents read: skills, AGENTS.md, docs."
-version: 1.0.0
+version: 1.1.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -177,6 +177,32 @@ Three rules that each cost a wrong document:
   sandboxed, or already gated becomes the **enabling assumption** for the next mistake —
   nobody re-checks a boundary a document says is there. Audit those claims first.
 
+## Verify it as the consumer receives it
+
+**Reading the file back is not verification — load it the way the agent will.** A
+document can be correct on disk and unreachable in context: a pointer whose target is
+absent, a support file that exists but is untracked so the build never sees it, a skill
+whose served copy is a cached older version. So after writing, fetch it through the same
+path the agent uses and read what comes back.
+
+For a Hermes skill, the two paths differ and the difference decides whether your edit is
+checkable in-session:
+
+- **`skill_view(<name>)` reads the file per call.** An edit to an existing `SKILL.md` is
+  served immediately, so you can confirm the new `version:` and the new section in the
+  same session that wrote them. Do not assume a stale cache hides it.
+- **The skill *table* — `skills_list`, the index in the system prompt — is built at
+  session start.** A brand-new skill is therefore absent from it until a new session or a
+  reload, which is a display lag, not a failed write. Confirm the file and the table
+  separately, and say which one you checked. (A packaging skill that warns "the loader is
+  cached" means this table, not the content — do not read it as "my edit cannot be
+  checked".)
+
+For a support file (`references/`, `templates/`, `scripts/`) the risk is the opposite: it
+is present on disk and absent from everything that consumes the tree. Where a repo's gate
+checks for dead references, an untracked support file that a SKILL.md names **fails the
+gate** — `git add` it before believing the pointer works.
+
 ## Verification
 
 - [ ] The pointer states the trigger, not just the topic
@@ -185,3 +211,5 @@ Three rules that each cost a wrong document:
 - [ ] Nothing in the document restates what a linked artifact already holds
 - [ ] Every line would change the agent's behaviour, or it is gone
 - [ ] Every factual claim is PROVEN by a re-runnable command, or labelled UNPROVEN
+- [ ] The document was fetched the way the agent receives it (`skill_view` for a skill,
+      a real build for a tracked support file), not merely read back off disk

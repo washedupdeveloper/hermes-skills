@@ -73,6 +73,25 @@ it is the one that gets skipped because the edit was "only a doc".
   say so and re-measure in the same breath — a standing property cannot rest on one
   observation, and a green summary is the easiest thing in the world to keep repeating
   after it has stopped being true.
+- **When a shared tree is red for someone else's reason, prove YOUR commit in a clone.**
+  A co-writer's uncommitted files break the gate for everybody: an untracked file a check
+  references, a half-finished edit, a staged experiment. Do not stash their work, do not
+  `git checkout --`, and do not report the red gate as if it described your commit — all
+  three lose information or misattribute it. Clone the repo at your SHA and run the gate
+  there:
+
+  ```bash
+  git clone -q . /tmp/clean-$$ && cd /tmp/clean-$$ && \
+    git log --oneline -1 && git status --short | wc -l && <the gate command>
+  ```
+
+  The clone carries only committed content, so a green run is a statement about your
+  commit alone, and the two lines above make it checkable: the SHA is the one you claim and
+  the dirty count is zero. Say that you did this and why, because "gate green" measured in
+  a scratch clone is a narrower claim than the same words about the working tree. Where a
+  gate failure names a file, confirm whose it is before anything else —
+  `git status --short <path>` showing `??` or ` M` means it is not in your commit, and the
+  fix belongs to whoever is mid-write, not to you.
 - Run focused checks before wider gates. A focused failure is faster to read and
   cheaper to run.
 - Distinguish **pass / fail / unavailable / blocked** exactly. "Could not run" is not
@@ -268,6 +287,10 @@ so look before escalating.
   `as_posix()`, and the evidence is the CI matrix's per-job conclusions, not the local
   result: read them by job name (`windows-latest`), because a red job and a green one sit in
   the same run. Where a repo ships to more than one OS, the matrix is part of the proof.
+- **A gate reported red without saying whose red** — a shared working tree fails for a
+  co-writer's uncommitted file, and quoting that failure beside your own change
+  misattributes it. A green run measured in a clone of your commit, with the SHA and a
+  zero dirty count beside it, is the narrower and honest claim.
 - **A result that arrived for the wrong reason** — a check whose output cannot be
   attributed to the condition under test. Silence from a pipeline that failed upstream
   read as "nothing found", or a gate that went green because its prerequisite was absent

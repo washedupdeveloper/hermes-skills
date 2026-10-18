@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.3.0
+version: 1.4.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -311,7 +311,10 @@ edited.
 
 **Run `nixfmt` on every file you touched** (via the devshell). The pre-commit hooks
 run on commit and will reformat or fail; a green commit is extra evidence, not a
-substitute for the gate.
+substitute for the gate. Markdown is gated too, and the two rules that bite are
+mechanical: a `$` prompt inside a ```console fence fails markdownlint's MD014
+(commands must be shown with their output), and a table whose separator row is
+`|---|` fails MD060 -- write bare commands and `| --- | --- |`.
 
 **Nix needs new files git-tracked — but never stage them with `git add -N`.** Nix
 cannot see an untracked path, and its error message tells you to run `git add -N`;
@@ -434,6 +437,11 @@ demonstrated nothing.
 - **Report which mode produced the verdict.** "Checks pass" over cached results, over
   zero executions, or over a pipeline whose status is the last stage's, is not
   evidence. Say whether anything actually ran.
+- **Prove a test is live by mutation, never by its derivation hash.** A `runTests`
+  group that passes emits a *fixed* derivation, so `drvPath` is identical before and
+  after you rewrite the assertions inside it -- measured on two different spellings
+  of one group. A green gate plus an unchanged hash therefore says nothing about
+  whether the test still tests anything.
 
 **Testing a clan flake.** Eval assertions (`lib.runTests`), VM tests (clan's
 `clanTest`), the deployability checks, the "no undeclared ports" pair, and the
@@ -445,7 +453,12 @@ the e2e tier it has the design rules: a test double must not carry its own copy 
 the system's table (or the new case becomes unrepresentable), an assertion must check
 that a unit MOVED the score rather than that its file exists, `nix log` is where a
 VM test's assertions are, and a unit registered in several places needs a
-two-direction agreement test.
+ two-direction agreement test.
+
+**Adding a machine** is its own procedure with its own traps -- clan's discovery
+rule, the reserved tags, the vars a machine needs before its toplevel will build at
+all, and the reason a test suite has to be fleet-shaped *before* the second machine
+arrives: `references/adding-machines-to-a-clan.md`.
 
 ## Procedure
 
@@ -466,6 +479,20 @@ two-direction agreement test.
    `git show --name-only --format='' HEAD` and compare it to what you intended. If a
    sweep happens, `git reset --mixed <target>`, re-stage the other writer's paths,
    and re-commit with `--only` -- never `git reset --hard`.
+   **The sweep also runs the other way, and you cannot fix that one by rewriting.**
+   A co-writer running `git add -A` takes *your* in-flight files into *their* commit,
+   so a commit whose message describes one concern arrives carrying two -- and the
+   diff looks correct, which is why nobody checks. Do not rebase or amend history
+   under a process that is still committing: it interleaves its work with yours and
+   the next thing you lose is real. Commit what remains with a body that names what
+   was carried, and run `git log --oneline -3` before every commit so you notice the
+   tree moved rather than discovering it later.
+   **Never pass a commit body through `-m "..."` when it contains backticks.** The
+   double quotes let the shell execute `` `...` `` as command substitution, so the
+   body is replaced by that command's output: a message describing a five-file change
+   became three lines of `command not found`, and the commit succeeded anyway. Write
+   the body to a file and pass `-F <file>`, or use a quoted heredoc (`<<'MSG'`), then
+   read it back with `git log -1 --format=%B` before pushing.
 6. **Re-verify LAST, and name the snapshot.** A verdict is a claim about one commit
    at one instant. On a tree another process can write, `HEAD` moves between the
    measurement and the report, so a green gate reported from a `git log` taken
@@ -482,6 +509,9 @@ two-direction agreement test.
   entry, generating it without rotating anything else, and verifying that.
 - `references/testing-a-clan-flake.md` — `lib.runTests` and clan's `clanTest`,
   the ports pair, deployability checks, and how the gate wires into git hooks.
+- `references/adding-machines-to-a-clan.md` — growing a clan from one machine to
+  many: clan's directory discovery, the reserved `all`/`nixos` tags, the vars store
+  as a build prerequisite, fleet-shaped assertions, and the deploy target.
 - `scripts/install-into-wsl.sh` — copy Windows-staged files into a WSL repo with CR
   stripped and before/after hashes.
 - `references/host-side-leakage-and-reclamation.md` — auditing and reclaiming what a

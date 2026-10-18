@@ -97,6 +97,42 @@ mutation to be *your* error rather than the test's: mutating `ports` inside
 the "not caught" result was the mutation's fault, not the test's. Confirm the
 mutation landed before concluding the test is blind.
 
+**A passing group's derivation hash cannot tell you whether its assertions are
+live.** `lib.runTests` emits a *fixed* derivation whenever the group passes -- the
+failures list is empty, so every input hash and the build script are identical --
+which means `unit-home.drvPath` is the same before and after you rewrite the
+assertions inside it. Measured: two different spellings of one group produced
+byte-identical `.drv` paths. So "the gate went green and the hash did not move" is
+not evidence that a test still tests anything; only a mutation is.
+
+**A mutation that changes nothing proves nothing -- check whether something else
+re-establishes the invariant.** Clan re-adds its reserved `all` and `nixos` tags to
+every machine, so deleting `"all"` from a machine's tag list is a no-op and the suite
+rightly stays green. Mutate the *mechanism* (put the role back on
+`machines.<name>`), not a spelling of it. Same shape as the `lib.all`-over-an-empty-
+list trap: a green result from a mutation that never bit is information about the
+mutation.
+
+**An assertion that an attribute EXISTS is vacuous when another module creates it.**
+`users.users ? <name>` is true on every machine in this fleet whether or not the
+account was ever created, because the base module assigns
+`users.users.<name>.shell` for the login shell -- so the guard passed in exactly the
+case it was written to catch, and passed a second machine that had no account at
+all. Assert the field only the real thing sets (`isNormalUser`, a
+`hashedPasswordFile`, a group membership) and confirm by mutating the assignment
+that creates it.
+
+**Assertions must be fleet-shaped, or the second machine fails for existing.** A
+`lib.unique (lib.map (m: m.config.X) named)` compared against a literal list asserts
+"there is exactly one machine, and it is the one I wrote down". The per-machine map
+(`lib.mapAttrs ... machines` vs `{ workstation = [ "x" ]; }`) and the per-user list
+(`[ [ true true ] ]`) have the same defect, and it is worse than a failure: the fix a
+reader reaches for is to add a second row, which disables the assertion for the
+machine just added. Write `lib.all (...) named` / `lib.all (...) hmUsers` with
+`expected = true`, or a `subtractLists` against the declared set with `expected =
+[ ]`. Details and the assertions this makes possible:
+`references/adding-machines-to-a-clan.md`.
+
 **"No undeclared ports open" needs two layers, and they are different claims.**
 At evaluation time, assert the *declared* exposure set exactly --
 `networking.firewall.allowedTCPPorts` and `allowedUDPPorts` compared against a
