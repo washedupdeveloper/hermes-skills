@@ -118,23 +118,25 @@ if soul.is_file():
           f"actual: {toks} tokens")
 
 # ── setup.sh claims, executed ────────────────────────────────────────────────
-p = subprocess.run([str(R / "setup.sh"), "--check"], capture_output=True, text=True,
-                   timeout=120)
+# Named `proc`, not `p`: `p` is a Path in the three loops above, and rebinding it
+# made mypy blind on the block that decides PROVEN vs UNPROVEN here (7 errors).
+proc = subprocess.run([str(R / "setup.sh"), "--check"], capture_output=True, text=True,
+                      timeout=120)
 # exit 1 is the documented DRIFT code, but it is also what the script returns when
 # `hermes` is not on PATH — which is the normal state of a fresh CI runner. Reporting
 # that as PROVEN would be a claim passing for a reason it did not establish, so the
 # message decides which case this is.
-_out = ((p.stderr or "") + (p.stdout or "")).strip()
+_out = ((proc.stderr or "") + (proc.stdout or "")).strip()
 _reason = _out.splitlines()[-1] if _out else "(no output)"
-if p.returncode == 0:
+if proc.returncode == 0:
     _verdict, _detail = "PROVEN", "exit=0 — in sync"
-elif p.returncode == 1 and "not on PATH" in _reason:
+elif proc.returncode == 1 and "not on PATH" in _reason:
     _verdict = "UNPROVEN"
     _detail = f"exit=1, but for a different reason: {_reason}"
-elif p.returncode == 1:
+elif proc.returncode == 1:
     _verdict, _detail = "PROVEN", f"exit=1 — drift: {_reason}"
 else:
-    _verdict, _detail = "FALSE", f"exit={p.returncode}: {_reason}"
+    _verdict, _detail = "FALSE", f"exit={proc.returncode}: {_reason}"
 claim("README: '--check ... exit 1 on drift' (and 0 in sync)", _verdict, _detail)
 claim("README: 'setup.sh resolves its own location'",
       "PROVEN" if "BASH_SOURCE" in (R / "setup.sh").read_text() else "FALSE")

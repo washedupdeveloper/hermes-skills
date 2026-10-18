@@ -1,7 +1,7 @@
 ---
 name: agent-harness-design
 description: "Use when designing harness seams, tools, registries."
-version: 1.0.0
+version: 1.0.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -170,7 +170,7 @@ accepts the valid one — at the boundary, not merely inside it.
 | `--dump-config` | the composed config and the skill index (`skills_list`) |
 | Skill registry, rank precedence | `$HERMES_HOME/skills`, `skills.external_dirs`, `.bundled_manifest` |
 | Skill catalog + `skill` tool | skill index in the system prompt + `skill_view` |
-| Two invocation switches | offer-time gating: `requires_toolsets`, `environments`, `requires_env` |
+| Two invocation switches (model vs human) | **not equivalent** — Hermes has no user/model switch; it gates at offer time on relevance only: `requires_toolsets`, `requires_tools`, `fallback_for_toolsets`, `environments`, `session_platforms`, and `required_environment_variables` |
 | Agent Notes (proposed/implemented/rejected) | `docs/adr/` in this repo; commit messages elsewhere |
 | `verify-*` scripts in one `doc-sync` gate | `nix flake check`, split into an eval tier and a run tier |
 | Recorded-session snapshots | session transcripts in `state.db` |
