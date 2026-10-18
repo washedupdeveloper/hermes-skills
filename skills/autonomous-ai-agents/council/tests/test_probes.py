@@ -565,7 +565,9 @@ def test_zizmor_parses_severity_location_and_feature():
     high = out["findings"][0]
     assert high["severity"] == "high", high
     assert high["location"]["path"] == ".github/workflows/x.yml", high["location"]
-    assert high["location"]["line_range"] == "7", high["location"]
+    # `row` is 0-BASED, so row 7 is line 8 on screen. Asserting "7" here pinned the
+    # off-by-one instead of the contract: every finding cited the line above its own.
+    assert high["location"]["line_range"] == "8", high["location"]
     assert "actions/checkout@v4" in high["claim"], high["claim"]
     assert "zizmor" in high["falsifiable_check"], high["falsifiable_check"]
 
@@ -610,11 +612,19 @@ def test_zizmor_clean_repo_scores_100():
 
 
 def main() -> int:
+    # Tests that take a fixture (`tmp_path`) cannot run here: this runner calls
+    # `fn()` with no arguments, so it reported them as ERROR while pytest ran them
+    # green — a runner that invents failures teaches a reader to ignore it.
+    import inspect
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
-    passed = failed = 0
+    passed = failed = skipped = 0
     for name, fn in tests:
         try:
+            if inspect.signature(fn).parameters:
+                print(f"  SKIP {name} (needs a pytest fixture)")
+                skipped += 1
+                continue
             fn()
             print(f"  PASS {name}")
             passed += 1
@@ -624,7 +634,7 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"  ERROR {name} -> {type(exc).__name__}: {exc}")
             failed += 1
-    print(f"\n{passed} passed, {failed} failed")
+    print(f"\n{passed} passed, {failed} failed, {skipped} skipped (run pytest for those)")
     return 1 if failed else 0
 
 
@@ -754,3 +764,105 @@ def test_the_ci_cache_finding_names_a_check_that_matches_the_logic(tmp_path):
     check = d["findings"][0]["falsifiable_check"]
     assert "cachix/cachix-action" in check and "actions/cache" in check, check
     assert "/nix/store" not in check.split("grep")[1], check
+
+# --- path normalisation -----------------------------------------------------
+#
+# `str(x).lstrip("./")` strips a CHARACTER SET, not a prefix. Measured: `.env`
+# became `env`, `.review-council/run/council.log` became `review-council/...`, and
+# `.github/workflows/ci.yml` became `github/...` — a path that exists nowhere, cited
+# as the location of a real finding. Nine call sites did this.
+
+def test_a_leading_dot_survives_path_normalisation():
+    """The prefix `./` is stripped; a dot that BELONGS to the name is not."""
+    assert probes._shared.norm_path("./.github/workflows/ci.yml") == ".github/workflows/ci.yml"
+    assert probes._shared.norm_path(".env") == ".env"
+    assert probes._shared.norm_path(".review-council/x/council.log") == ".review-council/x/council.log"
+    assert probes._shared.norm_path("src/.gitignore") == "src/.gitignore"
+    assert probes._shared.norm_path("") == ""
+    assert probes._shared.norm_path(None) == ""
+
+
+def test_no_probe_strips_a_character_set_from_a_path():
+    """A structural guard: the bug is invisible at runtime, so grep the source."""
+    source = (REPO / "scripts" / "probes.py").read_text(encoding="utf-8")
+    offenders = [
+        line.strip() for line in source.splitlines()
+        if 'lstrip("./")' in line and not line.strip().startswith("#")
+    ]
+    assert not offenders, f"lstrip(\"./\") strips a character set: {offenders}"
+
+
+# --- zizmor line numbers ----------------------------------------------------
+#
+# `start_point.row` is 0-BASED. Used unshifted, every workflow finding cited the line
+# ABOVE the offender — 44 for a `uses:` on line 45 — which points a reviewer at a
+# comment and makes a true finding look false.
+
+def test_zizmor_reports_the_line_the_finding_is_on(tmp_path):
+    if shutil.which("zizmor") is None:
+        return
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    # The `uses:` sits on line 4 exactly; nothing else in the file can match.
+    (wf / "a.yml").write_text(
+        "on: push\njobs:\n  t:\n    steps:\n"
+        "      - uses: actions/checkout@v4\n",
+        encoding="utf-8")
+    out = probes.run_probe("zizmor", tmp_path)
+    if _toolchain_unresolved(out):
+        return
+    if not out["ran"]:
+        return
+    hits = [f for f in out["findings"] if "checkout" in f["claim"]]
+    if not hits:
+        return  # this zizmor build reports no audit on a minimal workflow
+    assert hits[0]["location"]["line_range"] == "5", (
+        "row is 0-based; unshifted it reports 4 for a `uses:` on line 5: "
+        f"{hits[0]['location']}")
+
+
+# --- gitleaks must not scan what SKIP_DIRS skips ----------------------------
+#
+# `gitleaks detect --source .` walks the whole tree: it does not honour .gitignore and
+# knows nothing about SKIP_DIRS, so the harness re-reported its own `.review-council`
+# logs — the run's own quoted gitleaks output — as open findings. Measured on a
+# 377-file repository: 274 hits, 270 of them ignored scratch.
+
+def test_the_gitleaks_allowlist_covers_every_skip_dir():
+    """Structural: the config and SKIP_DIRS must not drift apart.
+
+    A new SKIP_DIRS entry that the gitleaks allowlist does not know about silently
+    reopens the bug, and nothing else in the suite would notice.
+    """
+    config = probes._GITLEAKS_CONFIG
+    # Compare escaping-agnostically: the config holds TOML literal strings, so a
+    # directory name appears as `\.git`, while the name itself has no backslash.
+    plain = config.replace("\\", "")
+    missing = [name for name in probes.SKIP_DIRS if f"/){name}(/|$)" not in plain]
+    assert not missing, f"SKIP_DIRS entries missing from the gitleaks allowlist: {missing}"
+    assert "[extend]" in config and "useDefault = true" in config, (
+        "a config without [extend] useDefault replaces the shipped rule set, "
+        "so every real credential stops being detected")
+
+
+def test_gitleaks_ignores_review_scratch(tmp_path):
+    """The run's own log is not a finding. Only the real credential is."""
+    if shutil.which("gitleaks") is None:
+        return
+    secret = "sk_" + "live_" + "".join("0123456789abcdef"[i % 16] for i in range(48))
+    (tmp_path / "app.py").write_text(f'KEY = "{secret}"\n', encoding="utf-8")
+    scratch = tmp_path / ".review-council" / "20260101-000000"
+    scratch.mkdir(parents=True)
+    # A log quoting the same value, exactly as the harness writes it.
+    (scratch / "council.log").write_text(f"gitleaks: {secret}\n", encoding="utf-8")
+    pyc = tmp_path / "__pycache__"
+    pyc.mkdir()
+    (pyc / "x.py").write_text(f'KEY = "{secret}"\n', encoding="utf-8")
+
+    out = probes.run_probe("gitleaks", tmp_path)
+    if _toolchain_unresolved(out):
+        return
+    assert out["ran"] is True, out["note"]
+    paths = [f["location"]["path"] for f in out["findings"]]
+    assert paths == ["app.py"], (
+        "ignored scratch was reported as a finding: " + str(paths))

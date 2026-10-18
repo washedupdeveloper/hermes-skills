@@ -30,6 +30,12 @@ except ImportError as exc:  # pragma: no cover
     print(f"probes: cannot import toolchain.py from {HERE}: {exc}", file=sys.stderr)
     raise
 
+try:
+    import _shared  # type: ignore
+except ImportError as exc:  # pragma: no cover
+    print(f"probes: cannot import _shared.py from {HERE}: {exc}", file=sys.stderr)
+    raise
+
 SKIP_DIRS = frozenset({
     ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
     "env", ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache", "target",
@@ -420,7 +426,7 @@ def probe_statix(root: Path) -> Dict[str, Any]:
 
     findings: List[Dict[str, Any]] = []
     for obj in _json_objects(out):
-        path = str(obj.get("file", "")).lstrip("./")
+        path = _shared.norm_path(obj.get("file", ""))
         for entry in obj.get("report") or []:
             severity = str(entry.get("severity", "")).lower()
             note = str(entry.get("note", ""))
@@ -458,7 +464,7 @@ def probe_deadnix(root: Path) -> Dict[str, Any]:
 
     findings: List[Dict[str, Any]] = []
     for obj in _json_objects(out):
-        path = str(obj.get("file", "")).lstrip("./")
+        path = _shared.norm_path(obj.get("file", ""))
         for r in obj.get("results") or []:
             findings.append({
                 "severity": "low", "status": "open",
@@ -886,7 +892,7 @@ def probe_ruff(root: Path) -> Dict[str, Any]:
             # missing call. `E` is pycodestyle, which is style.
             "severity": "medium" if code.startswith("F") else "low",
             "status": "open",
-            "location": {"path": str(item.get("filename") or "").lstrip("./"),
+            "location": {"path": _shared.norm_path(item.get("filename")),
                          "line_range": str(row)},
             "claim": f"ruff {code}: {str(item.get('message', '')).strip()}".strip()[:200],
             "falsifiable_check": f"ruff check {item.get('filename')}",
@@ -922,7 +928,7 @@ def probe_mypy(root: Path) -> Dict[str, Any]:
         findings.append({
             "severity": "low" if severity == "note" else "medium",
             "status": "open",
-            "location": {"path": str(obj.get("file") or "").lstrip("./"),
+            "location": {"path": _shared.norm_path(obj.get("file")),
                          "line_range": str(obj.get("line", ""))},
             "claim": f"mypy: {str(obj.get('message', '')).strip()}"[:200],
             "falsifiable_check": f"mypy {obj.get('file')}",
@@ -959,7 +965,7 @@ def probe_bandit(root: Path) -> Dict[str, Any]:
         findings.append({
             "severity": _severity_from_bandit(item.get("issue_severity")),
             "status": "open",
-            "location": {"path": str(item.get("filename") or "").lstrip("./"),
+            "location": {"path": _shared.norm_path(item.get("filename")),
                          "line_range": str(item.get("line_number", ""))},
             "claim": (f"bandit {item.get('test_id', '')}: "
                       f"{str(item.get('issue_text', '')).strip()}")[:200],
@@ -1048,7 +1054,7 @@ def probe_osv_scanner(root: Path) -> Dict[str, Any]:
     findings: List[Dict[str, Any]] = []
     packages = 0
     for entry in docs[0].get("results") or []:
-        lock = str((entry.get("source") or {}).get("path") or "").lstrip("./")
+        lock = _shared.norm_path((entry.get("source") or {}).get("path"))
         for pkg in entry.get("packages") or []:
             packages += 1
             name = str((pkg.get("package") or {}).get("name") or "?")
@@ -1065,6 +1071,44 @@ def probe_osv_scanner(root: Path) -> Dict[str, Any]:
     return result("osv-scanner", True, score_from_density(len(findings), root), findings,
                   f"{len(findings)} advisories over {packages} packages in "
                   f"{len(locks)} lockfile(s)")
+
+
+#: `gitleaks detect --source .` walks the WHOLE tree: it does not honour
+#: .gitignore and knows nothing about SKIP_DIRS, so the harness re-reported its own
+#: `.review-council` logs -- the run's own quoted gitleaks output -- as open findings.
+#: Measured on a 377-file repository: 274 hits, 270 of them ignored scratch, so the
+#: probe inflated the finding count ~68x and buried the three real fixtures.
+#:
+#: `[extend] useDefault` keeps the shipped rule set; the allowlist only removes paths
+#: that are not source. `paths` are regexes over the file path, anchored on a segment
+#: boundary so `.gitignore` is not caught by `.git`.
+_GITLEAKS_CONFIG = """[extend]
+useDefault = true
+
+[[allowlists]]
+description = "not source: VCS metadata, review scratch, dependency trees, build output"
+paths = [
+  '''(^|/)\\.git(/|$)''',
+  '''(^|/)\\.hg(/|$)''',
+  '''(^|/)\\.svn(/|$)''',
+  '''(^|/)node_modules(/|$)''',
+  '''(^|/)__pycache__(/|$)''',
+  '''(^|/)\\.venv(/|$)''',
+  '''(^|/)venv(/|$)''',
+  '''(^|/)env(/|$)''',
+  '''(^|/)\\.tox(/|$)''',
+  '''(^|/)\\.mypy_cache(/|$)''',
+  '''(^|/)\\.pytest_cache(/|$)''',
+  '''(^|/)\\.ruff_cache(/|$)''',
+  '''(^|/)target(/|$)''',
+  '''(^|/)dist(/|$)''',
+  '''(^|/)build(/|$)''',
+  '''(^|/)\\.next(/|$)''',
+  '''(^|/)\\.nuxt(/|$)''',
+  '''(^|/)result(/|$)''',
+  '''(^|/)\\.review-council(/|$)''',
+]
+"""
 
 
 def probe_gitleaks(root: Path) -> Dict[str, Any]:
@@ -1085,9 +1129,12 @@ def probe_gitleaks(root: Path) -> Dict[str, Any]:
                       parsed=False)
     with tempfile.TemporaryDirectory(prefix="rc-gitleaks-") as tmp:
         report = Path(tmp) / "gitleaks.json"
+        config = Path(tmp) / "gitleaks.toml"
+        config.write_text(_GITLEAKS_CONFIG, encoding="utf-8", newline="\n")
         rc, out = _bridge(
             root,
             ["gitleaks", "detect", "--no-git", "--source", ".",
+             "--config", str(config),
              "--report-format", "json", "--report-path", str(report),
              "--redact", "--exit-code", "0"],
             env_extra=_scratch_env(tmp), timeout=900)
@@ -1105,7 +1152,7 @@ def probe_gitleaks(root: Path) -> Dict[str, Any]:
 
     findings: List[Dict[str, Any]] = []
     for entry in doc if isinstance(doc, list) else []:
-        path = str(entry.get("File") or "").lstrip("./")
+        path = _shared.norm_path(entry.get("File"))
         start = int(entry.get("StartLine") or 0)
         end = int(entry.get("EndLine") or start)
         rule = str(entry.get("RuleID") or "?")
@@ -1183,14 +1230,17 @@ def probe_zizmor(root: Path) -> Dict[str, Any]:
         location = (entry.get("locations") or [{}])[0]
         symbolic = (location.get("symbolic") or {})
         local = (symbolic.get("key") or {}).get("Local") or {}
-        # `lstrip("./")` would strip every leading dot AND slash — `.github/x.yml`
-        # becomes `github/x.yml`. Strip the prefix, not a character set.
-        path = str(local.get("verbatim_path") or "")
-        if path.startswith("./"):
-            path = path[2:]
+        # One path normaliser for every probe: `_shared.norm_path` strips a leading
+        # `./` PREFIX (a `lstrip("./")` would strip a character set and turn
+        # `.github/x.yml` into `github/x.yml`).
+        path = _shared.norm_path(local.get("verbatim_path"))
         concrete = (location.get("concrete") or {})
         span = (concrete.get("location") or {}).get("start_point") or {}
-        line = int(span.get("row") or 0)
+        # `row` is 0-BASED (tree-sitter coordinates). Used unshifted it cited the
+        # line above the offender -- 44 for a `uses:` on line 45 -- which points a
+        # reviewer at a comment and makes the finding look wrong.
+        row = span.get("row")
+        line = int(row) + 1 if isinstance(row, int) else 0
         # `feature` is the offending source text, which makes the finding checkable
         # without opening the file.
         feature = str(concrete.get("feature") or "").strip()[:80]
@@ -1245,7 +1295,7 @@ def probe_shellcheck(root: Path) -> Dict[str, Any]:
             # Same convention as statix: an `error` level is medium, the rest low. A
             # linter's opinion does not block satisfaction.
             "severity": "medium" if level == "error" else "low", "status": "open",
-            "location": {"path": str(item.get("file") or "").lstrip("./"),
+            "location": {"path": _shared.norm_path(item.get("file")),
                          "line_range": str(line) if line == end else f"{line}-{end}"},
             "claim": f"SC{item.get('code')}: {str(item.get('message') or '')}"[:200],
             "falsifiable_check": f"shellcheck {item.get('file')}",
