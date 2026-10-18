@@ -178,6 +178,14 @@ so look before escalating.
   that cannot be reached and cannot be explained.
 - **A count quoted instead of measured** — repeating a number from a report as if it were
   a measurement. Quote the number you ran.
+- **A green run on one platform reported as a green suite** — the suite's own exit code on
+  your machine says nothing about the other targets, and the tests most likely to differ are
+  the ones you just wrote. Measured: two tests asserting `str(path.relative_to(root))`
+  against a POSIX literal — `['scripts\\real.py'] == ['scripts/real.py']` — passed locally on
+  Linux and failed `windows-latest` on the commit that added them, twice. The fix is
+  `as_posix()`, and the evidence is the CI matrix's per-job conclusions, not the local
+  result: read them by job name (`windows-latest`), because a red job and a green one sit in
+  the same run. Where a repo ships to more than one OS, the matrix is part of the proof.
 - **A result that arrived for the wrong reason** — a check whose output cannot be
   attributed to the condition under test. Silence from a pipeline that failed upstream
   read as "nothing found", or a gate that went green because its prerequisite was absent
