@@ -1,7 +1,7 @@
 ---
 name: git-history-sanitisation
 description: "Use when publishing a branch, or sanitising history."
-version: 1.2.0
+version: 1.2.1
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -95,11 +95,12 @@ what catches a malformed replacements file, and it costs one command.
 
    `$[0-9a-z]{1,10}\$` is the general crypt-format shape. Measured against every form
    that matters — `$1$`, `$2b$`, `$2y$`, `$5$`, `$6$`, `$y$`, `$apr1$`, `$argon2id$` — it
-   matches all eight and does not match ordinary prose or shell (`$5 per item`, `$HOME/x`,
-   `$1 and $2` all score zero). A hand-written `[56y]` character class silently misses
-   `$2b$` (bcrypt, `htpasswd -B`) and `$argon2id$`, which are the two a modern password
-   store is most likely to hold. Two reasons the blob scan is the only one that counts
-   here:
+   matches all eight. A hand-written `[56y]` character class silently misses `$2b$`
+   (bcrypt, `htpasswd -B`) and `$argon2id$`, which are the two a modern password store is
+   most likely to hold. **Treat a hit as a candidate, not a finding:** the pattern also
+   matches variable-adjacent text such as `echo $a$b` or `awk '{print $1$2}'`, so triage
+   each blob before rewriting history over it. Two reasons the blob scan is the only one
+   that counts here:
 
    - **`git log -p` cannot see a binary blob.** For any file git treats as binary or
      `-diff` — an `htpasswd` file with a NUL byte, a `.db` — `-p` prints `Binary files

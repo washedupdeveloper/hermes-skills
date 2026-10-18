@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.7.2
+version: 1.7.3
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -541,12 +541,10 @@ arrives: `references/adding-machines-to-a-clan.md`.
    When a verdict turns out to be stale rather than wrong, say which commit it was true
    at instead of defending it.
 
-   **Check the work is on the branch the user pulls**, and check it with
-   `git branch -a` first: the branch holding the work may not be the one you were told
-   about, and a long-lived `feat/*` branch is normal here rather than a sign of an
-   abandoned attempt. The commands, the count semantics and the clean-tree guard live in
-   `verify-and-stop` under "Name the branch, not only the commit" — one home for that
-   fact; do not restate the reasoning or the commands here.
+   **A flake repo's long-lived `feat/*` branches are normal**, so start from `git branch -a`
+   rather than the branch you were handed. Everything else about proving a merge — the
+   commands, the count semantics, the clean-tree guard — is in `verify-and-stop` under
+   "Name the branch, not only the commit"; do not restate it here.
 
 ## References
 

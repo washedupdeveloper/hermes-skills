@@ -31,10 +31,21 @@ secret with users but no machine marker encrypts correctly and never reaches the
 
 `containsSymlink` accepts `readFileType` in `{ directory, symlink }`, so either a real
 directory or a symlink registers — a plain **file** at that path does not, and the secret
-then silently stops deploying. `git ls-files -s <path>` prints `120000` for a symlink and
-`040000`/`100644` for a directory/file; check the type matches what the repo intends, and
-resolve a symlink with `readlink -f` because a dangling one reads as present to git and
-absent to the module, which is the worst of both.
+then silently stops deploying. Check the type with `git ls-tree`, which reports the mode of
+the entry itself:
+
+```bash
+git ls-tree HEAD sops/secrets/<name>/machines/<m>   # 120000 blob = symlink, 040000 tree = directory
+git ls-tree HEAD sops/secrets/<name>/groups/<g>
+```
+
+**Not `git ls-files -s` on a directory path** — that lists the files *inside* it at
+`100644`, so a directory marker looks like a plain file and a reader "fixes" a marker that
+was already correct. `git ls-files -s <path>` is right only for the symlink case
+(`120000`). And git does not track an empty directory at all, so a marker that is an empty
+directory is absent from the commit entirely; resolve a symlink with `readlink -f` too,
+because a dangling one reads as present to git and absent to the module, which is the
+worst of both.
 
 **A missing `.sops.yaml` is correct for clan, not an omission.** Clan does not use sops
 creation rules; its own template ships none and recipients live in
@@ -66,7 +77,7 @@ recipients are public keys, so printing them is safe:
 grep -oE '(recipient: *|"recipient": *")age1[a-z0-9]+' <file> | sed 's/.*age1/age1/'
 
 # the machine's key derives to its registered recipient
-git ls-files -s vars/per-machine/<m>/<gen>/<file>/machines/<m>   # must print 120000
+git ls-tree HEAD vars/per-machine/<m>/<gen>/<file>/machines/<m>  # 120000 blob, or 040000 tree
 age-keygen -y /var/lib/sops-nix/key.txt                          # public key only
 jq -r '.[0].publickey' sops/machines/<m>/key.json
 ```
