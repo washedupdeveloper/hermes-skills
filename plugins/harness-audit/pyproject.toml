@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-harness-audit"
+version = "1.0.0"
+description = "Durable tool-call audit and catalog-completeness reporting for Hermes Agent"
+requires-python = ">=3.10"
+dependencies = []
+
+# The entry point is what makes this installable instead of copied. Hermes scans
+# `hermes_agent.plugins` for installed distributions
+# (hermes_cli/plugins_discovery.py: ENTRY_POINTS_GROUP), and `ep.name` is the plugin key
+# that `plugins.enabled` matches.
+[project.entry-points."hermes_agent.plugins"]
+harness-audit = "harness_audit:register"
+
+[tool.setuptools]
+py-modules = ["harness_audit"]

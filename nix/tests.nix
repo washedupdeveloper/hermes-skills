@@ -171,6 +171,44 @@ let
   ) pluginNames;
 
   pluginNameMatches = dir: name: name == dir;
+
+  # A plugin that ships a `pyproject.toml` claims to be installable, and the only thing
+  # making it installable is the entry point Hermes scans. `hermes_agent.plugins` with a
+  # key equal to the plugin name is what `plugins.enabled` matches, so a wrong key is a
+  # plugin that builds, installs, and never loads — silently.
+  pluginEntrypointIssues = lib.concatMap (
+    name:
+    let
+      pyproject = pluginDir + "/${name}/pyproject.toml";
+    in
+    if !builtins.pathExists pyproject then
+      [ ]
+    else
+      let
+        text = builtins.readFile pyproject;
+        declaresGroup = lib.hasInfix "hermes_agent.plugins" text;
+        declaresKey = entrypointDeclares name text;
+      in
+      (if declaresGroup then [ ] else [ "${name}: pyproject.toml has no hermes_agent.plugins entry point" ])
+      ++ (if declaresKey then [ ] else [ "${name}: pyproject.toml declares no entry point named ${name}" ])
+  ) pluginNames;
+
+  # Line-based, because `builtins.match` anchors `^` to the start of the whole string:
+  # `.*^name` can never match, which is how the first version of this predicate reported
+  # a correct pyproject as broken.
+  entrypointDeclares = name: text:
+    lib.hasInfix "hermes_agent.plugins" text
+    && lib.any
+      (line: lib.hasPrefix "${name} =" (lib.trim line))
+      (lib.splitString "\n" text);
+
+  # --- build output -------------------------------------------------------
+  # `nix build` leaves a `result` symlink at the repo root. Committing it is worse than
+  # noise: it is a path into one machine's /nix/store, so every other checkout gets a
+  # dangling link, and `git add -A` sweeps it in without a word. This happened once here.
+  isBuildOutput = name: lib.hasPrefix "result" name;
+
+  committedBuildOutputs = lib.filter isBuildOutput (builtins.attrNames (builtins.readDir src));
 in
 {
   plugins = {
@@ -187,6 +225,48 @@ in
         (pluginNameMatches "harness-audit" "audit")
       ];
       expected = [
+        true
+        false
+      ];
+    };
+
+    test_every_installable_plugin_declares_its_entry_point = {
+      expr = pluginEntrypointIssues;
+      expected = [ ];
+    };
+
+    # Negative control for the entry-point gate: the right key under the wrong group, and
+    # the right group with the wrong key, must both be rejected.
+    test_the_entrypoint_gate_rejects_a_wrong_group_or_key = {
+      expr = [
+        (entrypointDeclares "harness-audit" "[project.entry-points.\"hermes_agent.plugins\"]\nharness-audit = \"harness_audit:register\"\n")
+        (entrypointDeclares "harness-audit" "[project.entry-points.\"console_scripts\"]\nharness-audit = \"harness_audit:main\"\n")
+        (entrypointDeclares "harness-audit" "[project.entry-points.\"hermes_agent.plugins\"]\naudit = \"harness_audit:register\"\n")
+      ];
+      expected = [
+        true
+        false
+        false
+      ];
+    };
+  };
+
+  buildOutput = {
+    test_no_build_output_is_committed = {
+      expr = committedBuildOutputs;
+      expected = [ ];
+    };
+
+    # Negative control: the predicate must accept `result` and `result-*` and reject an
+    # ordinary file, or the check above is satisfied by a tree it never inspects.
+    test_the_build_output_gate_rejects_a_result_link = {
+      expr = [
+        (isBuildOutput "result")
+        (isBuildOutput "result-harness-audit")
+        (isBuildOutput "README.md")
+      ];
+      expected = [
+        true
         true
         false
       ];

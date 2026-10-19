@@ -20,3 +20,9 @@ Thumbs.db
 # which are runtime scratch, not skills. review-council's own tree ignores the same
 # path for the same reason.
 .review-council/
+
+# `nix build` output. A tracked `result` is a symlink into /nix/store: machine-specific,
+# dangling on every other checkout, and it broke nothing loudly enough to be noticed until
+# a `git add -A` swept it in. `nix/tests.nix` now fails the gate if one is committed.
+result
+result-*
