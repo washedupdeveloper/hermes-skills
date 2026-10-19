@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: "Write documents agents read: skills, AGENTS.md, docs."
-version: 1.3.0
+version: 1.4.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -115,6 +115,15 @@ command. Words like *surface*, *seam*, *vocabulary* and *gate* read as precise a
 nothing a reader can find in the code; reserve them for a term the project defines, and
 otherwise say `response fields`, `JSON validation`, `ESM exports`. A metaphor survives
 review because it sounds like an answer.
+
+**A pointer must name a target that already holds the fact — check, do not assume.**
+Replacing a paragraph with "see X" is the cheapest compression and the easiest to get
+wrong: the writer believes X covers it because X is the relevant doc. Measured on one
+pass, six of sixteen rewritten module docstrings pointed at a `SKILL.md` that did not
+contain the rule they deferred — "silent when healthy", a no-PyYAML constraint, an env
+var. A false pointer is worse than the long paragraph it replaced, because the reader
+stops looking. Grep the target for the specific claim before writing the pointer, and
+when it is absent either keep the fact inline or add it to the target in the same edit.
 
 ## Compressing an existing document
 
