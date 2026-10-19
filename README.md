@@ -98,12 +98,13 @@ skills/
 │                           nix-declarative-config
 ├── productivity/           wait-what
 ├── security/               oss-forensics  web-app-security
-└── software-development/   deterministic-quality-gates  domain-modeling
-                            grill-me  handoff  nixos-clan-flake  retro
-                            skill-library-curation  surgical-patch  to-spec
-                            to-tickets  verify-and-stop  wayfinder  wizard
-                            writing-for-agents  project-kickoff-planning
-                            technology-selection
+└── software-development/   agent-harness-design  defensive-patterns
+                            deterministic-quality-gates  domain-modeling
+                            grill-me  handoff  nixos-clan-flake  postmortem
+                            retro  skill-library-curation  surgical-patch
+                            to-spec  to-tickets  verify-and-stop  wayfinder
+                            wizard  writing-for-agents
+                            project-kickoff-planning  technology-selection
 ```
 
 Also at the top level, not a skill:
@@ -113,10 +114,10 @@ soul/                       caveman-voice.md — the always-on SOUL.md fragment
 setup.sh                    the initializer: declares and applies the settings
 ```
 
-42 `SKILL.md` across 36 skills — 35 load on Windows; `hermes-s6-container-supervision`
+44 `SKILL.md` across 38 skills — 37 load on Windows; `hermes-s6-container-supervision`
 declares `platforms: [linux]` and is correctly skipped here.
 
-Six of the 42 are the council's reviewer rubrics
+Six of the 44 are the council's reviewer rubrics
 (`council/assets/rubrics/reviewer-*/SKILL.md`). They carry SKILL.md frontmatter, but
 `assets/` is one of Hermes's `SKILL_SUPPORT_DIRS` (`references`, `templates`, `assets`,
 `scripts`), so they are **not** separate catalog skills. They travel with the council and
@@ -258,6 +259,10 @@ paragraph, not a document.
 |---|---|
 | [0001](docs/adr/0001-reference-not-symlink.md) | Reference the repo, never a copy or symlink |
 | [0002](docs/adr/0002-voice-in-soul-not-skill.md) | The voice lives in `SOUL.md`, not a skill |
+| [0003](docs/adr/0003-the-council-skill-is-a-generated-copy.md) | The council skill is a generated copy |
+| [0004](docs/adr/0004-adopt-dsh-harness-rules.md) | Adopt four harness rules from DeepSeek Harness, reject its framework |
+| [0005](docs/adr/0005-pin-workflow-actions-to-commits.md) | Pin workflow actions and installs to commits |
+| [0006](docs/adr/0006-dsh-second-pass.md) | The second pass: bug classes, incident classes, request logging |
 
 Everything else — the ownership classes, the setup contract, the layout — is a rule
 or a fact, and lives in `AGENTS.md` or here.

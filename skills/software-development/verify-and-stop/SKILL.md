@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.6.3
+version: 1.7.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -53,6 +53,34 @@ What "run it" means, by artifact:
 **A test that requires a fixture you cannot supply is a blocker, not a pass.** Say
 "unproven: needs `<thing>`", never "covered". And when the run contradicts the suite, the
 run wins — the suite is a model, the run is the system.
+
+### Name the acceptance target, and observe it there
+
+The proof is about **the thing the user is looking at**, not about something that behaves
+the same way. Measured: an agent edited a running app's source, then reported success from a
+bare dev server on a new port — HTTP 200 and a blank page, because the boot manifest was
+injected only by the full host — and finally validated a *replacement* server on a third
+port while the user's page on the original port had already picked the change up. Every
+observation was true. None was evidence about the target.
+
+- **Name it before you prove it:** the origin and port, the process or unit, the profile,
+  the file path, the binary path. If you cannot name it, that is the one question worth
+  asking.
+- **Readiness is not liveness.** A port answering, a build succeeding, a file existing, and
+  a manifest being present are four different facts. Acceptance asserts the requested change
+  at the named target, observed from outside the process that made it.
+- **A replacement service cannot prove the existing one changed.** Starting a second
+  instance proves the second instance works — and is how an unmanaged server outlives the
+  turn.
+- **A timeout that kills the process is not a fail-fast assertion.** A test whose
+  "non-zero exit" came from the harness killing a hung server passes for the wrong reason.
+  Instrument what you meant to observe (the listen call, the response body), not the wrapper
+  around it.
+- **Run the published artifact at least once, and say which one you ran.** A dev runner
+  masks what the shipped binary does: module resolution, settle races, swallowed load
+  failures. A test that resolved a previously built copy passes while the source is broken,
+  so prove which artifact ran — a version marker, a path, a hash — not merely that a command
+  exited 0.
 
 **Run it again after the last edit.** A proof produced before the final change is a proof
 of a tree that no longer exists; this is the same rule as the stale-verdict one below, and
@@ -368,6 +396,11 @@ so look before escalating.
   co-writer's uncommitted file, and quoting that failure beside your own change
   misattributes it. A green run measured in a clone of your commit, with the SHA and a
   zero dirty count beside it, is the narrower and honest claim.
+- **A proof about a substitute** — the change demonstrated on a second server, a rebuilt
+  artifact on another port, or a fresh copy of the file, while the thing the user has open
+  was never observed. Each is a true statement about something else.
+- **A stale artifact that satisfied the check** — the run loaded a previously built copy, so
+  the new code never executed. Name the artifact, or the proof is about an older tree.
 - **A result that arrived for the wrong reason** — a check whose output cannot be
   attributed to the condition under test. Silence from a pipeline that failed upstream
   read as "nothing found", or a gate that went green because its prerequisite was absent

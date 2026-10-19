@@ -7,6 +7,11 @@ each is worth a deliberate assertion rather than trust.
 Distilled from real defects found by review — the mechanism matters more than the
 instance.
 
+The incident-shaped classes — a test double that validates a load path the product never
+takes, a config value parsed where it is not evaluated, attribution by a shared diagnostic
+prefix — are catalogued in the `postmortem` skill's failure-classes reference, where they
+are written for the investigation rather than for the gate.
+
 ## A suffix filter silently skips the file it names
 
 `pathlib.Path('.env').suffix` is `''` — a dotfile has no suffix — so a walk filtering on

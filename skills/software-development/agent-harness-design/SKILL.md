@@ -1,7 +1,7 @@
 ---
 name: agent-harness-design
 description: "Use when changing harness seams, tools, or registries."
-version: 2.0.0
+version: 2.1.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -9,13 +9,15 @@ category: software-development
 metadata:
   hermes:
     tags: [harness, plugins, seams, registries, audit, composition]
-    related_skills: [deterministic-quality-gates, writing-for-agents, hermes-agent]
+    related_skills: [deterministic-quality-gates, writing-for-agents, hermes-agent, defensive-patterns, postmortem]
 ---
 
 # agent-harness-design
 
 What this setup adopted from DeepSeek Harness (`dsh`, an all-plugin Cordis harness), **where
-each rule is actually implemented**, and which rules have no Hermes seam at all.
+each rule is actually implemented**, and which rules have no Hermes seam at all. The
+bug-class rules it states for review live in `defensive-patterns`; the incident discipline
+lives in `postmortem`.
 
 Read this when changing a harness seam — a tool, a registry, a plugin, a skill source. It is
 an index of running capability first, and judgement rules second. A rule that exists only as
@@ -32,6 +34,7 @@ Provenance and the rejected alternatives: `docs/adr/0004-adopt-dsh-harness-rules
 | **Wire each invariant into a gate, with a negative control** | `nix/tests.nix` — one predicate per rule, each driven with a deliberately invalid input through the same code the gate calls | `nix flake check` |
 | **A registration is an effect; teardown unwinds it** | Hermes plugin lifecycle — contributions from `register(ctx)` go away when the plugin unloads | `hermes plugins disable <name>` |
 | **Composition is layered; every row patchable by id** | Hermes profiles + `config.yaml`, changed with `hermes config set` (never by hand) | `hermes config get <key> --json` |
+| **A model request is a logged fact** | same plugin, `pre_api_request` — one JSONL line per call: provider, model, message and tool counts, input-token size, and a digest of the system prompt. No prompt text, no message bodies | `harness_audit(action="requests")` |
 
 ## Not implemented, because Hermes has no seam for it
 
@@ -75,6 +78,50 @@ Each states the defect it prevents and the check that can fail.
   is recorded so it is not broken by accident.
 - **One home per fact**; **a decision is a record with a lifecycle** (proposed → implemented →
   archived, frozen once archived). The tier table is in `writing-for-agents`.
+
+## Where a policy goes in the tool pipeline
+
+dsh runs one ordered pipeline per call, and each stage has exactly one job. Hermes has the
+same shape with fewer stages; what survives the port is the rule that a concern belongs to
+one stage.
+
+| stage | dsh | Hermes seam | may |
+|---|---|---|---|
+| pre-execute | `tools/pre-execute` waterfall | `pre_tool_call` hooks | allow, deny, ask, rewrite args |
+| guards | monotonic guards, un-reorderable | no seam | deny or abstain |
+| around | `tools/execute` waterfall | `hermes_cli.middleware` | timeout, retry, metrics |
+| body | the tool's `execute()` | the tool | its own work only |
+| post | `tools/post-execute` waterfall | `post_tool_call`; `transform_tool_result` | observe; replace the result string |
+| result | `tools/result` observer | `post_tool_call` after the transform | read the frozen outcome |
+
+- **A policy that must not be reordered is a guard, not a hook.** Hermes hooks run in
+  registration order and any of them may deny, so a "must run last" check has no guarantee.
+  If order matters, the tool body owns the check — and then it is not a guard, it is the
+  tool's own precondition.
+- **Around-dispatch concerns wrap; they do not branch.** A timeout, a retry, a metric goes
+  in a wrapper around the call. The same concern written as a branch inside the tool body is
+  a second copy that the wrapper cannot see.
+- **The result is rewritten once.** `transform_tool_result` is first-string-wins and runs
+  after `post_tool_call`, before the result enters context. Two plugins that both rewrite it
+  do not compose: the second is silently dropped.
+- **A tool body holds no policy that belongs to a seam.** If the check would apply to a
+  family of tools, it is a hook; if it applies to one tool only, it is that tool's own.
+
+Hermes already bounds tool output per tool — a `read_file` continuation offset, a saved
+file for a truncated command, head+tail for code execution. That is why dsh's **spill** (a
+global bounded-output rewrite) is not ported: a blanket transform would break each tool's
+own continuation contract to solve a problem those contracts already solve.
+
+## The model-facing surface
+
+What the model sees of a capability — the name, the description, the parameter schema, the
+prompt section framing it — is read by a consumer that pays for every token on every turn.
+The writing rules live in the `writing-for-agents` tool-surface reference. Two of them
+matter most when adding a capability: put each parameter's rules on that parameter, and say
+each fact once.
+
+Measure, do not estimate: `harness_audit(action="requests")` reports input tokens and
+system-prompt bytes per request, so a change to the offered surface has evidence beside it.
 
 ## When a rule cannot be implemented
 

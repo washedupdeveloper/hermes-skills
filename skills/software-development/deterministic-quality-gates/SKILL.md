@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.7.0
+version: 1.8.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -79,6 +79,12 @@ part of the path. When a check fails, the first hypothesis is the check.
 **Bound everything the gate executes.** A gate with an unbounded child process hangs
 forever, and a hung gate is indistinguishable from a slow one — the run never reports
 at all. Pass an explicit timeout to every subprocess a gate spawns.
+
+**Mock the boundary, never the pipeline.** Mock only the expensive or non-deterministic
+edge — the model adapter, the network, the clock — and keep the registry, the persistence and
+the dispatch path real. A hand-rolled stand-in proves the bridge moves bytes, not that the
+shipping tool behaves as asserted, and the fixture it needs becomes a second definition of
+the system that must be updated with every real change.
 
 **Every acceptance rule needs a negative control.** A check that cannot fail is not a
 gate: a predicate that silently matches everything passes its own test, and that pass
@@ -445,6 +451,24 @@ happened to mention first.
   analyzer's findings and tells a reader the gate shells out when it does not. In a gate
   an unreferenced function is not harmless tidiness debt: it makes the gate's own report
   misleading and buries the findings that do matter.
+- **A refresh that regenerates the expectation certifies the regression.** Regenerating
+  expected output is fixture production, not correctness review: run against a broken tree,
+  it rewrites the fixtures to match the break, and the suite then passes on a regression it
+  now documents. Measured: a configuration key that was parsed but never evaluated left every
+  filesystem tool unregistered, seven scenarios returned structured `UNKNOWN_TOOL` results,
+  and the refresh step recorded them as the expected output. Semantic impossibilities — a
+  tool that is not in the registry, a model turn with no assistant message — need an
+  assertion independent of the expected output, and every refreshed diff gets read as a
+  behaviour change.
+- **A spec that passes only when run alone is a test defect.** Flakiness attributed to the
+  runner is usually shared state the spec never owned: a fixed port, a predictable temp path,
+  a global left dirty by an earlier file. Own every acquired resource through teardown and
+  the spec passes in any order; a suite that reports "unstable runner" has not found the
+  leak.
+- **A skipped test is unmeasured, not passing.** A suite that self-skips without its key,
+  kernel or tool keeps keyless CI green — a policy, and a good one — but the skipped case
+  contributes nothing to the verdict. Count skips beside passes, and never quote the run as
+  coverage of the case that skipped.
 - **A collection error read as "0 failures".** A suite that aborts at collection
   reports nothing, and nothing looks like a pass in a summary line. Treat a collection
   error as zero coverage, not as a clean run — the code that ships is validated by

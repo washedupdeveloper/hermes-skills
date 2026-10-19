@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: "Write documents agents read: skills, AGENTS.md, docs."
-version: 1.4.0
+version: 1.5.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -24,6 +24,9 @@ For Hermes-specific skill mechanics (frontmatter fields, the validator, the
 description hardline, tests, docs regen), see the bundled
 `hermes-agent-skill-authoring`. This skill is the **writing craft**; that one is the
 packaging.
+
+Tool definitions, parameter schemas and tool results are the same craft on a surface read
+every turn rather than on demand: `references/tool-surface.md`.
 
 ## Context pointers
 
