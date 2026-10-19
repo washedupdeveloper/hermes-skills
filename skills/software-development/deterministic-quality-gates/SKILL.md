@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.6.1
+version: 1.7.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -104,7 +104,12 @@ from the repository's own location rather than a machine path. A copy drifts sil
 and the drift is invisible until something fails at runtime; the comparison turns a
 latent divergence into a red gate on the run that introduced it. Report the differing
 names, and treat a file present in the copy with no source as a second class of drift,
-not as a pass.
+not as a pass. **When the gate reports drift and the copy is the better version, promote
+the copy into the source and re-sync** — an unattended writer can patch a deployed mirror
+in place, and both wrong reactions are silent: editing the copy leaves the source stale,
+and re-syncing discards the work. Establish that the reported difference is the only one
+(so the promotion is a faithful copy), move it to the source, re-sync, and confirm the
+gate now reports clean. A mirror is never the place to fix anything.
 
 **Density, not raw counts.** Normalize findings by size, per KLOC. Absolute counts
 punish large repos: a 100-line file with 5 findings and a 10,000-line repo with 5

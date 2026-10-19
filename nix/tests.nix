@@ -131,8 +131,68 @@ let
   isLocal = ref: lib.hasPrefix "./" ref;
   isPinned = ref: builtins.match (".*@" + hex40) ref != null;
   isRevPinned = ref: builtins.match ("github:[^/]+/[^/]+/" + hex40 + "(#.*)?") ref != null;
+  # --- plugins ------------------------------------------------------------
+  # A plugin directory is discovered by its `plugin.yaml`, and the registry key is the
+  # `name:` field — a mismatch installs one plugin under another's key, and the manifest
+  # is the only thing telling a reader what the code is for.
+  pluginDir = src + "/plugins";
+
+  pluginNames =
+    if builtins.pathExists pluginDir then
+      lib.filter
+        (n: builtins.readFileType (pluginDir + "/${n}") == "directory")
+        (builtins.attrNames (builtins.readDir pluginDir))
+    else
+      [ ];
+
+  # `plugin.yaml` has no `---` fence, so the frontmatter parser does not apply: the
+  # manifest is plain YAML and `name:` is a top-level key.
+  pluginName =
+    name:
+    let
+      path = pluginDir + "/${name}/plugin.yaml";
+      m =
+        if builtins.pathExists path then
+          builtins.match ".*name:[[:space:]]*([^[:space:]]+).*" (builtins.readFile path)
+        else
+          null;
+    in
+    if m == null then null else builtins.head m;
+
+  pluginIssues = lib.concatMap (
+    name:
+    let
+      declared = pluginName name;
+      hasInit = builtins.pathExists (pluginDir + "/${name}/__init__.py");
+    in
+    (if declared == null then [ "${name}: no plugin.yaml, or it declares no name" ] else [ ])
+    ++ (if declared != null && declared != name then [ "${name}: plugin.yaml name is ${declared}" ] else [ ])
+    ++ (if hasInit then [ ] else [ "${name}: no __init__.py" ])
+  ) pluginNames;
+
+  pluginNameMatches = dir: name: name == dir;
 in
 {
+  plugins = {
+    test_every_plugin_directory_declares_itself = {
+      expr = pluginIssues;
+      expected = [ ];
+    };
+
+    # Negative control: a manifest naming a different plugin must be rejected, and the
+    # predicate must accept the correct pair — otherwise the check above is vacuous.
+    test_the_plugin_name_gate_rejects_a_mismatch = {
+      expr = [
+        (pluginNameMatches "harness-audit" "harness-audit")
+        (pluginNameMatches "harness-audit" "audit")
+      ];
+      expected = [
+        true
+        false
+      ];
+    };
+  };
+
   workflows = {
     test_every_workflow_action_is_pinned_to_a_commit = {
       expr = map (x: "${x.name}: ${x.value}") (

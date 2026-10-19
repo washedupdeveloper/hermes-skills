@@ -1,0 +1,53 @@
+# Plugins
+
+Skills this repo ships are **mounted** (`skills.external_dirs`) — Hermes reads them in
+place, and `git pull` is the update. Plugins have no such mount: Hermes discovers them
+under `<profile home>/plugins/`, so a plugin has to be placed there. It is the one part of
+this repo that is installed rather than referenced, and the reason is stated once, here.
+
+## harness-audit
+
+Two DeepSeek-Harness invariants, implemented against Hermes mechanics that exist today:
+
+| Invariant | What it does here |
+|---|---|
+| **Model-visible means logged** | `pre_tool_call` / `post_tool_call` hooks append one JSONL line per call to `$HERMES_HOME/logs/tool-audit/<date>.jsonl`: tool, task, redacted arguments, duration, result size and a sha256 prefix. The result *text* is never stored, and anything credential-shaped is dropped before it is written. |
+| **Discovery reports complete or incomplete, never absence** | `harness_audit(action="catalog")` returns every discovered skill plus any directory or frontmatter that could not be read, so a shorter list is never mistaken for "not installed". |
+
+A third invariant — dsh's two invocation switches, model-invocable vs user-invocable —
+is **not** implemented, because Hermes has no seam for it. Hermes gates skills at offer
+time on relevance (`requires_toolsets`, `environments`, `platforms`, `skills.disabled`),
+which is a different axis. A naming convention pretending otherwise would be advice, not
+a capability.
+
+### Install
+
+```bash
+cp -r plugins/harness-audit "$HERMES_HOME/plugins/"       # or: hermes plugins install <path>
+hermes config set plugins.enabled '["harness-audit"]'      # `hermes plugins enable` needs uv.lock
+```
+
+Then restart Hermes: plugin discovery happens once, at gateway startup, so the tool and
+the hooks appear in the next session — not in the one that installed them.
+
+`hermes plugins enable <name>` is the documented path and does not work on a Nix-managed
+install (it aborts looking for `uv.lock` in the store). The `config set` above is the same
+effect: `hermes plugins list` then reports `enabled`.
+
+### Check it is working
+
+```bash
+hermes plugins list | grep harness-audit          # enabled
+ls "$HERMES_HOME/logs/tool-audit/"                # a JSONL file, one line per tool call
+```
+
+Inside a session, `harness_audit(action="status")` reports the log path and today's count;
+`action="recent"` reads the last entries back; `action="catalog"` reports the skill catalog
+with its completeness.
+
+### What it deliberately does not do
+
+- No network, no credentials, no configuration writes.
+- No `override=True` on any built-in tool: nothing is intercepted or replaced.
+- No argument values in the log — only key names, plus a digest of each result. An audit
+  log that quotes the thing it is auditing becomes the leak it exists to prevent.

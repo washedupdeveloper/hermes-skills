@@ -1,7 +1,7 @@
 ---
 name: caveman-compress
 description: Use to shrink a memory file's tokens.
-version: 1.0.0
+version: 1.1.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -46,6 +46,33 @@ against — commentary must never leak into a saved file.
 3. Rewrite the prose. Leave code and structure alone.
 4. Report the before/after character counts. If it did not shrink, say so and restore
    the original — a compression that grew the file is a failed compression.
+
+## Delete before you compress
+
+Rewording prose saves words. **Deleting a passage that should not be there at all saves
+the words and the attention**, and it is the first thing to try on a memory or context
+file — a file near its cap is usually carrying history, not verbosity.
+
+Remove outright, rather than compressing:
+
+- **The story of how a rule was learned.** "Pushed back when given a self-looping
+automation instead of the requested interactive command" is incident narration; the rule
+it taught ("answer the exact question asked") is the part that changes behaviour. Keep
+the rule, drop the evidence. The same applies to dates, ticket IDs and PR numbers.
+- **Facts that live in the repository.** A list of subsystem names, a package inventory,
+a table of file paths — the artifact is the source of truth and a copy in context goes
+stale silently. Name the artifact instead of restating it.
+- **A second entry for the same thing.** Two lines about one subject is one line plus a
+drift risk; merge them, and keep the version that names the mechanism.
+- **Anything that contradicts another entry.** A contradiction is not a nuance to
+preserve — resolve it, or delete the weaker claim.
+
+What survives is every negation, path, number, command and standing preference. When in
+doubt, ask whether the line would change what the next session does; if not, it is
+history.
+
+Report the before/after counts after deleting, and name what you removed and why — a
+silent deletion looks identical to an accident.
 
 ## Remove
 

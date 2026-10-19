@@ -172,3 +172,24 @@ Detection: assert the config and `SKIP_DIRS` cannot drift apart, and run the pro
 fixture holding one real defect plus a copy of it inside a skipped directory — the expected
 result is exactly one finding.
 
+## A fixture tree pins the harness's own output
+
+A golden suite that hashes "every file under `tests/golden/`" also hashes whatever the
+harness *wrote there*. One review run against the fixture added **14 run artefacts** to the
+pinned payload, after which `--check` failed on a tree nobody had edited — and the test
+whose whole job is to prove `--update` is inert invoked the real `--update`, **re-pinned
+the tracked file as a side effect**, and then failed its own assertion. The next run was
+green, against a contaminated fixture. Three rules, each independently necessary:
+
+- **Exclude the harness's own output directories from "what counts as an input".** Name
+them in one set rather than testing inline: the same exclusion already existed for
+`__pycache__`, one directory over, which is exactly why the second one was missed.
+- **A test that can rewrite the artefact it checks is not checking it.** Run it against a
+temp copy of the payload and assert the bytes are unchanged; invoking the real mutator on
+the tracked file makes the test's own failure mode the thing it was written to prevent.
+- **Never fix this by re-pinning.** `--update` would have made the suite green and left the
+  fixture permanently contaminated; the fix is the exclusion, then re-run on a clean tree.
+
+Detection: plant a fake output directory inside the fixture and assert the check still
+passes and pins nothing from it.
+
