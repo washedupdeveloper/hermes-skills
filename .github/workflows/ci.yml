@@ -30,8 +30,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
+# Deny every permission at the workflow level and grant the one each job needs. The
+# default is broader than this repository uses: `contents: read` here means a compromised
+# action cannot push, open a PR, publish a package, or touch issues — it can read the
+# tree and nothing else. Per-job grants are the part that keeps a future job from
+# inheriting a scope nobody thought about.
+permissions: {}
+
+# A superseded push has no verdict worth waiting for. Cancelling it also bounds how many
+# copies of the same token-bearing workflow are alive at once.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # The tree's own gate, under one pinned toolchain. `nix flake check` builds every
@@ -40,7 +50,10 @@ jobs:
   # the other jobs remain the no-Nix path rather than a second implementation.
   gate:
     name: nix gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # the only scope any job here needs: read the tree, nothing else
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -62,7 +75,10 @@ jobs:
   # would make every contributor's `nix flake check` fetch it.
   live:
     name: live hermes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # the only scope any job here needs: read the tree, nothing else
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -83,14 +99,18 @@ jobs:
       - name: every catalog skill loads in the real hermes
         run: python scripts/verify-live.py
 
-  # The portability guarantee, executed: nothing installed but pytest.
+  # The portability guarantee, executed: nothing installed but the hash-pinned
+  # pytest set, on a pinned image for each OS.
   tests:
     name: tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # the only scope any job here needs: read the tree, nothing else
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-26, windows-2025]
     steps:
       # checkout and setup-python must run on Node 24. Node 20 reached EOL in April
       # 2026 and was removed from the runners on 2026-09-23, so v4/v5 (the Node-20
@@ -107,8 +127,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
         with:
           python-version: "3.12"
+      # Hash-pinned, not `pip install pytest`. An unpinned fetch resolves to whatever
+      # PyPI serves at run time and executes it in this job; `--require-hashes` refuses
+      # any artefact whose sha256 is not in the file, so a substituted release fails the
+      # job instead of running in it. `--upgrade pip` is dropped for the same reason:
+      # it is an unhashed download of the thing that does the verifying.
       - name: install pytest
-        run: python -m pip install --upgrade pip pytest
+        run: python -m pip install --require-hashes -r requirements-test.txt
       # Job logs need admin rights to download, but a step can emit GitHub
       # annotations and the checks API serves those unauthenticated for a public
       # repository. So the suite writes junit.xml and the next step turns each
@@ -146,7 +171,10 @@ jobs:
   # macOS against a stub. One OS is enough here; macOS minutes count tenfold.
   audit:
     name: claim audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # the only scope any job here needs: read the tree, nothing else
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -169,6 +197,17 @@ jobs:
             exit 1
           fi
 
+  # Deliberately NOT adopted, both rejected on cost rather than risk appetite:
+  #
+  #   step-security/harden-runner — an egress allowlist would have to name
+  #     cache.nixos.org, channels.nixos.org, github.com, codeload.github.com and PyPI,
+  #     and every Nix cache or flake input added later breaks the job with a failure
+  #     that looks like a network fault. It is also another third-party action with
+  #     `security-events: write`, which is the scope it exists to reduce.
+  #   actions/cache on /nix/store — a poisoned cache is arbitrary code in every later
+  #     run, and a Nix store cache is the highest-value thing in this workflow. The
+  #     minutes it would save are not worth that.
+
   # The initializer, against a stub. ubuntu and macOS only: the test builds an
   # extensionless `hermes` stub and executes it through bash, and on a Windows
   # runner that depends on how Git Bash's exec layer treats a shebang file with no
@@ -177,10 +216,13 @@ jobs:
   setup:
     name: setup.sh e2e (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # the only scope any job here needs: read the tree, nothing else
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-26]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:

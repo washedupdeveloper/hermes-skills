@@ -9,12 +9,13 @@ follows a branch and therefore tests a different product tomorrow.
 So every `uses:` is a 40-hex commit SHA with the version it was chosen for in a trailing
 comment, and the Hermes install carries a rev.
 
-**What this gives up, stated plainly.** A SHA pin is not updated by anything: no
-dependabot rule is configured here, so a security fix in an action reaches this repo only
-when a person edits the line. A major tag auto-updates and is therefore both more
-convenient and the actual supply-chain hole. The comment beside each pin is what keeps the
-staleness visible; `nix flake check` is what keeps the pin from drifting back, because the
-rule is a property of the source file rather than a matter of review.
+**What this gives up, stated plainly.** A SHA pin is not updated by anything. A major tag
+auto-updates and is therefore both more convenient and the actual supply-chain hole, so the
+update path has to be built instead of inherited: `.github/dependabot.yml` opens one grouped
+PR a week that bumps the SHAs, CI runs the whole gate on it, and a person reads the diff.
+That is GitHub-hosted, so no third-party action is added. The comment beside each pin keeps
+the staleness visible; `nix flake check` keeps the pin from drifting back, because the rule
+is a property of the source file rather than a matter of review.
 
 **Rejected: pinning the major, which is what `review-council`'s `docs/CI.md` recorded as
 the trade-off.** That reasoning assumed the tag's owner is trusted to only ever move it
@@ -23,10 +24,12 @@ failure is silent and total: no diff, no review, arbitrary code with a token. Th
 convenience it buys — automatic patch updates — is worth less than the ability to say what
 ran, and the update path is one commit either way.
 
-**Not adopted: a floating `ubuntu-latest`.** The runner image is also mutable, and pinning
-it to `ubuntu-24.04` would make the gate reproducible. It is left alone deliberately: a
-runner-image bump is visible in the job summary and cannot execute third-party code, so
-the trade-off that applies to actions does not apply here.
+**Adopted later, in the same spirit: the runner images are pinned too.** `ubuntu-latest`,
+`macos-latest` and `windows-latest` are mutable labels — the image changes under the
+workflow with no diff here — so they are now `ubuntu-24.04`, `macos-26` and `windows-2025`,
+each verified against `actions/runner-images` at the time of pinning. The cost is that a
+runner deprecation arrives as a red job rather than a silent upgrade, which is the trade
+this file argues for everywhere else.
 
 The pins are asserted in `nix/tests.nix` under `workflows`, with a negative control per
 predicate — a check that cannot fail would pass on any workflow at all.

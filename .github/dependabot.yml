@@ -1,0 +1,21 @@
+version: 2
+
+# The cost of pinning every action to a commit SHA (ADR-0005) is staleness: nothing
+# moves a pin, so a security fix in an action reaches this repository only when a person
+# edits the line. Dependabot closes that gap without reopening the hole it was closed
+# for — it opens a PR that bumps the SHA, CI runs the full gate on it, and a human reads
+# the diff. It is GitHub-hosted, so no third-party action is added to the workflow.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    # One PR for the whole set: four separate "bump checkout" PRs cost more review
+    # attention than the risk they describe, and the gate either passes on all of them
+    # or on none.
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
