@@ -23,35 +23,28 @@ GOLDEN = REPO / "tests" / "golden"
 EXPECT = GOLDEN / "expect.json"
 TARGET = GOLDEN / "target"
 
-# All pinned arithmetic is deterministic float work on the same inputs, so an
-# exact match is the honest tolerance. It is not 0 because summation order in the
-# aggregate is an implementation detail we do not want to freeze.
+# Not 0: summation order in the aggregate is an implementation detail we do not
+# want to freeze, and everything else here is exact.
 TOLERANCE = 1e-6
 
-#: Directories under `tests/golden/` that hold the harness's own OUTPUT, not fixture
-#: inputs. Both are written by running something over the fixture tree: `__pycache__` by
-#: a test that imports a module there, `.review-council` by a review run. Pinning either
-#: makes `--check` fail on a tree nobody edited, and makes `--update` — whose stated
-#: contract is to be inert when nothing changed — rewrite a tracked fixture.
+#: The harness's own OUTPUT, never fixture inputs: `__pycache__` from a test that imports
+#: a module there, `.review-council` from a review run. Measured: one `council review
+#: tests/golden/target` pinned 14 artefacts, so `--check` failed on an unedited tree.
 NON_INPUT_DIRS = frozenset({"__pycache__", ".review-council"})
 
 
 def _load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
-    # `spec_from_file_location` returns None only when it cannot classify the path
-    # as a loadable source module, and `loader` is None for a non-source spec. Both
-    # mean a broken checkout rather than a condition worth tolerating at runtime, so
-    # state it as a precondition and let the assertion name the file.
+    # None only for a path it cannot classify as loadable source: a broken checkout,
+    # not a runtime condition worth tolerating.
     assert spec is not None and spec.loader is not None, f"cannot load {path}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-# Cached so the modules are loaded ONCE per process. That matters beyond speed:
-# tests/test_golden.py proves this suite detects a deliberate regression by
-# mutating a weight table, and a mutation only reaches compute() if compute() and
-# the test are looking at the same module object.
+# Loaded ONCE per process: test_golden.py proves drift detection by mutating a weight
+# table, and that only reaches compute() if both hold the same module object.
 _SCORER = None
 _LOOP = None
 
@@ -82,22 +75,9 @@ def hash_inputs() -> Dict[str, str]:
     for path in sorted(GOLDEN.rglob("*")):
         if not path.is_file() or path.name == EXPECT.name:
             continue
-        # Directories that are NOT fixture INPUTS. Both appear as side effects of
-        # running the harness over the fixture tree, and hashing either makes this
-        # suite non-deterministic in a way that is worse than noise:
-        #
-        #   __pycache__    a test imported a module inside the fixture, so the first
-        #                  run created `__pycache__/tool.cpython-3*.pyc`, the next
-        #                  `--update` pinned it, and from then on `--check` failed on
-        #                  a tree nobody had edited.
-        #   .review-council a review was run against the fixture, so the run directory
-        #                  appeared and got pinned the same way. Measured: one
-        #                  `council review tests/golden/target` added 14 run artefacts
-        #                  to expect.json, and the suite then went green against a
-        #                  contaminated fixture.
-        #
-        # The contract `--update` states for itself ("inert when nothing changed")
-        # only holds if what counts as a change excludes the harness's own output.
+        # NON_INPUT_DIRS: the harness's own output, not fixture inputs. Hashing it made
+        # the suite fail on a tree nobody had edited, and then pass against a
+        # contaminated fixture.
         if any(part in NON_INPUT_DIRS for part in path.relative_to(GOLDEN).parts):
             continue
         if path.suffix in (".pyc", ".pyo"):
@@ -138,8 +118,8 @@ def _merge_result(name: str, loop, scorer) -> Dict[str, Any]:
     with tempfile.TemporaryDirectory() as td:
         out = Path(td)
         counts = loop.merge_generalist_samples(samples, out, probes)
-        # A dimension absent from the merge is recorded as None, so the value type
-        # has to admit it — that is the whole point of the mapping.
+        # Absent dimension -> None, so the value type admits it; that is the point of
+        # the mapping.
         merged: Dict[str, Any] = {}
         for dim in scorer.WEIGHTS:
             path = out / f"{dim}.json"

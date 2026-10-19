@@ -115,12 +115,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     sha = loop.git_sha(repo)
     stacks = loop._gate_module().detect_stacks(repo)
-    # meta.json is the harness's to write — it knows the facts, the LLM does not.
-    # The LOOP writes it; a swarm sample must too, or the gate cannot resolve the
-    # stack: resolve_stacks finds no meta.json, falls back to ["generic"], that stack
-    # has no expected tools, and every dimension scores beta = 0. The round then looks
-    # like "judgement-only" when the probes had in fact all run. Observed on a real
-    # swarm run, which is why this is here rather than assumed.
+    # The LOOP writes this, and a swarm sample must too: without meta.json,
+    # resolve_stacks falls back to ["generic"], which has no expected tools, so every
+    # dimension scores beta = 0 and the round reads as "judgement-only". Observed.
     if not (round_dir / "meta.json").exists():
         loop.write_meta(round_dir, repo, args.scope, args.round_no, stacks, sha)
     probes = load_probes(loop, repo, round_dir, args.timeout)
@@ -144,8 +141,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         except (OSError, json.JSONDecodeError):
             print(f"sample {args.index}: wrote {out_path.name} (unparseable)")
     else:
-        # A non-zero exit or a missing file is the failure the merge must see. Say
-        # which, so the card's failure is diagnosable from the board.
+        # Say which failed: the merge sees both, and the board is where it is diagnosed.
         print(f"sample {args.index}: FAILED (rc={rc}, "
               f"file={'present' if out_path.exists() else 'missing'})", file=sys.stderr)
     return rc

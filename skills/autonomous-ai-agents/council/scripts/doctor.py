@@ -45,13 +45,12 @@ CATALOG: Dict[str, Dict[str, Any]] = {
     "ruff":     {"detect": "ruff",      "pip": "ruff",     "why": "lint + format (readability)"},
     "mypy":     {"detect": "mypy",      "pip": "mypy",     "why": "static types (readability)"},
     "bandit":   {"detect": "bandit",    "pip": "bandit",   "why": "security lint (security)"},
-    # One dependency scanner for every ecosystem, replacing pip-audit / npm-audit /
-    # cargo-audit. pip-audit is gone deliberately: its nixpkgs wrapper cannot run
-    # (it execs `python3 -m pip --version` under an interpreter that has no pip).
+    # One scanner for every ecosystem. pip-audit is gone deliberately: its nixpkgs
+    # wrapper execs `python3 -m pip --version` under an interpreter that has no pip.
     "osv-scanner": {"detect": "osv-scanner", "nix": "osv-scanner",
                     "why": "dependency CVEs, all ecosystems (security)"},
     "pytest":   {"detect": "pytest",    "pip": "pytest",   "why": "test runner (correctness)"},
-    # Nix (first-class, per DECISIONS #3 / the Nix-scoped rubrics)
+    # Nix (first-class: DECISIONS #3, the Nix-scoped rubrics)
     "nix":      {"detect": "nix",       "nix": "nix",      "why": "nix eval + flake check"},
     "nixfmt":   {"detect": "nixfmt",    "nix": "nixfmt",   "why": "nix formatting (readability)"},
     "statix":   {"detect": "statix",    "nix": "statix",   "why": "nix lints (security/readability)"},
@@ -61,9 +60,8 @@ CATALOG: Dict[str, Dict[str, Any]] = {
                    "scoop": "shellcheck", "why": "shell lint (readability/security)"},
     "gitleaks": {"detect": "gitleaks", "brew": "gitleaks", "scoop": "gitleaks",
                  "why": "secret scanning (security)"},
-    # semgrep is deliberately absent: it is not in research/nix-tooling.md §0, and
-    # it does not build on the pinned nixpkgs (pyjwt runtime-dep check fails). The
-    # security dimensions use statix + gitleaks (Nix) and bandit + osv-scanner (Python).
+    # semgrep is deliberately absent: it does not build on the pinned nixpkgs (pyjwt
+    # runtime-dep check fails) and is not in research/nix-tooling.md §0.
     # JS/TS
     "eslint":   {"detect": "eslint",    "npm": "eslint",   "why": "JS/TS lint (readability)"},
     "prettier": {"detect": "prettier",  "npm": "prettier", "why": "JS/TS format (readability)"},
@@ -88,12 +86,8 @@ def _platform_keys() -> Tuple[str, ...]:
 
 
 # --- Nix: the declarative, pinned path --------------------------------------
-#
-# Nix is the PREFERRED provisioning mechanism: nix/builders.nix declares the tool set,
-# flake.lock pins the exact nixpkgs revision, and `nix build .#toolchain` yields
-# the same store path on every machine. Nothing is installed imperatively and
-# nothing drifts. The pip/brew/scoop hints below exist only as a fallback for
-# hosts without Nix.
+# Preferred: nix/builders.nix declares the set, flake.lock pins nixpkgs, and the
+# store path is identical everywhere. pip/brew/scoop are the no-nix fallback. docs/NIX.md.
 
 _NIX_CACHE: Optional[Dict[str, Any]] = None
 
@@ -286,9 +280,8 @@ def diagnose(repo: Path, dimension: Optional[str] = None) -> Dict[str, Any]:
             "absent": nix["absent"],
             "error": nix["error"],
         },
-        # The deterministic half decides the SCORE; this decides whether a review
-        # can run at all. Without it, doctor answered "beta 1.00" on a machine with
-        # no Hermes and left the user to discover that from a failed run.
+        # Decides whether a review can run at all, where beta decides the score. Without
+        # it doctor answered "beta 1.00" on a machine with no Hermes.
         "hermes": hermes.report(),
         "dimensions": dims_out,
         "beta_now": round(beta_now, 4),
@@ -478,8 +471,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     report = diagnose(repo, args.dimension)
     if args.probe:
-        # L4. Opt-in because it is the only layer that costs anything, and the
-        # only one that is authoritative: everything else is a proxy for it.
+        # L4: opt-in because it costs a turn, and it is the only authoritative layer --
+        # everything else is a proxy for it.
         report["hermes"]["capability"] = hermes.capability()
 
     if args.json:

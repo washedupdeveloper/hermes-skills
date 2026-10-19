@@ -1,32 +1,19 @@
-# The eval tier: what the tree SAYS, read without building anything.
+# The eval tier: what the tree SAYS, read without building anything. The run tier is
+# `nix/checks.nix`, and there is no build tier (see its header).
 #
-# Three tiers, and the tier is chosen by what the assertion needs:
+# The rule encoded here: an assertion belongs in the cheapest tier that can make it.
+# Nothing here shells out — a frontmatter field, a length, a name and a path are all values.
 #
-#   eval  -- a property of the source files. Here. Milliseconds, and a failure
-#            names the skill, the field and both values.
-#   build -- a property of the SHIPPED artifact, which is not the source tree.
-#            `nix/checks.nix`, seconds.
-#   run   -- behaviour: a script doing something to a stubbed `hermes`, or the
-#            prose claims checked against the tree. `nix/checks.nix`, and the
-#            only tier that needs an interpreter.
-#
-# The rule this encodes: an assertion belongs in the cheapest tier that can make
-# it. Nothing here shells out, and nothing here is a script -- a frontmatter
-# field, a length, a name and a path are all values.
-#
-# These four properties used to live in tests/unit/test_repo_skills.py. They are
-# asserted here instead because they are pure functions of the tree, and here
-# they fail with the skill's name and both values rather than a Python traceback.
-# What stayed in Python is what needs a real regex engine or a subprocess: the
-# prose claims and the reference heuristics. `tests/unit/test_repo_skills.py`
-# says which of its tests moved.
+# Four of these properties used to live in `tests/unit/test_repo_skills.py`; they are here
+# because they are pure functions of the tree, and here they fail with the skill's name and
+# both values rather than a Python traceback. What stayed in Python needs a real regex
+# engine or a subprocess; that file says which of its tests moved.
 { lib, src }:
 let
   L = import ./lib.nix { inherit lib; };
 
-  # The index truncates at 57 chars + "...", so the trigger must be
-  # self-contained there. Past that, the only part loaded before a skill opens is
-  # cut mid-word.
+  # The index truncates at 57 chars + "...", so the trigger must be self-contained there:
+  # past that, the only part loaded before a skill opens is cut mid-word.
   descMax = 57;
 
   required = [
@@ -38,8 +25,8 @@ let
     "platforms"
   ];
 
-  # Extensions the repo treats as text. A `.pyc` would make `readFile` return
-  # whatever bytes it happens to contain, so it is not scanned.
+  # Extensions the repo treats as text. A `.pyc` would make `readFile` return whatever
+  # bytes it happens to contain, so it is not scanned.
   textExts = [
     ".md"
     ".sh"
@@ -69,9 +56,8 @@ let
 
   catalog = lib.filter (x: !L.isSupport x.path) parsed;
 
-  # Every directory two levels down under `skills/` is a skill, so it must hold a
-  # SKILL.md. A directory holding only references is a skill whose entry point was
-  # never written.
+  # Every directory two levels down under `skills/` is a skill, so it must hold a SKILL.md:
+  # a directory holding only references is a skill whose entry point was never written.
   skillDirs = lib.concatMap (
     category:
     let
@@ -84,11 +70,9 @@ let
   ) (builtins.attrNames (builtins.readDir (src + "/skills")));
 
   # --- workflow pins ------------------------------------------------------
-  # `uses: owner/action@vN` is a mutable reference: whoever can move the tag runs
-  # code in this repository's CI, with no change to this repo. A branch name in
-  # `nix profile install github:owner/repo#attr` is the same hazard. A commit SHA is
-  # the only form that cannot be moved, so it is a property of the source file and
-  # is asserted here rather than left to review.
+  # `uses: owner/action@vN` is a mutable reference: whoever can move the tag runs code in
+  # this CI, with no change here. A branch in `github:owner/repo#attr` is the same hazard.
+  # See docs/adr/0005-pin-workflow-actions-to-commits.md.
   workflowDir = src + "/.github/workflows";
 
   workflowFiles =
@@ -99,9 +83,9 @@ let
     else
       [ ];
 
-  # Every match of *pattern* in every workflow, as `file:line:value`. Comment lines
-  # are skipped: a comment may name a ref without being one ("`uses:` must be a SHA"),
-  # and scanning prose turns a documentation line into a false failure.
+  # Every match of *pattern* in every workflow, as `file:line:value`. Comment lines are
+  # skipped: a comment may name a ref without being one, and scanning prose turns a
+  # documentation line into a false failure.
   scan =
     pattern:
     let
@@ -133,8 +117,7 @@ let
   isRevPinned = ref: builtins.match ("github:[^/]+/[^/]+/" + hex40 + "(#.*)?") ref != null;
   # --- plugins ------------------------------------------------------------
   # A plugin directory is discovered by its `plugin.yaml`, and the registry key is the
-  # `name:` field — a mismatch installs one plugin under another's key, and the manifest
-  # is the only thing telling a reader what the code is for.
+  # `name:` field: a mismatch installs one plugin under another's key.
   pluginDir = src + "/plugins";
 
   pluginNames =
@@ -145,8 +128,8 @@ let
     else
       [ ];
 
-  # `plugin.yaml` has no `---` fence, so the frontmatter parser does not apply: the
-  # manifest is plain YAML and `name:` is a top-level key.
+  # `plugin.yaml` has no `---` fence, so the frontmatter parser does not apply: `name:` is
+  # a top-level key.
   pluginName =
     name:
     let
@@ -172,10 +155,9 @@ let
 
   pluginNameMatches = dir: name: name == dir;
 
-  # A plugin that ships a `pyproject.toml` claims to be installable, and the only thing
-  # making it installable is the entry point Hermes scans. `hermes_agent.plugins` with a
-  # key equal to the plugin name is what `plugins.enabled` matches, so a wrong key is a
-  # plugin that builds, installs, and never loads — silently.
+  # A `pyproject.toml` claims installability, and the entry point is the only thing making
+  # it so: `hermes_agent.plugins` with a key equal to the plugin name is what
+  # `plugins.enabled` matches, so a wrong key builds, installs, and never loads — silently.
   pluginEntrypointIssues = lib.concatMap (
     name:
     let
@@ -194,8 +176,8 @@ let
   ) pluginNames;
 
   # Line-based, because `builtins.match` anchors `^` to the start of the whole string:
-  # `.*^name` can never match, which is how the first version of this predicate reported
-  # a correct pyproject as broken.
+  # `.*^name` can never match — which made the first version report a correct pyproject
+  # as broken.
   entrypointDeclares = name: text:
     lib.hasInfix "hermes_agent.plugins" text
     && lib.any
@@ -203,9 +185,9 @@ let
       (lib.splitString "\n" text);
 
   # --- build output -------------------------------------------------------
-  # `nix build` leaves a `result` symlink at the repo root. Committing it is worse than
-  # noise: it is a path into one machine's /nix/store, so every other checkout gets a
-  # dangling link, and `git add -A` sweeps it in without a word. This happened once here.
+  # `nix build` leaves a `result` symlink at the repo root. Committing it is a path into
+  # one machine's /nix/store — dangling for every other checkout, and swept in by
+  # `git add -A`. This happened once here.
   isBuildOutput = name: lib.hasPrefix "result" name;
 
   committedBuildOutputs = lib.filter isBuildOutput (builtins.attrNames (builtins.readDir src));
@@ -218,7 +200,7 @@ in
     };
 
     # Negative control: a manifest naming a different plugin must be rejected, and the
-    # predicate must accept the correct pair — otherwise the check above is vacuous.
+    # correct pair accepted, or the check above is vacuous.
     test_the_plugin_name_gate_rejects_a_mismatch = {
       expr = [
         (pluginNameMatches "harness-audit" "harness-audit")
@@ -288,8 +270,8 @@ in
       expected = [ ];
     };
 
-    # Negative controls. A predicate that accepts everything passes the checks
-    # above on any workflow at all, and the pass looks identical to a real one.
+    # Negative controls. A predicate that accepts everything passes the checks above on any
+    # workflow at all, and the pass looks identical to a real one.
     test_the_action_pin_gate_rejects_a_mutable_tag = {
       expr = [
         (isPinned "actions/checkout@v7")
@@ -346,8 +328,8 @@ in
     };
 
     # --- identity -----------------------------------------------------------
-    # The skill registers as /<name>, and the installer copies by directory name,
-    # so a mismatch installs one skill under another's slug.
+    # The skill registers as /<name>, and the installer copies by directory name, so a
+    # mismatch installs one skill under another's slug.
     test_the_name_matches_its_directory = {
       expr = map (x: "${rel x.path}: ${x.fields.name or "(none)"}") (
         builtins.filter (x: !(L.nameMatches x.dir (x.fields.name or ""))) parsed
@@ -355,8 +337,7 @@ in
       expected = [ ];
     };
 
-    # Two catalog skills with one name: the second silently shadows the first in
-    # the index, and nothing says so.
+    # Two catalog skills with one name: the second silently shadows the first in the index.
     test_every_catalog_name_is_unique = {
       expr = lib.filter (n: n != "") (L.duplicates (map (x: x.fields.name or "") catalog));
       expected = [ ];
@@ -371,11 +352,10 @@ in
       expected = [ ];
     };
 
-    # The boundary itself, not just "over it". The window check above rejects a
-    # description LONGER than `descMax`; a rule written as `>=` would reject the
-    # last character that fits, and nothing in the tree would notice because no
-    # skill sits exactly on the boundary. So the predicate is exercised at 57 and
-    # at 58 rather than inferred.
+    # The boundary itself, not just "over it". The check above rejects a description LONGER
+    # than `descMax`; a rule written `>=` would reject the last character that fits, and
+    # nothing in the tree would notice, because no skill sits on the boundary. So the
+    # predicate is exercised at 57 and at 58 rather than inferred.
     test_the_window_boundary_is_inclusive = {
       expr = [
         (fitsWindow (repeatChar descMax))
@@ -394,9 +374,9 @@ in
       expected = [ ];
     };
 
-    # A frontmatter line the field regex cannot parse would vanish silently, so
-    # every column-0 key must be present in the parsed map. This is the test that
-    # makes the parser's completeness observable rather than assumed.
+    # A frontmatter line the field regex cannot parse would vanish silently, so every
+    # column-0 key must be in the parsed map: this is what makes the parser's completeness
+    # observable rather than assumed.
     test_every_frontmatter_key_is_parsed = {
       expr = lib.concatMap (
         x: map (k: "${rel x.path}: ${k}") (builtins.filter (k: !(x.fields ? ${k})) x.keys)
@@ -413,8 +393,7 @@ in
     };
 
     # --- encoding -----------------------------------------------------------
-    # A CRLF shebang fails on Linux, and a CRLF/LF pair makes a sync report
-    # drift that is not there.
+    # A CRLF shebang fails on Linux, and a CRLF/LF pair reports drift that is not there.
     test_no_text_file_carries_crlf = {
       expr = map rel (
         builtins.filter (
@@ -427,10 +406,10 @@ in
     };
 
     # --- negative controls --------------------------------------------------
-    # One per predicate the checks above depend on. The invalid case must be
-    # REJECTED through the same code the check calls: a predicate that accepts
-    # everything passes every positive test above and fails exactly here. Each
-    # pair also carries the valid case, so a predicate stuck on `false` fails too.
+    # One per predicate the checks above depend on. The invalid case must be REJECTED
+    # through the same code the check calls: a predicate that accepts everything passes
+    # every positive test above and fails exactly here. Each pair also carries the valid
+    # case, so a predicate stuck on `false` fails too.
     test_the_frontmatter_gate_rejects_a_missing_fence = {
       expr = [ (L.parseText "name: x\n---\n").startsWithFence (L.parseText "---\nname: x\n---\n").startsWithFence ];
       expected = [
@@ -447,9 +426,9 @@ in
       ];
     };
 
-    # The completeness check is only meaningful while the parser has a real blind
-    # spot: a key the field regex cannot read must still be counted in `keys`, or
-    # the check would agree with the parser and prove nothing.
+    # The completeness check is only meaningful while the parser has a real blind spot: a
+    # key the field regex cannot read must still be counted in `keys`, or the check would
+    # agree with the parser and prove nothing.
     test_the_completeness_gate_rejects_a_key_the_parser_cannot_read = {
       expr =
         let

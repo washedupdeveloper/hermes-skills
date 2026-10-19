@@ -26,11 +26,8 @@ _SHARED_SPEC.loader.exec_module(_shared)
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 
-# Every capability comes from the user's config file (cfg_mod.CONFIG_NAME), not from
-# constants here. This file used to hardcode the toolsets and read nothing — so
-# `bots/*/bot.yaml`, which declared them again (plus a model and provider
-# belonging to one machine), was decorative, and a user could edit either and
-# see no effect. See council_config.py.
+# Every capability comes from the user's config (cfg_mod.CONFIG_NAME), never a
+# constant here; `bots/*/bot.yaml` is not read at all. See council_config.py.
 
 # The three trees this install reads and writes; the profile root is resolved in main.
 BOTS_DIR: Path
@@ -158,18 +155,15 @@ def install_member(name: str, member: Dict[str, Any], rubrics: List[str]) -> Non
     if profile_yaml.is_file():
         copy_file(profile_yaml, target / "profile.yaml")
 
-    # CORE — required, static, installed into the profile so the member always has
-    # it. The list comes from the config, not a glob: a member carries exactly the
-    # skills someone decided it needs. A config written before `core_skills`
-    # existed falls back to the shipped set.
+    # CORE: required, installed. From the config, not a glob; a config written before
+    # `core_skills` existed falls back to the shipped set.
     core = member.get("core_skills")
     if not core:
         if role == "reviewer":
             core = list(rubrics)
         else:
-            # The orchestrator's rubric is named `review-council-orchestrator`
-            # while the member is `council-orchestrator`, so the fallback glob has
-            # to be a SUFFIX match.
+            # Rubric is `review-council-orchestrator`, member `council-orchestrator`: the
+            # fallback glob has to be a SUFFIX match.
             core = sorted(p.name for p in RUBRICS_DIR.glob(f"*{name}")
                           if p.is_dir() and (p / "SKILL.md").is_file())
     missing = [s for s in core if not (RUBRICS_DIR / s / "SKILL.md").is_file()]
@@ -184,10 +178,9 @@ def install_member(name: str, member: Dict[str, Any], rubrics: List[str]) -> Non
         copy_file(RUBRICS_DIR / skill_dir / "SKILL.md",
                   target / "skills" / skill_dir / "SKILL.md")
 
-    # A stale rubric is worse than an absent one: the merge would drop its findings.
-    # The candidate set is the SHIPPED rubric namespace — never a bare glob over the
-    # profile's skills/ tree, which `--clone` filled with every bundled skill and
-    # which is not ours to prune.
+    # Prune only the SHIPPED rubric namespace, never a glob over the profile's skills/
+    # tree: `--clone` filled that with every bundled skill, and a stale rubric is
+    # worse than an absent one -- the merge silently drops its findings.
     shipped = set(rubrics) | {s for names in cfg_mod.CORE_SKILLS.values() for s in names}
     for stale_name in sorted(shipped):
         if stale_name in wanted:
@@ -199,9 +192,8 @@ def install_member(name: str, member: Dict[str, Any], rubrics: List[str]) -> Non
 
     _set_profile_config(target, "platform_toolsets.cli",
                         json.dumps(member.get("toolsets") or []))
-    # A model/provider is applied ONLY when the user named one. Unset is the
-    # default and means "inherit", so we never overwrite a choice the user made
-    # with `hermes -p <name> model`.
+    # Applied ONLY when named: unset means "inherit", so a `hermes -p <name> model`
+    # choice is never overwritten.
     if member.get("model"):
         _set_profile_config(target, "model.name", str(member["model"]))
     if member.get("provider"):
@@ -213,10 +205,8 @@ def install_member(name: str, member: Dict[str, Any], rubrics: List[str]) -> Non
         _set_profile_config(target, "skills.external_dirs", library)
         print(f"  mounted  {name}  ->  {library}")
 
-    # OPTIONAL — declared, on demand, never installed. The member has the `skills`
-    # toolset and the library is mounted, so it loads these by name when the work
-    # calls for them. An unresolved name is reported, not fatal: a missing optional
-    # skill is a smaller problem than a review that refuses to start.
+    # OPTIONAL: loaded by name from the mounted library, never installed. Unresolved is
+    # a warning, not fatal -- smaller than a review that refuses to start.
     optional = [s for s in (member.get("skills") or []) if s]
     if optional:
         libs = library_paths(library)

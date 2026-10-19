@@ -42,7 +42,7 @@ from typing import Any, Dict, List
 
 PLUGIN_DIR = Path(__file__).resolve().parent
 
-#: Fields whose VALUE is never written, only its presence. A tool call's arguments are
+#: Fields whose VALUE is never written, only its presence: a tool call's arguments are
 #: model-authored text and may quote a credential the model read somewhere.
 SENSITIVE_KEY = re.compile(
     r"(pass(word|wd)?|secret|token|api[_-]?key|apikey|credential|auth|private[_-]?key|"

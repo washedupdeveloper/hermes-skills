@@ -102,9 +102,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     if counts.get("dropped"):
         print(f"  {counts['dropped']} finding(s) dropped: no usable `dimension` field")
     if counts["samples"] == 0:
-        # merge_generalist_samples deliberately writes NO dimension files here, so a
-        # total reviewer failure cannot score as a clean 100. Say so, rather than
-        # printing an empty merge that reads like success.
+        # No dimension files are written, so a total reviewer failure cannot score as a
+        # clean 100. Say so rather than printing an empty merge that reads like success.
         print("merge: no sample was readable — no dimension files written, so the "
               "gate will report the round as an error (exit 2).", file=sys.stderr)
         return 1

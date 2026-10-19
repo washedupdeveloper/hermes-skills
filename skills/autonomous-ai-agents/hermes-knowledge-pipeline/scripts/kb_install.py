@@ -65,9 +65,8 @@ def main() -> int:
         if content_same and bytes_same:
             status = "current"
         elif content_same:
-            # Same code, different line endings. That is a checkout artefact, not
-            # drift - so it never fails the check. In deploy mode it is still copied,
-            # which converges the installed copy onto the repo's LF form.
+            # Same code, different line endings: a checkout artefact, not drift, so it
+            # never fails the check. Deploy mode still copies, converging on LF.
             relined.append(src.name)
             if check_only:
                 status = "current*"

@@ -19,8 +19,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# `_shared` by path, like every sibling here -- see its own docstring for why a
-# plain import would not be safe.
+# `_shared` by path, like every sibling here: see its docstring for why a plain
+# import is not safe.
 _SHARED_SPEC = _shared_util.spec_from_file_location(
     "_shared", Path(__file__).resolve().parent / "_shared.py")
 assert _SHARED_SPEC is not None and _SHARED_SPEC.loader is not None, "_shared.py"
@@ -29,15 +29,14 @@ _SHARED_SPEC.loader.exec_module(_shared)
 
 HERE = Path(__file__).resolve().parent
 
-# Source suffixes counted when measuring repo size for findings DENSITY.
-# research/deterministic-quality-tooling.md §3 requires density, not raw counts.
+# Source suffixes for findings DENSITY (research/deterministic-quality-tooling.md §3).
 SOURCE_SUFFIXES = frozenset({
     ".py", ".nix", ".sh", ".bash", ".js", ".ts", ".go", ".rs", ".c", ".h",
 })
 
 # --- The scoring table (FRAMEWORK §6) ---------------------------------------
 
-# Aggregate weights. Working defaults; M8 calibrates. Sum should be 1.0.
+# Aggregate weights, summing to 1.0. Working defaults; M8 calibrates.
 WEIGHTS: Dict[str, float] = {
     "security": 0.30,
     "correctness": 0.25,
@@ -46,39 +45,14 @@ WEIGHTS: Dict[str, float] = {
     "performance": 0.10,
 }
 
-# Expected deterministic tools, per dimension PER LANGUAGE STACK — the
-# denominator of beta. beta_c = tools_ran_and_parsed_c / tools_expected_c
-# (MEASURED, not asserted).
-#
-# Keyed by stack because a flat table makes beta unreachable on any repo that is
-# not that stack: with a Nix-only table, a Python repo scores beta=0 no matter
-# how many analyzers it runs, so the deterministic half of the hybrid is
-# decorative. DECISIONS #3 locks "language-agnostic framework, Python
-# first-class" — this table encodes that. Nix stays first-class too.
-#
-# Names in BUILTIN_TOOLS are satisfied by the framework's own probes.py (zero
-# installs). Everything else needs the external tool; `doctor.py` reports which
-# are missing and how to get them.
+# Expected tools per dimension PER STACK — the beta_c denominator
+# (ran_and_parsed_c / tools_expected_c). A flat table scores beta=0 on every other
+# stack (DECISIONS #3); BUILTIN_TOOLS need no install, `doctor.py` names the gaps.
 STACK_TOOLS: Dict[str, Dict[str, List[str]]] = {
     "security": {
-        # ONE dependency scanner for every ecosystem: osv-scanner reads PyPI,
-        # npm, cargo, Go, Ruby and Composer lockfiles, so it replaces pip-audit,
-        # npm-audit and cargo-audit -- and unlike them it has no runtime
-        # dependency of its own to get wrong. gosec stays because it is a Go
-        # security LINTER, a different job from auditing dependencies.
-        #
-        # TWO secret scanners, and they are not redundant: `gitleaks` is the
-        # maintained binary with entropy detection and a few hundred rules, while
-        # `secret-grep` is this framework's own regex probe with no external
-        # dependency at all. They fail in different ways -- gitleaks cannot run
-        # without the toolchain, secret-grep always can -- so both are expected.
-        #
-        # `zizmor` is a security probe that is DELIBERATELY NOT in this table. It
-        # reads `.github/workflows`, and a repository without CI has no workflows to
-        # read: listing it here would make beta fall on every repo that has no
-        # workflows, punishing it for a check that cannot apply. It contributes to
-        # `det` through `tools_run` whenever it does run, which is the correct
-        # behaviour for a conditional analyzer -- see `probe_zizmor`.
+        # osv-scanner reads every ecosystem's lockfile, so no pip-audit/npm-audit/
+        # cargo-audit; gosec stays as a Go LINTER. gitleaks (maintained, entropy) and
+        # secret-grep (zero deps) fail differently, so both. zizmor: docs/TOOLCHAIN.md.
         "python": ["bandit", "osv-scanner", "gitleaks", "secret-grep"],
         "nix": ["statix", "gitleaks", "secret-grep"],
         "javascript": ["osv-scanner", "gitleaks", "secret-grep"],
@@ -105,10 +79,8 @@ STACK_TOOLS: Dict[str, Dict[str, List[str]]] = {
     "performance": {
         "python": ["complexity"],
         # Four signals, because one was not enough: `nix-eval-time` is informational
-        # without a pinned baseline, so performance had no measured input at all and was
-        # scored entirely from the reviewer's findings. These three are absolute and
-        # cheap — IFD breaks eval caching, a missing store cache rebuilds every run, and
-        # a missing concurrency key wastes superseded runs.
+        # without a pinned baseline. The other three are absolute and cheap — IFD breaks
+        # eval caching, a missing store cache rebuilds every run, a missing key wastes runs.
         "nix": ["ifd", "ci-cache", "ci-concurrency", "nix-eval-time"],
         "javascript": ["bundle-size"],
         "rust": ["cargo-bench"],
@@ -125,29 +97,22 @@ STACK_TOOLS: Dict[str, Dict[str, List[str]]] = {
     },
 }
 
-# Tools the framework implements itself (scripts/probes.py). These always
-# "ran" — they need no installation, which is what keeps the framework runnable
-# on a bare machine.
+# Tools the framework implements itself (scripts/probes.py), so they always "ran":
+# no installation, which keeps the framework runnable on a bare machine.
 BUILTIN_TOOLS: frozenset = frozenset({
     "secret-grep", "py-compile", "bash-n", "complexity", "dep-graph", "declared-rules",
-    # Pure text over the repository; they need no toolchain, so they run everywhere.
+    # Pure text; no toolchain needed, so they run everywhere.
     "ci-cache", "ci-concurrency",
 })
 
-# Tools implemented as probes.py wrappers around the PINNED nix toolchain. They
-# need no binary of their own — `nix` plus the toolchain is enough — so they count
-# as available whenever the toolchain resolves.
-#
-# This is the whole set the gate can expect a HARNESS-RUN tool to come from. A name
-# the gate expects but that is absent here can only be satisfied by the reviewer's
-# own report, which is exactly the asymmetry that let beta measure diligence: the
-# Nix tools were deterministic and the Python ones were not. Every expected tool
-# now has a probe, so the deterministic half is a property of the harness.
+# probes.py wrappers around the PINNED nix toolchain: no binary of their own, so they
+# are available whenever the toolchain resolves. Every expected tool now has a probe,
+# which makes the deterministic half a property of the harness.
 NIX_PROBE_TOOLS: frozenset = frozenset({
     "statix", "deadnix", "nixfmt", "flake-check", "nix-eval", "nix-eval-time",
     "ruff", "mypy", "bandit", "osv-scanner", "pytest",
-    # Needs `nix` (it asks Nix to evaluate with IFD disabled), unlike the two CI text
-    # probes, which are BUILTIN.
+    # Needs `nix` (it evaluates with IFD disabled), unlike the two BUILTIN CI text
+    # probes.
     "ifd",
 })
 
@@ -160,12 +125,9 @@ GENERIC_TOOLS: Dict[str, List[str]] = {
     "architecture": [],
 }
 
-#: Expected-tool names that are EXTERNAL BINARIES: the toolchain must ship them, or
-#: beta is capped by the packaging rather than by the repository under review.
-#: Every OTHER name in STACK_TOOLS/GENERIC_TOOLS is a probe implemented inside
-#: scripts/probes.py -- no binary, no dependency. The two sets are disjoint and
-#: together cover every name, which `tests/test_probes.py` asserts, so a name added to
-#: STACK_TOOLS without a probe or a shipped tool cannot go unnoticed.
+#: Expected-tool names that are EXTERNAL BINARIES: the toolchain must ship them or beta
+#: is capped by the packaging. Every other name is a probe in scripts/probes.py; the
+#: sets are disjoint and cover everything (tests/test_probes.py asserts it).
 EXTERNAL_TOOLS = frozenset({
     # security
     "bandit", "gitleaks", "gosec", "osv-scanner", "shellcheck", "statix",
@@ -227,8 +189,8 @@ def detect_stacks(root: Path, max_files: int = 4000) -> List[str]:
                 break
             if not path.is_file():
                 continue
-            # Relative to *root*, not the absolute path: a checkout under a directory
-            # named `build` or `target` would otherwise have every file skipped.
+            # Relative to *root*, not absolute: a checkout under a directory named
+            # `build` or `target` would otherwise skip every file.
             if any(part in _SKIP_DIRS for part in path.relative_to(root).parts):
                 continue
             seen += 1
@@ -238,8 +200,7 @@ def detect_stacks(root: Path, max_files: int = 4000) -> List[str]:
                     counts[stack] = counts.get(stack, 0) + 1
                     break
 
-    # Marker-detected stacks first (authoritative), then stacks that only show
-    # up as a meaningful share of the tree.
+    # Marker-detected stacks first (authoritative), then any stack owning >= 2 files.
     for stack in sorted(counts, key=lambda s: -counts[s]):
         if stack not in found and counts[stack] >= 2:
             found.append(stack)
@@ -300,10 +261,10 @@ def relevant_stacks(root: Path, min_share: float = 0.10) -> List[str]:
         return present
     kept = [s for s in present if shares.get(s, 0.0) >= min_share]
     if kept:
-        # Order by weight: the dominant stack first, so `expected_tools` reads naturally.
+        # Dominant stack first, so `expected_tools` reads naturally.
         return sorted(kept, key=lambda s: -shares.get(s, 0.0))
-    # Nothing cleared the bar: keep the largest stack, and any marker-detected one that
-    # at least owns some lines, rather than falling back to `generic` and losing beta.
+    # Nothing cleared the bar: keep stacks that own any lines, not `generic` — else beta
+    # is lost.
     fallback = [s for s in present if shares.get(s, 0.0) > 0]
     if fallback:
         return sorted(fallback, key=lambda s: -shares.get(s, 0.0))
@@ -323,24 +284,19 @@ def expected_tools(dimension: str, stacks: List[str]) -> List[str]:
             out.append(tool)
     return out
 
-# Hill curve defaults for findings density (FRAMEWORK §6 normalization).
+# Uncalibrated Hill defaults for findings density (FRAMEWORK §6 shape): the measured
+# d* and threshold live in docs/CALIBRATION.md.
 HILL_K = 5.0
 HILL_N = 1.2
 
-# FALLBACK pass threshold — used only when scripts/calibration.json is missing or
-# unreadable. The authoritative value is the calibrated one; see
-# calibrated_threshold(). A fallback rather than a hard failure is deliberate: an
-# uncalibrated checkout still runs.
+# FALLBACK pass threshold, used only when scripts/calibration.json is missing or
+# unreadable; the calibrated value wins (calibrated_threshold). Falling back rather
+# than failing is deliberate: an uncalibrated checkout still runs.
 DEFAULT_THRESHOLD = 80.0
 
-# Severities that block satisfaction outright (FRAMEWORK §6, §5), per dimension.
-#
-# Security and correctness are the HARD requirements: the observed cost of getting one
-# wrong is a supply-chain compromise or a build that does not work, and nine
-# well-regarded repositories produced 93 of 94 blocking findings in exactly these two
-# dimensions. Everything else blocks only at `critical`, so a readability or performance
-# defect moves the score without vetoing a merge — while a `critical` anywhere still
-# blocks, which keeps an absolute floor in every dimension.
+# Blocking severities (FRAMEWORK §5/§6). Security and correctness block at `high`: 93 of
+# 94 blocking findings across nine well-regarded repos were those two. The rest block
+# only at `critical`, so a style defect moves the score but keeps an absolute floor.
 BLOCKING_SEVERITIES: Dict[str, frozenset] = {
     "security": frozenset({"high", "critical"}),
     "correctness": frozenset({"high", "critical"}),
@@ -349,28 +305,12 @@ BLOCKING_SEVERITIES: Dict[str, frozenset] = {
     "performance": frozenset({"critical"}),
 }
 # An unrecognised dimension gets the strict floor, not the lenient one: a dimension
-# nobody classified should not be able to pass on a `high`.
-#
-# This said `{"critical"}` while the comment, the commit message and the test's own
-# docstring all said "strict floor" — and the test asserted `not open_blocking(...)`,
-# i.e. it was written to match the code rather than the intent. Three statements of
-# intent against one line of code, so the code moved: `high` blocks in a dimension
-# nobody has classified, exactly as it does in security and correctness.
+# nobody classified must not pass on a `high`.
 DEFAULT_BLOCKING: frozenset = frozenset({"high", "critical"})
 
-# Severity weights for the density term (§3: "severity-weighted findings per
-# KLOC"). The density numerator is a WEIGHTED count, not a raw one.
-#
-# `info` weighs 0 because it is a note, not a defect: the rubrics use it for
-# "verified, no action", "recorded so it is not re-litigated" and "assessment,
-# no cost found". Counting those as defects made a thorough reviewer score WORSE
-# than a silent one — the incentive pointed away from the diligence the council
-# exists to reward.
-#
-# `low` is 1.0 deliberately. It is the scale anchor the calibration was fitted
-# on, so a repo whose findings are all `low` scores exactly as it did before and
-# every d_star in calibration.json stays meaningful. Reweighting the anchor
-# would invalidate the whole manifest without a recalibration to match.
+# Severity weights for the density numerator (§3: severity-weighted per KLOC, not raw).
+# `info` is 0 — counting notes made a thorough reviewer score WORSE than a silent one.
+# `low` is 1.0: the calibration's scale anchor, so reweighting it invalidates every d_star.
 SEVERITY_WEIGHT: Dict[str, float] = {
     "critical": 4.0,
     "high": 3.0,
@@ -378,8 +318,8 @@ SEVERITY_WEIGHT: Dict[str, float] = {
     "low": 1.0,
     "info": 0.0,
 }
-# An unrecognised severity is treated as a real finding rather than dropped:
-# silence about a defect is the worse failure, and the rubrics' enum is closed.
+# An unrecognised severity counts as a real finding rather than being dropped: silence
+# about a defect is the worse failure, and the rubrics' enum is closed.
 DEFAULT_SEVERITY_WEIGHT = 1.0
 
 
@@ -393,15 +333,8 @@ def hill_curve(x: float, k: float = HILL_K, n: float = HILL_N) -> float:
 
 
 # --- calibration (M8) -------------------------------------------------------
-#
-# research/deterministic-quality-tooling.md §3: "Density, not raw counts.
-# Absolute counts punish large repos; use severity-weighted findings per KLOC."
-# §7: calibrate d* from a known-good baseline scan and "record the calibration
-# inputs and outputs in the manifest so a score is always reproducible *and* its
-# parameters are auditable."
-#
-# Without a manifest the framework falls back to the original count-based curve,
-# so an uncalibrated checkout still runs — it just says so.
+# See docs/CALIBRATION.md for d*, the threshold and the manifest. Without a manifest
+# the scorer falls back to the count curve and still runs — it just says so.
 
 CALIBRATION_PATH = HERE / "calibration.json"
 _CALIBRATION: Optional[Dict[str, Any]] = None
@@ -522,17 +455,9 @@ def weighted_geometric_mean(pairs: List[Tuple[float, float]]) -> float:
 _RUNNERS = frozenset({"python", "python3", "py", "uv", "uvx", "npx", "node",
                       "poetry", "pipx", "sh", "bash", "env"})
 
-# Invocations whose canonical tool name cannot be derived from the command's own
-# words. The reviewer reports what it TYPED; STACK_TOOLS names the TOOL. Where
-# those differ the mapping is real knowledge and has to live somewhere -- without
-# it the reviewer runs the tool, beta cannot see it, and the dimension is scored
-# as though nothing ran. Observed on a real run: `nix flake check --no-build
-# --keep-going` yielded candidates {nix, nix-flake} and never reached
-# `flake-check`, silently halving the correctness dimension's beta.
-#
-# `nix flake check` is the reason a generic rule cannot do this: the canonical
-# name is the SUBCOMMAND PAIR, not the first two tokens, so the usual
-# runner+subcommand join lands on `nix-flake` instead.
+# Invocations whose canonical name is not derivable from the command's words: the reviewer
+# reports what it TYPED, STACK_TOOLS names the TOOL. Without these,
+# `nix flake check --no-build --keep-going` yields {nix, nix-flake}, never `flake-check` — beta halved.
 _INVOCATION_ALIASES: Tuple[Tuple[str, str], ...] = (
     ("nix flake check", "flake-check"),
     ("nix-instantiate", "nix-eval"),
@@ -561,17 +486,14 @@ def tool_name_candidates(name: str) -> set:
         return base[:-4] if base.endswith(".exe") else base
 
     tokens = raw.split()
-    # Skip leading `NAME=value` assignments: `PATH=/x/bin:$PATH ruff check` runs
-    # ruff, and the assignment is not the executable.
+    # Skip leading `NAME=value`: `PATH=/x/bin:$PATH ruff check` runs ruff, not PATH.
     while tokens and re.match(r"^[a-z_][a-z0-9_]*=", tokens[0]):
         tokens.pop(0)
     if not tokens:
         return set()
 
-    # Only the EXECUTABLE is path-stripped. Stripping the whole string before its
-    # last `/` took the tail of the last ARGUMENT instead: a reviewer reporting
-    # `python3 -m pytest tests/ -q` resolved to `-q`, so pytest never matched and
-    # the dimension was scored as though the tool had not run.
+    # Only the EXECUTABLE is path-stripped: stripping the whole string took the last
+    # ARGUMENT's tail, so `python3 -m pytest tests/ -q` resolved to `-q` and never matched.
     exe = clean(tokens[0])
     out: set = {exe}
     # First two tokens joined (`cargo test` -> cargo-test).
@@ -582,7 +504,7 @@ def tool_name_candidates(name: str) -> set:
         idx = tokens.index("-m")
         if idx + 1 < len(tokens):
             out.add(clean(tokens[idx + 1]))
-    # Runner + subcommand (`cargo test` -> cargo-test).
+    # Runner + subcommand; `-m` is the module form above, not a subcommand.
     if exe in _RUNNERS and len(tokens) > 1 and tokens[1] != "-m":
         out.add(clean(tokens[1]))
 
@@ -622,10 +544,9 @@ def measure_beta(tools_run: List[Dict[str, Any]], dimension: str,
     ran: set = set()
     for tool in tools_run:
         if tool.get("ran") and tool.get("parsed", True):
-            # Three producers write this field: the reviewer's JSON (`cmd`), a
-            # probe result (`tool`), and older reports (`name`). Accepting all
-            # three is honest -- they are the same fact under different keys --
-            # and reading only one silently drops a producer's whole contribution.
+            # Three producers write this field: `cmd` (reviewer JSON), `tool` (a probe
+            # result) and `name` (older reports). Reading only one drops that
+            # producer's whole contribution.
             ran |= tool_name_candidates(
                 tool.get("name") or tool.get("cmd") or tool.get("tool") or "")
 
@@ -669,12 +590,9 @@ def deterministic_score(review: Dict[str, Any], dimension: str,
     expected = expected_tools(dimension, stacks or ["generic"])
     beta, _ran, missing = measure_beta(tools_run, dimension, stacks)
 
-    # §6: det[c] = geometric_mean(normalize(tool_signals_c)) -- the signals of THIS
-    # category's tools. Averaging every tool into every category made the
-    # readability number depend on bandit and the security number depend on mypy,
-    # which is neither what the spec says nor what the `_c` subscript means. It went
-    # unnoticed while beta < 1 let the reviewer's score dominate; at beta = 1 det IS
-    # the score, so the leak would decide the verdict rather than just colour it.
+    # §6: det[c] = geometric_mean(normalize(tool_signals_c)) — THIS category's tools
+    # only. Averaging every tool into every category made readability depend on bandit
+    # and security on mypy; at beta = 1 det IS the score, so that leak decides the verdict.
     wanted: set = set()
     for name in expected:
         wanted |= tool_name_candidates(name)
@@ -686,19 +604,16 @@ def deterministic_score(review: Dict[str, Any], dimension: str,
         name = tool.get("name") or tool.get("cmd") or tool.get("tool") or ""
         if not (tool_name_candidates(name) & wanted):
             continue
-        # A tool that ran contributes a normalized signal. Tools that report an
-        # explicit 0-100 `signal` are trusted for the deterministic term; a
-        # clean run with no signal defaults to 100 (no findings => no defect
-        # signal), and findings density below is what moves it down.
+        # An explicit 0-100 `signal` is trusted; a clean run defaults to 100 (no
+        # findings), and findings density below is what moves it down.
         raw = tool.get("signal")
         signals.append((float(raw) if isinstance(raw, (int, float)) else 100.0, 1.0))
 
     det = weighted_geometric_mean(signals) if signals else 0.0
 
-    # Findings density for the dimension, as a second deterministic term.
-    # §3: severity-weighted findings per KLOC, NOT a raw count. A raw count makes
-    # a 100-line file with 5 findings score identically to a 10,000-line repo
-    # with 5, and makes an `info` note cost as much as a defect.
+    # Findings density for the dimension, as a second deterministic term. §3:
+    # severity-weighted findings per KLOC, NOT a raw count — a raw count scores a
+    # 100-line file with 5 findings like a 10,000-line repo with 5.
     open_findings = weighted_open_findings(review.get("findings"))
     if size_kloc > 0:
         density_score = hill_density(open_findings / size_kloc)
@@ -800,11 +715,9 @@ def resolve_stacks(run_dir: Path, repo: Optional[Path] = None) -> List[str]:
                 target = parent
                 break
     if target is not None and target.is_dir():
-        # relevant_stacks, not detect_stacks: beta should ask "did the tools for the
-        # languages this repo is MADE OF run", not "did every tool for every language
-        # that appears twice run". An incidental Python file used to make pytest, ruff,
-        # mypy and bandit expected, which depressed beta on repos that had nothing to
-        # test in Python.
+        # relevant_stacks, not detect_stacks: beta asks whether the tools for the languages
+        # this repo is MADE OF ran. An incidental Python file made pytest, ruff, mypy and
+        # bandit expected, which depressed beta on repos with nothing to test in Python.
         return relevant_stacks(target)
     return ["generic"]
 
@@ -896,8 +809,7 @@ def evaluate(run_dir: Path, threshold: float, allow_partial: bool = False,
     if stacks is None:
         stacks = resolve_stacks(run_dir, repo)
 
-    # Resolve the repo from meta.json when not given, so the score depends on the
-    # RUN and not on how the gate was invoked (see resolve_repo).
+    # See resolve_repo: the score must depend on the RUN, not on how the gate was invoked.
     repo = resolve_repo(run_dir, repo)
 
     reviews, missing_files, invalid = load_reviews(run_dir)
@@ -927,8 +839,8 @@ def evaluate(run_dir: Path, threshold: float, allow_partial: bool = False,
     per_dimension = [score_dimension(reviews[d], d, stacks, size_kloc)
                      for d in WEIGHTS if d in reviews]
 
-    # Renormalize weights over the dimensions actually present, so a partial run
-    # is scored on what it reviewed rather than silently diluted to zero.
+    # Renormalize over the dimensions present, so a partial run is not diluted toward
+    # zero by the absent ones.
     present = {d: WEIGHTS[d] for d in reviews}
     aggregate = renormalized_aggregate(present, per_dimension)
 
@@ -974,12 +886,9 @@ def improvement_opportunities(result: Dict[str, Any],
     threshold = float(result.get("threshold") or target or calibrated_threshold())
     goal = float(target) if target is not None else threshold
 
-    # Whether the SCORE requirement is already met decides what counts as
-    # required. The minimum score is the requirement; the blocking-finding gate
-    # is a separate, independent requirement. Conflating them would mark a
-    # dimension below the threshold as "required" even on a run whose aggregate
-    # already clears the minimum — and would mislabel such a run as "below the
-    # minimum" when it is really just blocked.
+    # The score requirement and the blocking gate are independent. Conflating them marks
+    # a dimension "required" on a run whose aggregate already clears the minimum, and
+    # mislabels a blocked-but-passing run as "below the minimum".
     aggregate = result.get("aggregate")
     score_met = (isinstance(aggregate, (int, float))
                  and float(aggregate) >= goal)
@@ -1008,8 +917,7 @@ def improvement_opportunities(result: Dict[str, Any],
                        f"finding blocks a pass regardless of the aggregate."),
         })
 
-    # 2. Per-dimension headroom, split into "needed for the minimum" and
-    #    "desirable above it".
+    # 2. Per-dimension headroom: needed for the minimum vs desirable above it.
     for d in per_dim:
         name = d["dimension"]
         score = float(d["score"])
@@ -1039,8 +947,8 @@ def improvement_opportunities(result: Dict[str, Any],
             ),
         })
 
-    # 3. beta gaps. Raising beta only helps when the deterministic half scores
-    #    BETTER than the reviewer, since score = beta*det + (1-beta)*llm.
+    # 3. beta gaps. Raising beta only helps when det > llm, since
+    #    score = beta*det + (1-beta)*llm.
     for d in per_dim:
         missing = d.get("tools_missing") or []
         if not missing:
@@ -1062,15 +970,9 @@ def improvement_opportunities(result: Dict[str, Any],
             "det": round(det, 2),
             "llm": round(llm, 2),
             "points_potential": round((1.0 - beta) * gain_per_beta * w, 2),
-            # "not run", not "install": `tools_missing` means the tool was EXPECTED
-            # and the run did not report it. Whether it is installed is a different
-            # question that this module cannot see -- `council doctor` answers it.
-            # Saying "install" sent a reader to install tools that were already
-            # pinned in the toolchain and, for ruff and mypy, already run.
-            #
-            # The harness now runs every expected tool itself, so this branch is
-            # reached only when a probe genuinely could not run -- no lockfile to
-            # audit, no tests collected -- rather than when a reviewer chose not to.
+            # "not run", not "install": `tools_missing` means EXPECTED and unreported —
+            # whether it is installed is `council doctor`'s question, not this module's.
+            # The harness now runs every expected tool, so this means a probe could not.
             "action": (f"{d['dimension']}: {', '.join(missing)} not run "
                        f"(beta {beta:.2f} -> 1.00); the deterministic half scores "
                        f"{det:.1f} vs the reviewer's {llm:.1f}"),
@@ -1082,11 +984,8 @@ def improvement_opportunities(result: Dict[str, Any],
         for finding in d.get("findings") or []:
             sev = str(finding.get("severity") or "").lower()
             # `sev in BLOCKING_SEVERITIES` tested a SEVERITY against a dict keyed by
-            # DIMENSION, so it was false for every finding and the skip never fired: a
-            # blocking finding was listed here as an improvement opportunity while
-            # section 1 already listed it as required. Measured on a security/high
-            # finding: two entries naming `SEC-0001`, one "Fix ... must be fixed before
-            # this can pass" and one "Address ... improves the review".
+            # DIMENSION: false for every finding, so a blocking finding appeared here AND
+            # in section 1 — measured twice as SEC-0001.
             if sev in blocking_sev:
                 continue      # already covered as blocking
             status = str(finding.get("status") or "open").lower()
@@ -1197,9 +1096,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     threshold: float = args.threshold if args.threshold is not None else calibrated_threshold()
 
     if args.latest:
-        # The /goal quality-gate form. It runs at EVERY turn boundary, so it must
-        # be cheap and must never guess: no run yet is a FAILED gate (the goal is
-        # not met), not an error, and it says which directory it looked in.
+        # Runs at EVERY turn boundary, so it must stay cheap and never guess: no run yet
+        # is a FAILED gate (the goal is not met), not an error, and it names the
+        # directory it looked in.
         repo_root = Path(args.repo) if args.repo else Path.cwd()
         runs = sorted(
             (p for p in (repo_root / ".review-council").glob("*") if p.is_dir()),

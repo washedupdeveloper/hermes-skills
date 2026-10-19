@@ -5,28 +5,27 @@
 #   ./setup.sh --check    report drift; change nothing
 #   ./setup.sh --print    show the desired state and exit
 #
-# Declarative: DESIRED STATE below is the whole declaration, and this script
-# only makes the machine match it. Re-running is safe — in sync means no-op.
-# It resolves its own location, so it works from any clone on any OS.
+# Declarative: DESIRED STATE below is the whole declaration, and re-running is a no-op
+# when in sync. It resolves its own location, so it works from any clone on any OS.
 set -euo pipefail
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_SKILLS="$HERE/skills"
 
 # ─── DESIRED STATE ───────────────────────────────────────────────────────────
-# The repo's skills tree is the source of truth, mounted by REFERENCE — never
-# copied. Same shape as a Nix store path: one declaration, nothing derived,
-# nothing to drift. Reading is live, so `git pull` is the update mechanism.
+# The repo's skills tree is the source of truth, mounted by REFERENCE — never copied.
+# Reading is live, so `git pull` is the update mechanism.
+# See docs/adr/0001-reference-not-symlink.md.
 DESIRED_EXTERNAL_DIR="$REPO_SKILLS"
 
-# No approval prompts. This repo is git-tracked, so a background skill write
-# shows up in `git status` / `git diff` and reverts with `git checkout`. That
-# is the review gate, and it costs nothing at the time of the write.
+# No approval prompts. This repo is git-tracked, so a background skill write shows up in
+# `git status` / `git diff` and reverts with `git checkout` — the review gate, at no cost
+# at the time of the write.
 DESIRED_WRITE_APPROVAL="false"
 
-# New agent-created skills are NOT sent here. The default (profile-local
-# ~/.hermes/skills/) is left alone on purpose: it keeps this repo free of
-# untracked files, and promotion into it stays a deliberate act.
+# New agent-created skills are NOT sent here. The profile-local default
+# (~/.hermes/skills/) is left alone on purpose: it keeps this repo free of untracked
+# files, and promotion into it stays a deliberate act.
 # ─────────────────────────────────────────────────────────────────────────────
 
 MODE="${1:-apply}"
@@ -47,8 +46,8 @@ hermes_ok() { hermes "$@" 2>/dev/null | grep -v '^⚠' || true; }
 current() { hermes_ok config get "$1" --json | tr -d '\r\n'; }
 
 # A JSON list of strings, without a JSON parser (jq/python may be absent).
-# `hermes config get --json` may render an entry as `~/x` while this script
-# resolves an absolute path, so compare EXPANDED paths, never the raw strings.
+# `hermes config get --json` may render an entry as `~/x` while this script resolves an
+# absolute path, so compare EXPANDED paths, never the raw strings.
 dirs_include() { # $1 = json list, $2 = absolute path
   local raw e
   while IFS= read -r raw; do

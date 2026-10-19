@@ -30,8 +30,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 PROBES = HERE / "probes.py"
 
-# Below this, a tool's findings density is indistinguishable from zero and using
-# it as d* would make the Hill curve collapse to a step function at x=0.
+# Below this a density is indistinguishable from zero, and d* there makes the Hill
+# curve a step function at x=0.
 DENSITY_FLOOR = 0.05   # findings per KLOC
 
 SOURCE_SUFFIXES = _shared.SOURCE_SUFFIXES
@@ -141,9 +141,8 @@ def seed_defects(root: Path, count: int, rng: random.Random,
         kind = kinds[i % len(kinds)]
         maker, suffix = SEEDERS[kind]
         path = src / f"seeded_{kind}_{i}{suffix}"
-        # newline="\n" so the seeded corpus is byte-identical on every platform.
-        # write_text would emit CRLF on Windows, and the probes then measure a
-        # different corpus than the one a Linux run calibrates against.
+        # newline="\n" so the corpus is byte-identical everywhere: write_text emits
+        # CRLF on Windows, and the probes would then measure a different corpus.
         path.write_text(maker(rng), encoding="utf-8", newline="\n")
         written.append(str(path.relative_to(root)))
     return written
@@ -282,8 +281,7 @@ def choose_threshold(points: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     n_bad, n_good = len(bad), len(good)
 
     if best_bad >= worst_good:
-        # The classes overlap: no threshold separates them. Report the point
-        # that minimizes misclassification instead of pretending to a clean cut.
+        # Classes overlap: report the minimum-misclassification point, not a clean cut.
         candidates = sorted(set(bad + good))
         def errors(t: float) -> Tuple[int, int]:
             return (sum(1 for s in bad if s >= t), sum(1 for s in good if s < t))
@@ -343,8 +341,7 @@ def recalibrate(measured: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, Any
         "halflife_k": k,
         "d_star": d_star,
         "points": points,
-        # Carried through so a re-tuned manifest is itself re-tunable: measurement
-        # is the expensive half and dropping it here would make this a dead end.
+        # Kept so the output is itself re-tunable: measurement is the expensive half.
         "measured": measured,
         "sweep": sweep,
         "recommended_threshold": choose_threshold(points),
@@ -360,9 +357,8 @@ def calibrate(good: Path, bad: Path, seed: int = 20261006) -> Dict[str, Any]:
     good_score = score_from_densities(good_dens, d_star)
     bad_score = score_from_densities(bad_dens, d_star)
 
-    # Annotated because the two entries disagree on `defects` (0 vs None), which
-    # makes an unannotated literal infer `list[dict[str, object]]` — narrower than
-    # what sweep_threshold/choose_threshold accept.
+    # Annotated: `defects` is 0 in one entry and None in the other, so an unannotated
+    # literal infers a type narrower than sweep_threshold accepts.
     points: List[Dict[str, Any]] = [
         {"label": "good", "path": str(good), "defects": 0, "score": good_score,
          "kloc": round(kloc(good), 4)},
@@ -454,9 +450,8 @@ def calibrate_ladder(ladder: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, 
             dirty_densities.append(dens)
         measured.append({**entry, "density": dens, "kloc": round(kloc(root), 4)})
 
-    # d* is derived from the WORST density seen on clean code, per tool: the
-    # highest clean reading is the most conservative reference point, because a
-    # d* set too low would flag healthy code.
+    # d* from the WORST density seen on clean code, per tool: set too low, it flags
+    # healthy code.
     good_union: Dict[str, float] = {}
     for dens in clean_densities:
         for tool, d in dens.items():
@@ -485,8 +480,7 @@ def calibrate_ladder(ladder: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, 
         "halflife_k": k,
         "d_star": d_star,
         "points": points,
-        # Raw per-rung measurements, kept so recalibrate() can re-tune k or the
-        # tie-break without paying for the toolchain sweep again.
+        # Raw per-rung measurements, so recalibrate() can re-tune k without re-probing.
         "measured": measured,
         "sweep": sweep,
         "recommended_threshold": choose_threshold(points),
@@ -679,10 +673,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     text = json.dumps(result, indent=2, ensure_ascii=False)
     if args.out:
-        # newline="\n": write_text defaults to translating \n to os.linesep, so on
-        # Windows this file came out CRLF and the same calibration produced
-        # different bytes per platform. The manifest is a determinism anchor —
-        # it must be byte-identical everywhere, and the skill repo is LF-only.
+        # newline="\n": write_text translates to os.linesep, so on Windows the same
+        # calibration produced different bytes. This manifest is a determinism anchor.
         Path(args.out).write_text(text + "\n", encoding="utf-8", newline="\n")
         print(f"calibration written to {args.out}")
     else:

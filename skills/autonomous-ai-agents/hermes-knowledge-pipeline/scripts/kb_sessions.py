@@ -35,9 +35,9 @@ import kb_reindex as kb  # noqa: E402
 
 SESSIONS_DIR = "sessions"
 
-# Only fields with real coverage in state.db. cwd/git_branch/git_repo_root are NULL on
-# every session on this host, and tool_names carries an opaque hash rather than names -
-# including them would put permanently-empty columns on the board.
+# Only fields with real coverage in state.db: cwd/git_branch/git_repo_root are NULL on every
+# session on this host, and tool_names carries an opaque hash, so including them would put
+# permanently-empty columns on the board.
 FIELDS = """id source profile_name model title title_source started_at ended_at
             last_activity_at last_activity_description end_reason message_count
             tool_call_count api_call_count input_tokens output_tokens
@@ -110,9 +110,8 @@ def build_note(row: dict, produced: list[str] | None = None) -> tuple[str, str]:
 
     title = str(row.get("title") or "").strip() or f"session {sid}"
     src = str(row.get("source") or "")
-    # Who did the work: a top-level session, a delegated subagent, or a scheduled job.
-    # This is the axis a supervisor actually wants - it separates "what the agent did"
-    # from "what it delegated" from "what ran unattended".
+    # Who did the work: top-level session, delegated subagent, or scheduled job - the axis
+    # a supervisor wants (did the agent do it, delegate it, or was it unattended).
     if src == "cron":
         kind = "cron"
     elif title.lower().startswith("subagent"):
@@ -160,9 +159,8 @@ def build_note(row: dict, produced: list[str] | None = None) -> tuple[str, str]:
     body = [f"One agent session, exported from `state.db` by `kb_sessions.py`.\n",
             "\n> Generated, and machine-local: `sessions/` is gitignored and outside the\n"
             "> vault's lint. Do not hand-edit — re-run the exporter.\n",
-            # One click back into the session. `hermes://open/<id>` is the desktop app's
-            # own deep link (verified: the app logs `[deeplink] delivered open/<id>`),
-            # so the vault and the app address each other with no plugin involved.
+            # One click back into the session: `hermes://open/<id>` is the desktop app's own
+            # deep link (verified: the app logs `[deeplink] delivered open/<id>`).
             f"\n[Open this session in Hermes](hermes://open/{sid})\n",
             f"\n| | |\n|---|---|\n"
             f"| state | `{state}` |\n"
@@ -181,8 +179,8 @@ def build_note(row: dict, produced: list[str] | None = None) -> tuple[str, str]:
     if last_desc:
         body.append(f"\n**Last activity:** {last_desc}\n")
 
-    # What this session put into the knowledge base. Without this a session is a dead
-    # end: you can read what the agent did but not what it produced.
+    # What this session put into the knowledge base; without it a session is a dead end -
+    # you can read what the agent did but not what it produced.
     if produced:
         body.append(f"\n## Produced {len(produced)} page(s)\n\n")
         for slug in sorted(produced):
@@ -232,11 +230,10 @@ def main() -> int:
             if kb.write_if_changed(path, content):
                 written += 1
         except OSError as e:
-            # A vault folder that is transiently locked (cloud sync, a backup agent, an
-            # AV scan holding the tree) must not abort the whole export: one unwritable
-            # note is a reportable problem, a crashed job is a silent one. Seen in
-            # practice - Documents briefly carried the READONLY attribute and every
-            # create failed with FileNotFoundError.
+            # A vault folder that is transiently locked (cloud sync, backup agent, AV scan)
+            # must not abort the whole export: one unwritable note is a reportable problem,
+            # a crashed job is a silent one. Seen in practice - Documents briefly carried
+            # the READONLY attribute and every create failed with FileNotFoundError.
             failed.append(f"{path.name}: {e.__class__.__name__}")
 
     if a.dry_run:

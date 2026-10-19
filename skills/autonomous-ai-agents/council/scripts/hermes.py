@@ -55,8 +55,8 @@ PROFILES = ("council-generalist", "council-orchestrator")
 # `hermes serve`'s default port. Only ever a hint — see the module docstring.
 DEFAULT_GATEWAY_PORT = 9119
 
-# Markers that mean a profile config can reach a model. Hermes keeps credentials
-# PER PROFILE and does not share them, so this is asked per profile.
+# Markers that a profile config can reach a model. Hermes keeps credentials PER
+# PROFILE and does not share them, so this is asked per profile.
 _CREDENTIAL_MARKERS = ("api_key", "provider", "base_url")
 
 
@@ -266,8 +266,7 @@ def render(data: Dict[str, Any]) -> List[str]:
     elif verdict:
         out.append(f"    verdict : {_VERDICT_TEXT[verdict]}")
 
-    # L4, when it was asked for. Reported as its own line so a caller can never
-    # mistake a proxy for the proof.
+    # L4, when asked for: its own line, so a proxy is never mistaken for the proof.
     cap = data.get("capability")
     if cap:
         out.append(f"    probe   : {'ok' if cap.get('ok') else 'FAILED'} — {cap.get('note')}")

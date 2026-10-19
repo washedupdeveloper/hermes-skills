@@ -78,10 +78,9 @@ def run(root: Path, *args: str) -> subprocess.CompletedProcess:
 
 def build_dirty(root: Path) -> None:
     write(root, "SCHEMA.md", SCHEMA)
-    # Log the canonical pages so the ONLY findings are the seeded defects. Leaving them
-    # unlogged would also trip canonical_page_never_logged, and a title from that finding
-    # ("Page B") would then collide with the link-resolution assertion below - an
-    # ambiguous test is worse than no test.
+    # Log the canonical pages so the ONLY findings are the seeded defects: unlogged pages
+    # would trip canonical_page_never_logged, and its "Page B" output would collide with
+    # the link-resolution assertion below - an ambiguous test is worse than no test.
     write(root, "log.md",
           "# Wiki Log\n\n## [2026-01-01] create | seed\n- entities/page-a\n"
           "- concepts/page-b\n- concepts/bad-tag\n- concepts/mismatch\n")
@@ -98,10 +97,9 @@ def build_dirty(root: Path) -> None:
     write(root, "inbox/pending.md", page("Pending", "alpha", "A legitimate proposal.\n",
                                           status="proposed"))
 
-    # ---- work/ items: the supervisor board's fields ----
-    # `status` on a work item is WORK state, not promotion state, and the board's fields
-    # are required rather than optional - a board with blank columns is a board nobody
-    # trusts. One of each defect, plus a valid item that must stay unreported.
+    # ---- work/ items: `status` is WORK state, not promotion state, and the board fields
+    # are required - a board with blank columns is one nobody trusts. One of each defect,
+    # plus a valid item that must stay unreported.
     write(root, "work/ok-item.md",
           page("Good Work Item", "alpha", "Valid board entry.\n",
                extra="priority: P2\nowner: agent\ntopic: board\n",

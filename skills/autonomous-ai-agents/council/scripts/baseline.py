@@ -51,14 +51,11 @@ def fingerprint(finding: Dict[str, Any]) -> str:
     return _shared.fingerprint(finding)
 
 
-#: A URL is stripped before scanning, so its host and path cannot be mistaken
-#: for a repository path.
+#: A URL is stripped first, so its host and path cannot pass as a repository path.
 _URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.IGNORECASE)
 
-#: Tokens in a claim that name a file. Three shapes, because claims use all
-#: three: a path (`docs/adr/0003.md`), a dotfile (`.wslconfig`), and a bare
-#: filename (`topology.nix`). The bare filename matters most -- it is the common
-#: way a comment refers to a file it does not live in.
+#: File-shaped tokens in a claim: a path, a dotfile, a bare filename. The bare
+#: filename matters most -- the usual way a comment names a file it does not live in.
 _PATHISH = re.compile(
     r"(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+"      # docs/adr/0003.md
     r"|\.[A-Za-z0-9_-]{2,}"                      # .wslconfig
@@ -259,8 +256,7 @@ def carry(
             dropped.append({**finding, "_drop": "self", "_why": f"{path} changed"})
             continue
 
-        # `claim` is optional in a finding, so default to empty: `claim_paths`
-        # takes a str, and a missing claim simply references no paths.
+        # `claim` is optional, and a missing one references no paths.
         hit = [p for p in claim_paths(finding.get("claim") or "") if p in changed_set]
         if hit:
             dropped.append({
@@ -346,11 +342,9 @@ def _cmd_changed(args: argparse.Namespace) -> int:
 
     last = round_dirs(run_root)[-1]
     since = read_meta(last).get("target_sha")
-    # `find_baseline` only returns a run that passed `is_baseline`, which requires a
-    # recorded `target_sha` — so this holds. Stated as an assert because the type
-    # checker cannot see across the two functions: without it mypy and pyright both
-    # report `Any | None` here. If `find_baseline` ever stops requiring the sha, this
-    # fires at the invariant instead of a confusing subscript error downstream.
+    # Holds because find_baseline only returns a run that passed is_baseline, which
+    # requires target_sha. The assert is for the type checker (mypy and pyright both
+    # report `Any | None` here) and fires at the invariant if that stops holding.
     assert since, f"baseline {last.name} has no target_sha; find_baseline should reject it"
     changed = changed_files(project, since)
     print(f"since {since[:12]}: {len(changed)} file(s) changed")

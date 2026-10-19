@@ -1,11 +1,7 @@
-# The declarative half of the bootstrap.
-#
-# See docs/bootstrap.md for the four paths and why this one is the only one where
-# drift is impossible, and docs/adr/0004 for the store-path decision.
-#
-# Home-manager module: Hermes runs user-level with its own HERMES_HOME, so the
-# skill it loads, the CLI on its PATH and the settings that point at both are all
-# user state. Import it into the user's HM module list:
+# The declarative half of the bootstrap — the one path where drift is impossible.
+# docs/bootstrap.md has the other three; docs/adr/0004 the store-path decision.
+# Hermes runs user-level with its own HERMES_HOME, so the skill and the CLI are
+# user state, which is why this is a home-manager module:
 #
 #   home-manager.users.<name>.imports = [ inputs.review-council.homeManagerModules.default ];
 {
@@ -17,8 +13,8 @@
 let
   cfg = config.programs.council;
 
-  # Hermes' own module is a SEPARATE input, so this repo must evaluate without it.
-  # `options` (not `config`) is the map that answers "is that option declared here".
+  # Hermes' module is a SEPARATE input, so this repo must evaluate without it.
+  # `options`, not `config`, is the map answering "is that option declared here".
   hermesModulePresent = options.services or { } ? hermes-agent;
 in
 {
@@ -72,8 +68,8 @@ in
     lib.mkMerge [
       { home.packages = [ cfg.package ]; }
 
-      # Default: one owner for the setting. List options concatenate, so this adds to
-      # whatever the user declared rather than replacing it.
+      # List options concatenate, so this adds to whatever the user declared
+      # rather than replacing it.
       (lib.mkIf (cfg.mode == "external-dirs" && hermesModulePresent) {
         services.hermes-agent.settings.skills.external_dirs = [ "${cfg.skill}" ];
       })
@@ -82,8 +78,8 @@ in
         home.file."${cfg.hermesHome}/skills/autonomous-ai-agents/council".source = cfg.skill;
       })
 
-      # A mode was asked for that this configuration cannot satisfy. Fail the build
-      # rather than installing a CLI nothing points at.
+      # A mode this configuration cannot satisfy: fail the build rather than
+      # installing a CLI nothing points at.
       {
         assertions = [
           {

@@ -34,14 +34,14 @@ PYPROJECT = REPO / "pyproject.toml"
 CHANGELOG = REPO / "CHANGELOG.md"
 
 VERSION_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-# `## [1.0.0] — 2026-10-11`. The dash is an em dash in the file; a hyphen is
-# accepted so a hand-written entry is not rejected over punctuation.
+# `## [1.0.0] — 2026-10-11`. Em dash in the file; a hyphen is accepted so a
+# hand-written entry is not rejected over punctuation.
 RELEASE_RE = re.compile(r"^## \[(\d+\.\d+\.\d+)\]\s+[—–-]\s+(\d{4}-\d{2}-\d{2})\s*$")
 UNRELEASED = "## [Unreleased]"
 PARTS = ("major", "minor", "patch")
 
-# Prose that quotes the release, and the files allowed to. Excluded: CHANGELOG.md is the
-# history rather than a claim about now, and runs/ records a past moment.
+# Prose that quotes the release, and the files allowed to. Excluded deliberately:
+# CHANGELOG.md is history, and runs/ records a past moment.
 PROSE_VERSION = re.compile(r"[Cc]urrent release\s+\*{0,2}v(\d+\.\d+\.\d+)\*{0,2}")
 PROSE_FILES = ("README.md", "docs")
 
@@ -131,8 +131,8 @@ def read_changelog(path: Optional[Path] = None) -> Changelog:
             continue
         match = RELEASE_RE.match(line)
         if not match:
-            # A heading we cannot parse is a problem `check` reports; keep the line
-            # so the message can quote it rather than the file being rejected here.
+            # Unparseable heading: keep the line so `check` can quote it instead of
+            # rejecting the file here.
             releases.append(Release("", "", line_no))
             continue
         releases.append(Release(match.group(1), match.group(2), line_no))
@@ -199,10 +199,9 @@ def check(tag: Optional[str] = None, path_changelog: Optional[Path] = None,
         if wanted != version:
             problems.append(f"tag {tag} does not match pyproject.toml {version}")
 
-    # Prose that quotes the release is a checkable claim (`docs/VERSIONING.md`), and it
-    # is the one that kept rotting: pyproject, CHANGELOG and tags all agreed while a doc
-    # still advertised a superseded version. Derived from path_pyproject's own parent so
-    # a caller pointing at a fixture tree validates that tree.
+    # Prose claims are checkable (docs/VERSIONING.md) and were the part that rotted:
+    # pyproject, CHANGELOG and tags agreed while a doc advertised a superseded version.
+    # Rooted at path_pyproject's parent so a fixture tree validates itself.
     problems.extend(stale_prose_claims(path_pyproject.parent))
 
     return problems
@@ -353,8 +352,8 @@ def cmd_bump(args: argparse.Namespace) -> int:
         print(f"version bump: --date {date} is not YYYY-MM-DD", file=sys.stderr)
         return 2
 
-    # One line becomes three: the empty Unreleased, a blank line, the new heading.
-    # The blank line already after the old heading becomes the gap under the new one.
+    # One line becomes three: empty Unreleased, blank, new heading. The blank already
+    # after the old heading becomes the gap under the new one.
     lines = list(log.lines)
     lines[log.unreleased_line] = f"{UNRELEASED}\n\n## [{new}] — {date}"
 
@@ -366,8 +365,8 @@ def cmd_bump(args: argparse.Namespace) -> int:
 
     changelog.write_text("\n".join(lines) + "\n", encoding="utf-8")
     write_pyproject_version(new, pyproject)
-    # Same commit, same command: prose that quotes the release would otherwise rot until
-    # the test caught it, which it did three releases running.
+    # Same commit, same command: otherwise the prose rots until the test catches it --
+    # which it did three releases running.
     touched = rewrite_prose_versions(root, new)
     print(f"  released {new} on {date}; pyproject.toml updated")
     for path in touched:

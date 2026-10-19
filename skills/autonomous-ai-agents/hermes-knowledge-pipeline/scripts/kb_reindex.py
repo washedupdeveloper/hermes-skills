@@ -43,17 +43,15 @@ from pathlib import Path
 __version__ = "3.0.0"
 
 CANONICAL_DIRS = ("entities", "concepts", "comparisons", "queries")
-# `work/` is the supervisor's board: one page per unit of in-flight work. It is a
-# first-class page directory but NOT canonical knowledge - its pages are ephemeral
-# by design and are never promoted into the corpus.
+# `work/` is the supervisor's board: one page per unit of in-flight work. First-class
+# page directory, but NOT canonical knowledge - ephemeral, never promoted.
 WORK_DIR = "work"
 PAGE_DIRS = CANONICAL_DIRS + ("inbox", WORK_DIR)
 ARCHIVE_DIR = "_archive"
 RAW_DIRS = ("raw",)
 REQUIRED_FM = ("title", "created", "updated", "type", "tags", "sources", "status")
-# Work items carry the fields a Kanban board groups and filters on. Required, not
-# optional: a board with blank columns and missing priorities is a board nobody
-# trusts, and an unchecked convention is a decorative one.
+# Work items carry the fields a Kanban board groups and filters on. Required: a board with
+# blank columns and missing priorities is a board nobody trusts.
 WORK_REQUIRED = ("status", "priority", "owner", "topic")
 WORK_STATUSES = ("backlog", "active", "blocked", "done")
 WORK_PRIORITIES = ("P0", "P1", "P2", "P3")
@@ -80,9 +78,7 @@ INDEX_BANNER = (
     "     them by the hourly kb-reindex job. -->\n"
 )
 
-# --------------------------------------------------------------------------- #
-# Frontmatter (YAML subset - no PyYAML available in the Hermes python)
-# --------------------------------------------------------------------------- #
+# --- Frontmatter (YAML subset - the Hermes python ships no PyYAML) -------------
 
 
 def _unquote(value: str) -> str:
@@ -141,16 +137,15 @@ def as_list(value) -> list[str]:
     return [str(value).strip()] if str(value).strip() else []
 
 
-# Canonical frontmatter field order, and the single writer for it. kb_archive.py and
-# kb_promote.py both rewrite frontmatter; a second copy of this renderer in either of
-# them is the drift defect this pipeline exists to avoid.
+# Canonical frontmatter field order, and its single writer: kb_archive.py and kb_promote.py
+# both rewrite frontmatter, and a second copy of this renderer is the drift defect.
 FM_ORDER = ["title", "created", "updated", "type", "tags", "sources", "confidence",
             "status", "proposed_by", "aliases", "supersedes", "superseded_by",
             "archived", "contested", "contradictions"]
 
 
-# Plain scalars YAML would reinterpret: a bare `true`, `12` or `~` becomes a
-# bool/number/null, silently changing a property's type across the whole vault.
+# Bare `true`, `12` or `~` parse back as bool/number/null, silently retyping a property
+# across the whole vault.
 _YAML_RESERVED = {"true", "false", "yes", "no", "on", "off", "null", "~", "none"}
 _NUMERIC_RE = re.compile(r"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
 _INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
@@ -203,9 +198,7 @@ def render_frontmatter(fm: dict) -> str:
     return "".join(out)
 
 
-# --------------------------------------------------------------------------- #
-# SCHEMA.md machine block: schema version + tag taxonomy
-# --------------------------------------------------------------------------- #
+# --- SCHEMA.md machine block: schema version + tag taxonomy --------------------
 
 
 def load_schema(schema_text: str) -> tuple[str | None, set[str]]:
@@ -241,9 +234,7 @@ def load_schema(schema_text: str) -> tuple[str | None, set[str]]:
     return None, set()
 
 
-# --------------------------------------------------------------------------- #
-# Links
-# --------------------------------------------------------------------------- #
+# --- Links --------------------------------------------------------------------
 
 
 def norm_key(value: str) -> str:
@@ -286,9 +277,7 @@ def build_link_map(pages: dict, archived: dict) -> dict[str, str]:
     return link_map
 
 
-# --------------------------------------------------------------------------- #
-# Build
-# --------------------------------------------------------------------------- #
+# --- Build --------------------------------------------------------------------
 
 
 def body_hash(body: str) -> str:
@@ -397,9 +386,7 @@ def build(root: Path) -> tuple[dict, dict]:
     return pages, archived
 
 
-# --------------------------------------------------------------------------- #
-# Lint: findings (defects) vs state (normal)
-# --------------------------------------------------------------------------- #
+# --- Lint: findings (defects) vs state (normal) --------------------------------
 
 
 def lint(root: Path, pages: dict, archived: dict) -> dict:
@@ -423,13 +410,12 @@ def lint(root: Path, pages: dict, archived: dict) -> dict:
             if hit is None:
                 broken.append({"page": slug, "link": t})
             elif hit in archived:
-                # Resolves, but points at a retired iteration. The successor is
-                # usually what the reader wants.
+                # Resolves, but to a retired iteration; the successor is usually what
+                # the reader wants.
                 to_archived.append({"page": slug, "link": t, "archived_slug": hit,
                                     "successor": archived[hit]["superseded_by"] or None})
-        # Orphans are checked for CANONICAL pages only. A canonical page must be
-        # reachable or it is invisible. An inbox proposal is already surfaced by
-        # the generated index and may legitimately be a stub.
+        # Orphans are checked for CANONICAL pages only: a canonical page must be
+        # reachable or it is invisible; an inbox proposal may legitimately be a stub.
         if m["dir"] in CANONICAL_DIRS and not m["inbound"] and not m["outbound"]:
             orphans.append(slug)
         if m["tags"] and taxonomy and not set(m["tags"]) & taxonomy:
@@ -485,9 +471,9 @@ def lint(root: Path, pages: dict, archived: dict) -> dict:
             except ValueError:
                 pass
 
-        # A live page must not claim to supersede something that no longer exists.
-        # Resolved through link_map, not dict membership: an archived slug is a full
-        # path (`_archive/entities/x`) while the reference is written as `x`.
+        # A live page must not supersede something that no longer exists. Resolved
+        # through link_map, not dict membership: archived slugs are full paths
+        # (`_archive/entities/x`) while the reference is written as `x`.
         for target in m["supersedes"]:
             if link_map.get(norm_key(target)) is None:
                 ghost_successor.append({"page": slug, "supersedes": target})
@@ -527,11 +513,9 @@ def lint(root: Path, pages: dict, archived: dict) -> dict:
             if not str(fm.get("source_url") or "").strip():
                 unprovenanced.append({"file": rel, "missing": "source_url"})
 
-    # Every canonical page must be attributable in the append-only log. A page that
-    # appears in no log entry cannot be traced to a source, a session or a decision.
-    # Checked by title, stem and full slug so any reasonable log phrasing passes; this
-    # is deliberately lenient, because a check that fires on a well-kept vault is worse
-    # than no check at all.
+    # Every canonical page must be attributable in the append-only log, else it cannot be
+    # traced to a source, session or decision. Deliberately lenient (title, stem or slug),
+    # because a check that fires on a well-kept vault is worse than no check.
     never_logged = []
     for slug, m in pages.items():
         if m["dir"] not in CANONICAL_DIRS:
@@ -546,13 +530,9 @@ def lint(root: Path, pages: dict, archived: dict) -> dict:
                 outdated.append({"page": slug, "page_version": m["schema_version"],
                                  "schema_version": schema_version})
 
-    # ---- a whole page directory disappearing is never legitimate ----
-    # Promote and archive MOVE a page between directories; nothing in the pipeline
-    # removes a directory. So a page directory that held pages last run and is now
-    # gone from disk means something outside the pipeline deleted it - and because the
-    # vault is silent when healthy, that would otherwise be invisible. The previous
-    # index is the memory that makes this detectable with no extra dependency: it
-    # already records which directory every page lived in.
+    # A whole page directory disappearing is never legitimate: promote and archive MOVE
+    # pages, nothing removes a directory. The previous index is the memory that makes
+    # this detectable with no extra dependency - it records each page's directory.
     prev = root / "_meta" / "kb-index.json"
     vanished: list[dict] = []
     if prev.is_file():
@@ -603,19 +583,16 @@ def lint(root: Path, pages: dict, archived: dict) -> dict:
         "work_needing_human": sorted(s for s, m in pages.items()
                                      if m["dir"] == WORK_DIR
                                      and (m["owner"] == "human" or m["status"] == "blocked")),
-        # A page nothing links TO is findable only from the generated index. That is a
-        # discoverability weakness, not a defect - a self-contained page may legitimately
-        # have no inbound links - so it is STATE. Reporting it as a finding would make a
-        # healthy vault noisy, which is how a check gets ignored.
+        # A page nothing links TO is findable only from the generated index: a
+        # discoverability weakness, not a defect, so it is STATE. Reporting it as a
+        # finding would make a healthy vault noisy, which is how a check gets ignored.
         "zero_inbound_pages": sorted(s for s, m in pages.items() if not m["inbound"]),
     }
     return {"schema_version": schema_version, "taxonomy": sorted(taxonomy),
             "findings": {k: v for k, v in findings.items() if v}, "state": state}
 
 
-# --------------------------------------------------------------------------- #
-# Generated outputs
-# --------------------------------------------------------------------------- #
+# --- Generated outputs --------------------------------------------------------
 
 
 def render_index(pages: dict, archived: dict, report: dict) -> str:
@@ -676,8 +653,8 @@ def render_index(pages: dict, archived: dict, report: dict) -> str:
     else:
         out.append("None.\n")
 
-    # Work in flight. Listed here so the catalog stays complete, but the
-    # interactive surface for it is the Bases views in HOME.md.
+    # Work in flight: listed so the catalog stays complete, but its interactive surface
+    # is the Bases views in HOME.md.
     total_work = sum(len(v) for v in work.values())
     out.append(f"\n## Work in flight (`{WORK_DIR}/`) — {total_work}\n\n")
     if total_work:
@@ -752,9 +729,7 @@ def print_orient(orient: dict) -> None:
                                           for p in orient["pending_proposals"]))
 
 
-# --------------------------------------------------------------------------- #
-# Entry point
-# --------------------------------------------------------------------------- #
+# --- Entry point --------------------------------------------------------------
 
 
 def resolve_root() -> Path:

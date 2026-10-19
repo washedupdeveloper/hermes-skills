@@ -71,9 +71,7 @@ def specialist_profile(dimension: str) -> str:
     return f"{dimension}-reviewer"
 
 
-# The per-dimension reviewer prompt. It lived in council_loop.py until the
-# specialists mode was deleted; its only remaining consumer is the arm below, so it
-# lives with that arm.
+# Only the `specialists` arm below reads this, so it lives beside that arm.
 SPECIALIST_PROMPT = """Load your {rubric_skill} skill and review this change.
 
 Target repository: {repo}
@@ -184,10 +182,8 @@ mandatory: {rubrics}."""
 NO_RUBRIC_INSTRUCTION = """No dimension rubric is provided. Apply your own judgement about what
 counts as a defect in each dimension, and say so when you are unsure."""
 
-#: Appended to EVERY arm's prompt, so the comparison is not confounded by one arm
-#: being told to work differently. The probe results are already computed and
-#: passed in; without this an arm re-derives them with a hundred tool calls, which
-#: costs hours and measures patience rather than review quality.
+#: Appended to EVERY arm, so no arm is told to work differently. Without it an arm
+#: re-derives the probes with a hundred tool calls: hours, measuring patience.
 TOOL_BUDGET = """
 Work from the repository itself. The probe results above are already computed --
 do not re-run them. Read the files you need, reason about them, and write your
@@ -332,17 +328,14 @@ def run_arm(arm: str, repo: Path, out_dir: Path, scope: str, sha: str,
         prompt = _generalist_prompt(repo, scope, sha, stacks, probe_json,
                                     out_path, spec["rubrics"], i)
         rc, _ = run_hermes(binary, repo, prompt, timeout, log, profile=spec["profile"])
-        # A sample that exits 0 but writes no file silently understates this arm's
-        # recall -- the number the pre-registered rule compares. One retry, then
-        # the shortfall is reported rather than hidden.
+        # Exit 0 with no file silently understates recall -- the number the rule compares.
         if rc == 0 and not out_path.exists():
             rc, _ = run_hermes(binary, repo, prompt, timeout, log, profile=spec["profile"])
         return i, rc
 
     with ThreadPoolExecutor(max_workers=spec["samples"]) as pool:
-        # A distinct name from the per-dimension `codes` above: Python gives both
-        # one function-scoped variable, so reusing the name made mypy type this
-        # one from the earlier dict[str, int] and reject sample's tuple[int, int].
+        # Not `codes`: one function scope, and mypy then typed this from the earlier
+        # dict[str, int].
         sample_codes: Dict[int, int] = dict(pool.map(sample, range(1, spec["samples"] + 1)))
     return {"arm": arm, "exit_codes": {str(k): v for k, v in sample_codes.items()},
             "failed": sorted(i for i, rc in sample_codes.items() if rc != 0)}
@@ -362,9 +355,7 @@ def planted_defects(rung0: Path, rungN: Path) -> List[Dict[str, Any]]:
             continue
         rel = path.relative_to(rungN)
         base = rung0 / rel
-        # as_posix(), not str(): the truth is a REPO-RELATIVE path, and its canonical
-        # form here is the one reviewers write. str() would emit `src\\keep.py` on
-        # Windows and match nothing.
+        # as_posix(), not str(): str() emits `src\\keep.py` on Windows, matching nothing.
         rel_text = rel.as_posix()
         if not base.exists():
             planted.append({"path": rel_text, "line_range": "1", "kind": "new-file"})
@@ -527,10 +518,9 @@ def score_arm(collected: Dict[str, Any], truth: Optional[List[Dict[str, Any]]],
     noise = distinct - tp_findings
     return {
         "distinct": distinct,
-        # `true` counts DISTINCT planted defects found, not findings that matched.
-        # An arm that describes one defect three ways must not out-score an arm
-        # that describes it once -- that is the number the rule compares.
-        # `true_findings` keeps the raw count visible for the record.
+        # `true` counts DISTINCT planted defects, not matching findings: an arm that
+        # describes one defect three ways must not out-score one that says it once.
+        # `true_findings` keeps the raw count for the record.
         "true": len(hit_truth),
         "true_findings": tp_findings,
         "false_positives": noise,
@@ -629,8 +619,7 @@ def cmd_run(_repo: Optional[Path], args: argparse.Namespace) -> int:
         collected = collect(out_dir / arm)
         result.update(collected)
 
-        # A sample that never wrote its file would silently understate this arm's
-        # recall, which is exactly the number the rule compares. Count them.
+        # Count missing files: recall is the number the rule compares.
         expected = len(DIMENSIONS) if arm == "specialists" else ARMS[arm]["samples"]
         produced = len(list((out_dir / arm).glob("findings*.json")))
         result["samples_expected"] = expected
@@ -649,9 +638,7 @@ def cmd_run(_repo: Optional[Path], args: argparse.Namespace) -> int:
     (out_dir / "ablation.json").write_text(
         json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
 
-    # Always emit the labelling sheet. It is the handover artefact: without the
-    # operator's verdicts there is no precision number, and a run that ends
-    # without one has not finished its job.
+    # Always emit it: without the operator's verdicts there is no precision number.
     labels = write_labels(out_dir, report, blind=True)
     print(f"  labelling sheet -> {labels}")
     print(f"\n  done in {report['seconds']}s -> {out_dir / 'ablation.json'}")
@@ -680,9 +667,8 @@ def cmd_score(_repo: Optional[Path], args: argparse.Namespace) -> int:
               f"{str(s['recall'] if s['recall'] is not None else '-'):>8s} "
               f"{str(s.get('snr') if s.get('snr') is not None else '-'):>7s} "
               f"{str(s.get('usefulness_rate') if s.get('usefulness_rate') is not None else '-'):>7s}")
-    # Recall and SNR move in opposite directions by construction, so a verdict that
-    # read only recall could be bought by volume. Print the pair the rule is not
-    # allowed to ignore: same recall at a lower SNR is not the same result.
+    # Recall can be bought by volume, so SNR prints beside it: same recall at a
+    # lower SNR is not the same result.
     print("  ('-' in SNR means no noise at all -- the best case, not an unknown)")
 
     # The rule: only arms at equal cost are comparable.
@@ -692,8 +678,8 @@ def cmd_score(_repo: Optional[Path], args: argparse.Namespace) -> int:
         best_single = scored["generalist-rubrics"]["true"]
         five = scored["specialists"]["true"]
         if best_single == 0 and five == 0:
-            # No arm found anything true. That is not a win for either side --
-            # it means the corpus does not discriminate, and the run proves nothing.
+            # Neither side found anything true: the corpus does not discriminate, so
+            # this decides nothing.
             verdict = ("UNDECIDED - neither arm found a true defect; the corpus "
                        "does not discriminate and this run decides nothing")
         elif best_single == 0:

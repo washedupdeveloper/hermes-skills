@@ -1,32 +1,15 @@
 {
   description = "review-council — pinned, declarative deterministic review toolchain";
 
-  # Determinism contract (research/nix-tooling.md §0): every category score must
-  # be reproducible from a pinned tool set on a pinned nixpkgs revision. Every
-  # tool comes from this one input, pinned in flake.lock, so the set moves
-  # atomically and `nix build .#toolchain` yields the same store path everywhere.
+  # Determinism contract (research/nix-tooling.md §0): every score reproducible
+  # from a pinned tool set on one pinned nixpkgs, so the set moves atomically and
+  # `nix build .#toolchain` is the same store path everywhere. One command, one
+  # app — the modules stay separate programs and become its verbs. See docs/NIX.md.
   #
-  # ONE COMMAND. The modules under scripts/ stay separate programs; the INTERFACE
-  # is unified. There is exactly one app, `council`, and the modules are its
-  # verbs:
-  #
-  #     nix run .#council -- review <repo>
-  #     nix run .#council -- setup bots
-  #
-  # With no arguments it prints that list. Nothing in this repo is run by hand.
-  #
-  # `audience` is load-bearing, not documentation: the shipped app exposes `user`
-  # verbs, the devshell also exposes `dev` ones, and checks.commands asserts the
-  # split so it cannot decay into a comment.
-  #
-  # The toolchain, the framework tree, the command surface, the gates and the
-  # formatter are declarative and pinned. The council LOOP cannot be: it spawns
-  # non-deterministic LLM agents over the network, an effect rather than a build,
-  # so it is exposed as a pinned interface — see docs/NIX.md.
-  #
-  # STRUCTURE. This file is the configuration, not the construction: the builders
-  # are in nix/builders.nix, the consumer-facing outputs in nix/flake-module.nix,
-  # and this repo's own gates in nix/checks.nix.
+  # `audience` is load-bearing: the shipped app exposes `user` verbs, the devshell
+  # adds `dev`, and checks.commands asserts the split. This file configures;
+  # nix/builders.nix constructs; the import surfaces are flake-module.nix and
+  # checks.nix.
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -49,24 +32,21 @@
           "aarch64-darwin"
         ];
 
-        # The consumer-facing surface, then this repo's own gates. Importing the
-        # first alone is what another flake does — see flakeModules below.
+        # Consumer surface, then this repo's own gates; another flake imports the
+        # first only (see flakeModules below).
         imports = [
           ./nix/flake-module.nix
           ./nix/checks.nix
         ];
 
         flake = {
-          # The declarative path. Hermes runs user-level with its own HERMES_HOME, so
-          # the skill it loads, the CLI on its PATH and the settings that point at both
-          # are user state — a home-manager module is the scope that matches.
+          # Hermes runs user-level with its own HERMES_HOME, so the skill, the CLI
+          # and the settings pointing at both are user state — hence home-manager.
+          # Defaults come from THIS flake, so importing the module is the whole
+          # setup; usage in nix/home-manager.md, options in nix/module.nix.
           #
-          # Defaults come from THIS flake, so importing the module is the whole setup.
-          # Usage is in nix/home-manager.md; the options and their reasoning are in
-          # nix/module.nix.
-          #
-          # `nix flake check` knows a fixed set of output names and would skip this one
-          # with a warning, so checks.module-evaluates evaluates it explicitly.
+          # `nix flake check` knows a fixed set of output names and would skip this
+          # one with a warning, so the `module` group (nix/tests.nix) evaluates it.
           homeManagerModules.default =
             { lib, pkgs, ... }:
             {
@@ -77,21 +57,17 @@
               programs.council.skill = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.skill;
             };
 
-          # The integration point for another flake:
+          # Another flake's integration point:
           #
           #     imports = [ inputs.review-council.flakeModules.default ];
           #
-          # That yields the packages, the formatter and the app — the same
-          # definitions this repo builds for itself, not a copy of them.
+          # Same definitions this repo builds for itself, not a copy.
           flakeModules.default = ./nix/flake-module.nix;
 
-          # Onboarding, the way crane and devshell do it: `nix flake init -t` writes a
-          # working consumer, so the first step is one command rather than reading a
-          # doc. `default` is the one most people want.
-          #
-          # checks.templates asserts these still reference the PUBLISHED flake and
-          # still import the module, because a template that rots is worse than no
-          # template — it fails in someone else's repository.
+          # `nix flake init -t` writes a working consumer, so onboarding is one
+          # command rather than a doc. checks.templates asserts they still
+          # reference the PUBLISHED flake and import the module — a rotted template
+          # fails in someone else's repository.
           templates = {
             default = {
               path = ./templates/flake-parts;

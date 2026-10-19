@@ -20,9 +20,8 @@ from typing import Any, Dict, List, Optional
 HERE = Path(__file__).resolve().parent
 FRAMEWORK = HERE.parent
 
-# The two profiles the framework installs. Not configurable: the whole point of the
-# collapse is that there is one reviewer, and a flag pointing the swarm at a
-# different profile would let a second reviewer roster grow back unreviewed.
+# Not configurable: a flag pointing the swarm at another profile would let a second
+# reviewer roster grow back unreviewed. docs/DECISIONS.md #5.
 GENERALIST = "council-generalist"
 ORCHESTRATOR = "council-orchestrator"
 
@@ -180,9 +179,8 @@ def _create_cards(cards: List[CardSpec], run_root: Path, tenant: str,
         argv += ["--tenant", tenant, "--created-by", created_by]
         for parent_key in spec.parents:
             argv += ["--parent", ids[parent_key]]
-        # The root carries the dedup key: re-running the same repo and round is the
-        # same round, not a second one, so a reclaimed dispatch cannot fork a
-        # duplicate. Only the root needs it — its children are created once, after it.
+        # Root only: re-running the same repo and round is the same round, so a
+        # reclaimed dispatch cannot fork a duplicate. Children are created once, after it.
         if index == 0 and idempotency_key:
             argv += ["--idempotency-key", idempotency_key]
         argv += ["--json"]
@@ -241,8 +239,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 else repo.resolve() / ".review-council")
     cards = build_plan(repo, args.samples, args.round_no, run_root, args.goal)
     slug = slugify(repo.resolve().name)
-    # No git revision in the key: a plain directory is a legitimate target, and
-    # requiring a git repo to dedup would exclude it.
+    # No git revision in the key: a plain directory is a legitimate target.
     idempotency_key = f"{slug}-r{args.round_no}"
 
     if args.dry_run:

@@ -28,12 +28,10 @@ def test_the_shipped_defaults_are_usable_with_no_config_at_all():
 def test_the_defaults_carry_no_machine_specifics():
     """A default that only works on the author's machine is not a default."""
     text = (SCRIPTS / "council_config.py").read_text(encoding="utf-8")
-    # Only the DEFAULTS block matters, but scanning the whole module is stricter
-    # and the module has no legitimate reason to name any of these.
-    #
-    # These are SHAPES of machine-specific data, not anyone's actual username: a
-    # username needle here would be both obsolete after sanitising and far too
-    # generic to assert on ("user" appears in ordinary prose in this module).
+    # Only the DEFAULTS block matters; scanning the whole module is stricter, and the
+    # module has no legitimate reason to name any of these. They are SHAPES of
+    # machine-specific data, not a real username: a username needle would be obsolete
+    # after sanitising and far too generic ("user" appears in ordinary prose here).
     for needle in ("openai", "anthropic", "api_key", "sk-", "/home/", "C:\\"):
         assert needle not in text.lower(), (
             f"council_config.py names {needle!r}; defaults must carry no machine specifics"

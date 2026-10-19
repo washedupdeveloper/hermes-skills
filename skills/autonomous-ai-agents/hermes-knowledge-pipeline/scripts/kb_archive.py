@@ -26,8 +26,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import kb_reindex as kb  # noqa: E402
 
-# The frontmatter writer lives in kb_reindex so every script that rewrites
-# frontmatter shares one implementation.
+# The frontmatter writer lives in kb_reindex so every script shares one implementation.
 render_frontmatter = kb.render_frontmatter
 
 

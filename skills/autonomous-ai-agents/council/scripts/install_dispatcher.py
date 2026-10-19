@@ -19,7 +19,6 @@ USER = os.environ.get("USER") or getpass.getuser()
 # Every place `nix` can live, in precedence order; a user unit sources no profile.
 PATH_TAIL = "%h/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin:/usr/local/bin:/usr/bin:/bin"
 
-# --help is byte-identical to what the shell version printed.
 USAGE = """Install the kanban dispatcher as a systemd USER service (M7).
 
 WHY THIS EXISTS. A kanban board is durable storage; it is not a scheduler. Nothing
@@ -189,12 +188,10 @@ def main(argv: list | None = None) -> int:
         arg = argv[i]
         if arg == "--interval":
             if i + 1 >= len(argv):
-                # the shell died on the unset $2 here, with the same status
                 print("council setup dispatcher: --interval needs a value", file=sys.stderr)
                 return 1
             value = argv[i + 1]
-            # Written into the unit's ExecStart, so a non-number produces a service
-            # that fails at start rather than at install.
+            # Goes into ExecStart, so a non-number fails at service start, not install.
             if not value.isdigit() or int(value) < 1:
                 print(f"council setup dispatcher: --interval must be a positive "
                       f"integer, not {value!r}", file=sys.stderr)

@@ -1,30 +1,23 @@
-# Starter home-manager module (GLOBAL scope): publish a set of agent skills at a
-# path that never changes, refresh it from upstream on a timer, and report what
-# changed.
-#
-# Use this when the skills must be available to EVERY project and session and
-# must track upstream rather than a frozen snapshot.
-#
-# NOT YET BUILT end-to-end anywhere — it is a design derived from documented
-# behaviour (`skills.external_dirs`, silent skip of missing paths) plus standard
-# Nix. Run the verification steps in SKILL.md before trusting it.
+# Starter home-manager module (GLOBAL scope): publish agent skills at a path that
+# never changes, refresh from upstream on a timer, and report what changed. Use it when
+# skills must reach EVERY project and track upstream, not a frozen snapshot.
+# NOT YET BUILT end-to-end: derived from documented behaviour (`skills.external_dirs`,
+# silent skip of missing paths) plus standard Nix - run the SKILL.md verification first.
 #
 # Wire-up:
-#   1. flake.nix:
-#        inputs.caveman = { url = "github:JuliusBrussee/caveman"; flake = false; };
-#        # no `rev` -> flake.lock pins the exact commit while the input keeps
-#        # tracking the branch.
-#   2. That flake must expose the skills as a package attribute. Build it with
-#      linkFarm over the discovered skill dirs, e.g.:
+#   1. flake.nix: `inputs.caveman = { url = "github:JuliusBrussee/caveman"; flake = false; };`
+#      no `rev` -> flake.lock pins the exact commit while the input keeps tracking the branch.
+#   2. That flake must expose the skills as a package attribute, linkFarm over the
+#      discovered skill dirs, e.g.:
 #        packages.<system>.skills = pkgs.linkFarm "agent-skills"
 #          (map (n: { name = n; path = "${root}/${n}"; })
 #               (lib.attrNames (lib.filterAttrs
 #                 (n: t: t == "directory" && builtins.pathExists "${root}/${n}/SKILL.md")
 #                 (builtins.readDir root))));
-#      linkFarm copies into the store, but the result is rebuilt from upstream on
-#      every refresh, so it is a derived artifact, not a frozen copy.
+#      linkFarm copies into the store, but the result is rebuilt from upstream on every
+#      refresh, so it is a derived artifact, not a frozen copy.
 #   3. Import this file and set my.skillsRefresh.enable = true;
-#   4. Point Hermes at the stable path ONCE — declaratively if managed:
+#   4. Point Hermes at the stable path ONCE - declaratively if managed:
 #        services.hermes-agent.settings.skills.external_dirs =
 #          [ "${config.home.homeDirectory}/.local/share/agent-skills/current" ];
 #      or, unmanaged:
@@ -34,9 +27,9 @@
 let
   cfg = config.my.skillsRefresh;
 
-  # home-manager owns this parent dir and the `.keep` inside it, nothing else.
-  # The `current` symlink is owned by the refresh job — if home-manager owned
-  # it too, the two would fight on every switch.
+  # Timer owns `current`; home-manager owns only this parent dir and its `.keep` - if
+  # both owned the symlink they would fight on every switch.
+  # See references/unattended-refresh-job.md.
   root = "${config.home.homeDirectory}/.local/share/agent-skills";
   link = "${root}/current";
 
@@ -50,7 +43,7 @@ let
     prev="${stateDir}/manifest.prev"
     cur="${stateDir}/manifest.cur"
 
-    # Move the lock forward, then rebuild. Nix records the resolved commit in
+    # Move the lock forward, then rebuild: the resolved commit is recorded in
     # flake.lock, so the result stays reproducible after the fact.
     nix flake update --flake ${cfg.flakeDir} ${cfg.inputName}
     nix build --flake ${cfg.flakeDir} --out-link "${link}" .#${cfg.attr}
@@ -60,9 +53,8 @@ let
       | sort -z | xargs -0 -r sha256sum > "$cur"
 
     if [ -f "$prev" ] && ! diff -q "$prev" "$cur" > /dev/null; then
-      # Report only when something actually changed. `hermes send` pipes script
-      # output to a configured messaging platform; check `hermes send --help`
-      # for the exact flag on your version, or swap in any notifier.
+      # Report only on change. `hermes send` pipes output to a configured messaging
+      # platform - check `hermes send --help` for the exact flag, or swap in a notifier.
       diff -u "$prev" "$cur" | hermes send || true
     fi
 

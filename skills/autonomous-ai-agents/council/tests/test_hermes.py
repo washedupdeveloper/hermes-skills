@@ -53,11 +53,10 @@ class _Env:
         return False
 
 
-# A `#!/bin/sh` fixture executes on POSIX and NOT on Windows: the file has no
-# extension, so CreateProcess refuses it and `version()` returns None — correctly,
-# because it cannot run. The tests below need that fixture to RUN, so they are
-# POSIX-only. The Windows equivalent — a `.cmd` launcher, which `launcher()` does
-# look for — is a real gap in this file, not a covered case.
+# A `#!/bin/sh` fixture executes on POSIX, not Windows: the file has no extension,
+# so CreateProcess refuses it and `version()` returns None — correctly. Tests needing
+# it to RUN are POSIX-only; the Windows `.cmd` equivalent, which `launcher()` does look
+# for, is a real gap in this file, not a covered case.
 _SHEBANG_FIXTURES_EXECUTE = os.name != "nt"
 
 
@@ -211,9 +210,9 @@ def test_the_verdict_names_the_first_thing_to_fix(tmp_path):
         with _Env(HERMES_BIN=str(broken), HERMES_HOME=str(tmp_path)):
             assert hermes.report()["verdict"] == "unusable-launcher"
 
-    # Only this last block needs the fixture to RUN. On Windows the two above still
-    # hold — a file it cannot execute reports 'unusable-launcher' too — but there is
-    # no way to reach 'no-profiles' from a launcher Windows will not start.
+    # Only this last block needs the fixture to RUN. The two above hold on Windows
+    # too — a file it cannot execute reports 'unusable-launcher' — but 'no-profiles'
+    # is unreachable from a launcher Windows will not start.
     if _SHEBANG_FIXTURES_EXECUTE:
         with tempfile.TemporaryDirectory() as td:
             ok = Path(td) / "hermes"

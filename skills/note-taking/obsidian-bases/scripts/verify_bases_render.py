@@ -342,8 +342,7 @@ def main() -> int:
         print(f"  {data['error']}", file=sys.stderr)
         return 1
 
-    # The window was chosen by matching the vault name, so a mismatch here is impossible;
-    # keep the report for the record.
+    # The window was chosen by vault name, so a mismatch is impossible; kept for the record.
     print(f"  driving vault: {data.get('vault')}")
 
     failures = 0

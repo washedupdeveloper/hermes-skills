@@ -220,11 +220,10 @@ def test_recall_counts_planted_defects_found_not_findings():
 
 
 # --- the signal-quality pair -------------------------------------------------
-#
-# M8 lists SNR and usefulness rate as first-class metrics; the research says why:
-# recall can be bought with volume, and a high-recall agent that gets there by
-# reporting more is a trust hazard (sota §3.6). These pin the pair, and the
-# property that matters -- volume must not read as improvement.
+# M8 lists SNR and usefulness rate as first-class metrics because recall can be
+# bought with volume, and a high-recall agent that gets there by reporting more is a
+# trust hazard (research/sota-multi-agent-code-review.md §3.6). Volume must not read
+# as improvement.
 
 def test_score_arm_reports_snr_and_usefulness():
     truth = [{"path": "src/a.py", "line_range": "10", "kind": "changed"},
@@ -482,7 +481,6 @@ def test_assign_picks_the_nearest_defect_not_the_first_in_the_manifest():
     # A finding at 49-52 describes the commented-out block, not the setting at 46.
     assert ablate.assign({"location": {"path": "a.nix", "line_range": "49-52"}},
                          truth) == 1
-    # A finding at 46 describes the setting.
     assert ablate.assign({"location": {"path": "a.nix", "line_range": "46"}},
                          truth) == 0
 

@@ -22,26 +22,17 @@ spec = importlib.util.spec_from_file_location("council_loop", REPO / "scripts" /
 loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 
-# This module drives the loop in-process, and the loop runs the gate as a CHILD
-# process. A module under scripts/ refuses to execute unless the dispatcher set
-# REVIEW_COUNCIL_DISPATCHED — scripts/council.py is normally the only thing that
-# does — so these tests declare themselves the dispatcher, exactly as it does.
-# Without it the gate's refusal would surface as a scoring failure and mask what
-# the test is actually asserting.
+# The loop runs the gate as a CHILD process, and a scripts/ module refuses to
+# execute unless the dispatcher set REVIEW_COUNCIL_DISPATCHED — so these tests
+# declare themselves the dispatcher, or the refusal masks what they assert.
 os.environ.setdefault("REVIEW_COUNCIL_DISPATCHED", "1")
 
 
 # --- the agent turn must NOT inherit the dispatch variable --------------------
-#
-# The guard is an environment variable, so a turn spawned by the harness used to
-# inherit it -- and a reviewer reads untrusted repository content. Reported by the
-# council on this repository, and demonstrated in its own session: inside a
-# council-spawned turn `env | grep REVIEW_COUNCIL_DISPATCHED` returned 1, and
-# `python3 scripts/inject_defects.py --base B --out V` then executed and destroyed
-# V, where the identical command from a clean shell was refused.
-#
-# Not a boundary -- an agent with a terminal can set the variable itself -- but the
-# framework should not hand it over.
+# A spawned turn inherited the env guard while reading untrusted content: measured,
+# `env | grep REVIEW_COUNCIL_DISPATCHED` returned 1 and `inject_defects.py --out V`
+# destroyed V, refused in a clean shell. Not a boundary — an agent can set it — but
+# the framework must not hand it over.
 
 def test_the_agent_environment_drops_the_dispatch_variable():
     saved = os.environ.get("REVIEW_COUNCIL_DISPATCHED")
@@ -60,22 +51,20 @@ def test_the_agent_environment_drops_the_dispatch_variable():
     assert env.get("HERMES_ACCEPT_HOOKS") == "1", "hook consent must still be set"
 
 DIMS = ["security", "correctness", "readability", "architecture", "performance"]
-# The shipped default sample count, named so these tests assert the SAMPLING
-# rather than a literal that happens to equal len(DIMS).
+# Shipped default sample count, named so asserts test the SAMPLING, not a literal
+# that happens to equal len(DIMS).
 SAMPLES = 5
-# The reviewer prompt is the one carrying an explicit output path; the
-# aggregation prompt carries the run directory but no per-dimension path.
+# Only the reviewer prompt carries a per-dimension output path; the aggregation
+# prompt carries the run directory.
 _OUT_PATH_RE = re.compile(r"exactly this path:\s+(\S+)")
 _ROUND_RE = re.compile(r"Round:\s*(\d+)")
-# The reviewer prompt is the GENERALIST one. Its output path is the thing that
-# identifies it: `generalist-N.json`. The goals prompt also says "exactly this
-# path:", so the filename is what distinguishes them.
+# The generalist prompt is identified by its output path `generalist-N.json`: the
+# goals prompt also says "exactly this path:", so the filename distinguishes them.
 _GENERALIST_RE = re.compile(r"exactly this path:\s+(\S*generalist-\d+\.json)")
 
 
-# Prompt identification. The goals prompt ALSO says "exactly this path:", and the
-# goal review ALSO names the run directory, so a single marker is ambiguous —
-# these predicates require the distinguishing pair.
+# Both prompts share markers ("exactly this path:", "Run directory:"), so each
+# predicate requires the distinguishing pair.
 def _is_reviewer(prompt: str) -> bool:
     """The reviewer turn is the generalist one — it writes `generalist-N.json`."""
     return bool(_GENERALIST_RE.search(prompt))
@@ -102,9 +91,8 @@ def make_stub(scores_per_round, blocking_rounds=(), reuse_findings=False,
         calls["n"] += 1
         calls["spawns"].append({"profile": profile, "prompt": prompt})
 
-        # Dispatch by prompt shape, most specific FIRST. The goals prompt also
-        # says "exactly this path:", so it must be tested before the reviewer
-        # branch or it would be mistaken for a reviewer and fail its markers.
+        # Most specific FIRST: the goals prompt also says "exactly this path:", so
+        # the reviewer branch would claim it and fail its markers.
         if "set this round's goals" in prompt:
             calls["goals"] += 1
             if not goals_fail:
@@ -127,8 +115,8 @@ def make_stub(scores_per_round, blocking_rounds=(), reuse_findings=False,
 
         match = _OUT_PATH_RE.search(prompt)
         if not match:
-            # Not a reviewer: the aggregation turn names the run directory; the
-            # fix turn names neither.
+            # Not a reviewer: aggregation names the run directory, the fix turn
+            # neither.
             if "Run directory:" in prompt:
                 calls["aggregates"] += 1
                 return 0, "aggregate turn"
@@ -146,10 +134,9 @@ def make_stub(scores_per_round, blocking_rounds=(), reuse_findings=False,
         fid_round = 0 if reuse_findings else idx
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # One low-severity finding per DIMENSION keeps the novelty signal alive,
-        # so tests targeting OTHER termination paths are not short-circuited by
-        # the k-window check. reuse_findings=True emits the SAME ids every round,
-        # which is what the novelty test needs.
+        # One low-severity finding per DIMENSION keeps the novelty signal alive, so
+        # tests of OTHER termination paths are not cut short by the k-window check.
+        # reuse_findings=True re-emits the SAME ids — what the novelty test needs.
         findings = [{"id": f"{dim[:3].upper()}-{fid_round:04d}", "dimension": dim,
                      "severity": "low", "status": "open",
                      "location": {"path": "x.py", "line_range": "1-2"},
@@ -204,17 +191,14 @@ def run_loop(tmp, scores_per_round, **kwargs):
     orig = (loop.run_hermes, loop.hermes_bin, loop.run_probes, loop.git_sha)
     loop.run_hermes = stub
     loop.hermes_bin = lambda: "hermes-stub"
-    # The real probes shell out and take minutes; the loop's own logic is what
-    # these tests exercise. git_sha would need a real repo.
+    # Real probes shell out and take minutes; git_sha would need a real repo.
     loop.run_probes = lambda *a, **k: []
     loop.git_sha = lambda *a, **k: "stub-sha"
     try:
         argv = [str(tmp), "--run-root", str(Path(tmp) / "rc"), "--timeout", "5"]
-        # Pin the threshold unless the test names one. These tests exercise LOOP
-        # LOGIC (termination, novelty, budget), and the shipped default is
-        # calibrated from scripts/calibration.json — leaving it implicit would
-        # make them fail on a recalibration for reasons that have nothing to do
-        # with the loop. The default's own behaviour has a dedicated test.
+        # Pin the threshold unless the test names one: these exercise LOOP LOGIC,
+        # and the shipped default comes from scripts/calibration.json, so leaving
+        # it implicit would fail them on a recalibration. Its own behaviour has a test.
         if "threshold" not in kwargs:
             argv += ["--threshold", "80"]
         for key, value in kwargs.items():
@@ -230,8 +214,7 @@ def run_loop(tmp, scores_per_round, **kwargs):
 PASS = {"security": 92, "correctness": 90, "readability": 88, "architecture": 85, "performance": 86}
 FAIL = {"security": 78, "correctness": 72, "readability": 70, "architecture": 68, "performance": 84}
 
-# Strictly better than PASS, for exercising the "keep climbing above the
-# minimum while the score is still rising" behaviour.
+# Strictly better than PASS, to exercise climbing above the minimum while rising.
 BETTER = {"security": 96, "correctness": 95, "readability": 94, "architecture": 93, "performance": 94}
 BETTER2 = {"security": 99, "correctness": 98, "readability": 97, "architecture": 96, "performance": 97}
 WORSE = {"security": 70, "correctness": 60, "readability": 58, "architecture": 55, "performance": 60}
@@ -347,8 +330,8 @@ def test_project_inference(tmp_path):
     assert "AGENTS.md" in why
     assert confident is True
 
-    # Nothing at all: report the directory but flag low confidence, so the
-    # caller can refuse instead of reviewing an arbitrary tree.
+    # Nothing at all: report the directory but flag low confidence, so the caller
+    # can refuse instead of reviewing an arbitrary tree.
     bare = tmp_path / "bare"
     bare.mkdir()
     got, why, confident = loop.find_project_root(bare)
@@ -382,9 +365,9 @@ def test_unanchored_session_refuses(tmp_path):
 
 # --- the adaptive termination ladder (§8, M8) --------------------------------
 #
-# The threshold is the MINIMUM requirement; everything above it is desirable.
-# These were previously inline in a 170-line main(), reachable only by running a
-# full council. Extracting them made each rule independently testable.
+# The threshold is the MINIMUM; everything above it is desirable. These lived in a
+# 170-line main() reachable only by a full council; extracted, each rule is
+# independently testable.
 
 def _decide(**kw):
     """Call decide_stop with permissive defaults; override per test."""
@@ -438,8 +421,8 @@ def test_decide_round_cap_reports_the_outcome_truthfully():
     outcome, reason = _decide(round_no=8, max_rounds=8, met_minimum=True)
     assert outcome == "satisfied"
     assert "round cap" in reason
-    # The reason must not contradict the outcome: a run that cleared the minimum
-    # must never be described as having failed to.
+    # The reason must not contradict the outcome: clearing the minimum is never
+    # described as failing to.
     assert "without clearing" not in reason, reason
     assert "minimum met" in reason
     outcome, reason = _decide(round_no=8, max_rounds=8, met_minimum=False)
@@ -755,12 +738,9 @@ def test_outcome_records_the_adaptive_parameters():
 
 
 # --- the fan-out: reviewers must be real profiles (the defect this fixes) ----
-#
-# `delegate_task` children are in-process and inherit the PARENT's HERMES_HOME, so
-# a rubric installed only in a reviewer's own profile is unreachable from them —
-# the council ran five generic subagents wearing dimension labels. These tests pin
-# the fix: every reviewer is spawned under its own profile, and its prompt names
-# its own rubric.
+# `delegate_task` children inherit the PARENT's HERMES_HOME, so a rubric in a
+# reviewer's own profile was unreachable — the council ran five generic subagents
+# in dimension labels. Each now spawns under its own profile, prompt naming it.
 
 def test_the_reviewer_is_one_generalist_profile_sampled_n_times():
     """M8.5's result, pinned: ONE profile sampled, not five specialists.
@@ -904,8 +884,8 @@ def test_read_goals_accepts_a_complete_set(tmp_path):
     ]}), encoding="utf-8")
     goals = loop.read_goals(p, 2)
     assert goals is not None
-    # Normalised into DIMENSIONS order, so a round report reads the same way
-    # regardless of the order the orchestrator happened to emit.
+    # Normalised into DIMENSIONS order, so a report reads the same regardless of
+    # what order the orchestrator emitted.
     assert [g["dimension"] for g in goals["goals"]] == DIMS
 
 
@@ -1030,8 +1010,8 @@ def main() -> int:
     passed = failed = 0
     for name, fn in tests:
         try:
-            # pytest-style: hand tmp_path to tests that declare it, so the same
-            # suite runs under both this harness and `pytest`.
+            # pytest-style: hand tmp_path to tests that declare it, so the suite
+            # runs under both this harness and `pytest`.
             import inspect
             if "tmp_path" in inspect.signature(fn).parameters:
                 with tempfile.TemporaryDirectory() as td:
@@ -1051,11 +1031,9 @@ def main() -> int:
 
 
 # --- collapsed mode: bucketing a generalist's findings by dimension -----------
-#
 # The ablation (M8.5) found one generalist sampled N times better than five
-# specialists at equal cost, so this is now the default mode. The scorer still
-# reads one file per dimension, so what one agent produced has to be regrouped --
-# and every failure here is silent: a dropped finding just lowers a score.
+# specialists at equal cost, so it is the default. The scorer still reads one file
+# per dimension, and every failure here is silent: a drop just lowers a score.
 
 def _sample(tmp: Path, name: str, doc: dict) -> Path:
     p = tmp / name
@@ -1146,9 +1124,8 @@ def test_merge_ignores_a_missing_sample():
         assert counts["samples"] == 0, counts
         for dim in DIMS:
             assert counts[dim] == 0, counts
-        # And it must NOT leave empty dimension files behind. Five empty files score
-        # as a clean 100 and PASS, so writing them would turn a total reviewer
-        # failure into a reported success.
+        # And it must NOT leave empty dimension files: five empty files score a
+        # clean 100 and PASS, turning total reviewer failure into reported success.
         for dim in DIMS:
             assert not (tmp / f"{dim}.json").exists(), dim
 
@@ -1279,13 +1256,10 @@ def test_the_reviewer_is_one_generalist_sampled_five_times_by_default():
 
 
 # ---------------------------------------------------------------------------
-# tools_run -> beta. The bug these exist for: the generalist prompt did not ask
-# for `tools_run` and merge_generalist_samples hardcoded it to [], so beta was 0
-# for every dimension and score = beta*det + (1-beta)*llm collapsed to the LLM's
-# own judgement. The deterministic half -- the pinned toolchain, the probes, det
-# itself -- contributed nothing to the number the gate enforced, and nothing
-# said so. Every other merge test supplies its own fixture, so both halves could
-# drop tools_run and the suite still passed. These go through the real path.
+# tools_run -> beta. The generalist prompt never asked for it and
+# merge_generalist_samples hardcoded [], so beta was 0 everywhere and the score
+# collapsed to the LLM's judgement, silently — and since every other merge test
+# supplies its own fixture, both halves could drop it and still pass. Real path.
 # ---------------------------------------------------------------------------
 
 _spec = importlib.util.spec_from_file_location(
@@ -1435,9 +1409,8 @@ def test_merge_still_works_without_probe_results():
 
 
 # --- asking for the project (the no-hardcoded-paths rule) --------------------
-#
-# The session route is preferred and is tested above (find_project_root). These
-# cover the fallback: a terminal gets asked, anything else gets the refusal.
+# find_project_root (session route) is tested above; these cover the fallback: a
+# terminal gets asked, anything else gets the refusal.
 
 class _FakeStdin:
     def __init__(self, tty: bool):
@@ -1504,9 +1477,8 @@ def test_unanchored_session_without_a_tty_still_refuses():
     real = loop.sys.stdin
     cwd = Path.cwd()
     with tempfile.TemporaryDirectory() as td:
-        # A directory with no git root and no project marker anywhere above it
-        # cannot be built reliably, so assert the branch instead: with no TTY the
-        # prompt returns None and resolve_target must not gain a project from it.
+        # No git root and no marker above cannot be built reliably, so assert the
+        # branch: with no TTY the prompt returns None and resolve_target gains nothing.
         loop.sys.stdin = _FakeStdin(False)
         try:
             assert loop._ask_for_project(Path(td)) is None
@@ -1517,10 +1489,8 @@ def test_unanchored_session_without_a_tty_still_refuses():
 
 
 # --- the profile preflight (the newcomer's first failure) --------------------
-#
-# A run with no profiles produced every sample as rc=1 NO FILE and then reported
-# "gate could not evaluate the run", which names the SYMPTOM. These cover the
-# check that names the cause.
+# With no profiles every sample was rc=1 NO FILE and the gate reported "could not
+# evaluate the run" — the SYMPTOM. These cover the check that names the cause.
 
 def test_hermes_home_honours_the_env_var():
     import os
@@ -1530,11 +1500,10 @@ def test_hermes_home_honours_the_env_var():
     with tempfile.TemporaryDirectory() as td:
         os.environ["HERMES_HOME"] = td
         try:
-            # Compared RAW, like the sibling assertions below: hermes_home() returns
-            # the env value expanduser'd, not resolved. Resolving the right-hand side
-            # passes on Linux only because /tmp is a real directory there — on macOS
-            # `TMPDIR` is under /var, which is a symlink to /private/var, so
-            # Path(td).resolve() would be a different string for the same directory.
+            # Compared RAW, like the siblings below: hermes_home() returns the env
+            # value expanduser'd, not resolved. Resolving passes on Linux only
+            # because /tmp is real; on macOS TMPDIR is under /var -> /private/var,
+            # so Path(td).resolve() is a different string for the same directory.
             assert loop.hermes_home() == Path(td)
         finally:
             if real is None:
@@ -1682,8 +1651,7 @@ def test_hermes_home_falls_back_to_asking_hermes():
 
     with tempfile.TemporaryDirectory() as td:
         # The home `hermes` reports must EXIST: hermes_home() validates with
-        # is_dir(), so a stub pointing at a nonexistent path is correctly
-        # rejected and the branch would go untested.
+        # is_dir(), so a stub at a nonexistent path is rejected and the branch untested.
         custom = Path(td) / "custom-home"
         custom.mkdir()
         stdout = f"Path: {custom}\n"
@@ -1771,7 +1739,7 @@ def test_concurrent_samples_do_not_share_a_prompt_file(tmp_path: Path):
 
     def fake_run(cmd, **kwargs):
         path = Path(cmd[cmd.index("--query-file") + 1])
-        # Hold every caller here, so all five have written before any reads -- the
+        # Hold every caller here so all five have written before any reads — the
         # interleaving the real parallel spawn produces.
         barrier.wait()
         seen[threading.get_ident()] = (path, path.read_text(encoding="utf-8"))

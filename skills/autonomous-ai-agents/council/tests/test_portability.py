@@ -129,12 +129,9 @@ def test_the_allowed_names_are_actually_present():
 
 
 # --- the PATH the systemd unit builds ---------------------------------------
-#
-# The dispatcher's unit does NOT inherit the caller's PATH, so it writes a fixed
-# list, and a location the list forgets is silent: the service starts, `nix` is not
-# found, and nothing is watching to say so. The deleted shell version carried this
-# guard; it applies to Python exactly as it did to the shell, and the list it
-# guards is now in a place where a mistake is harder to notice.
+# The unit does NOT inherit the caller's PATH, so it writes a fixed list, and a
+# forgotten location is silent: the service starts, `nix` is not found, nothing says
+# so. The deleted shell version carried this guard; the list is now harder to notice.
 
 NIX_LOCATIONS = {
     "/run/current-system/sw/bin": "NixOS",
@@ -182,13 +179,10 @@ def test_the_path_check_sees_the_lines_it_claims_to():
 
 
 # --- the council does not depend on a skill library ---------------------------
-#
-# The rubrics the council installs come from its OWN skills/ directory. A Hermes
-# install may ALSO mount an external skill library (skills.external_dirs), and
-# `council setup bots` mirrors that mount into the profiles it creates — but only
-# when one exists, and never on the review path. That is what keeps the council
-# usable on a machine that has Hermes and nothing else: the library is somebody
-# else's repository, and a review must not need it.
+# Rubrics come from the council's OWN skills/. A Hermes install may also mount an
+# external library (skills.external_dirs) and `setup bots` mirrors it into the
+# profiles — but only when one exists, never on the review path: that is what keeps
+# the council usable on a machine with Hermes and nothing else.
 
 REVIEW_PATH = (
     "council_loop.py", "probes.py", "score_reviews.py", "doctor.py",
@@ -286,10 +280,9 @@ def test_the_launchers_pass_the_flake_location():
     """Both entry points must set REVIEW_COUNCIL_FLAKE_DIR, or `setup skill` from
     the nix app or the container would refuse — and from the image there is no
     checkout to fall back to."""
-    # Every Nix source, not flake.nix alone. The launchers live in nix/builders.nix
-    # since the flake was split into flake-parts modules, and a test pinned to one
-    # filename fails on the next move rather than on a real regression. tests/golden
-    # is fixture data and is not source.
+    # Every Nix source, not flake.nix alone: the launchers live in nix/builders.nix
+    # since the flake-parts split, and a test pinned to one filename fails on the next
+    # move rather than on a regression. tests/golden is fixture data, not source.
     nix = "\n".join(
         p.read_text(encoding="utf-8")
         for p in sorted(REPO.rglob("*.nix"))
@@ -297,9 +290,9 @@ def test_the_launchers_pass_the_flake_location():
         and ".git" not in p.parts
         and "golden" not in p.parts
     )
-    # Counts ASSIGNMENTS (`NAME=`), not mentions: the variable is also named in
-    # comments explaining what the staged tree is for, and a bare substring count
-    # fails on prose rather than on a launcher that stopped setting it.
+    # Counts ASSIGNMENTS (`NAME=`), not mentions: the variable is named in comments
+    # explaining the staged tree, so a substring count fails on prose, not a launcher
+    # that stopped setting it.
     assert nix.count("REVIEW_COUNCIL_FLAKE_DIR=") == 2, (
         "expected REVIEW_COUNCIL_FLAKE_DIR to be SET in both mkDispatcher and "
         "mkContainerEntrypoint"

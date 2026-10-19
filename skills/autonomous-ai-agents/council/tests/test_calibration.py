@@ -280,11 +280,9 @@ def test_a_labelless_manifest_yields_no_threshold():
 
 
 # --- alpha_t sensitivity ----------------------------------------------------
-#
 # M8 records the aggregate weights as uncalibrated, on the rule "reweight only with
-# evidence". Before looking for that evidence, measure the leverage: a weighted mean of
-# EQUAL values cannot move at all, so the spread across dimensions is the ceiling on
-# anything a reweighting could achieve.
+# evidence". Measure the leverage first: a weighted mean of EQUAL values cannot move,
+# so the spread across dimensions caps what any reweighting could achieve.
 
 THRESHOLD = score.calibrated_threshold()
 
@@ -341,15 +339,13 @@ def test_the_swept_weights_still_sum_to_one():
     result = cal.weight_sensitivity(scores, THRESHOLD)
     assert abs(sum(result["weights"].values()) - 1.0) < 1e-9, result["weights"]
 
-    # Zeroing a weight redistributes PROPORTIONALLY among the others, not equally:
-    # they keep their relative sizes. So the aggregate lands on the weighted mean of
-    # the remaining dimensions at their original proportions, not their plain mean.
+    # Zeroing a weight redistributes PROPORTIONALLY, not equally: the others keep their
+    # relative sizes, so the aggregate is their weighted mean, not their plain mean.
     security = next(r for r in result["per_dimension"] if r["dimension"] == "security")
     others = {d: w for d, w in score.WEIGHTS.items() if d != "security"}
     total = sum(others.values())
     expected = sum(w * scores[d] for d, w in others.items()) / total
-    # `aggregate_at_0` is reported rounded to 4 dp, so compare at that resolution
-    # rather than against the full-precision value.
+    # `aggregate_at_0` is reported rounded to 4 dp; compare at that resolution.
     assert abs(security["aggregate_at_0"] - round(expected, 4)) < 1e-9, (
         f"expected the proportional mean {round(expected, 4):.4f}, got "
         f"{security['aggregate_at_0']:.4f}")
@@ -383,11 +379,9 @@ def test_the_flag_reports_the_fixture_it_was_given():
 
 
 # --- run_probes: the trap that made a calibration measure nothing -------------
-#
-# `probes.py` refuses a bare invocation and prints usage instead of JSON. A caller that
-# only checks `json.loads` therefore gets an empty list, which reads as "no probes" and
-# turns into "no labels" — a much less useful error than the truth. Worse, the silent
-# version produced a calibration with ZERO points, which is how this was found.
+# `probes.py` refuses a bare invocation and prints usage instead of JSON, so a caller
+# checking only `json.loads` gets an empty list — "no probes" becomes "no labels".
+# The silent version produced a calibration with ZERO points, which is how this was found.
 
 def test_run_probes_sets_the_dispatch_variable(monkeypatch=None):
     """Called as a library, the subprocess must still be allowed to run."""

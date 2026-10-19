@@ -92,13 +92,9 @@ done
 echo "================================================"
 
 # A rename-and-recreate leaves the OLD repository alive under a new name, still serving
-# the old objects. That is the step people skip, so check it explicitly.
-#
-# GitHub also keeps a REDIRECT from the old name, so after renaming X -> X-old the plain
-# name X still resolves and a push to X lands in X-old while reporting success — and the
-# refs then "verify", because they agree with the wrong repository. The tell is that the
-# two names advertise IDENTICAL refs, so compare them rather than trusting that X points
-# at the repository you think it does.
+# the old objects - the step people skip. GitHub also keeps a REDIRECT from the old name,
+# so a push to X lands in X-old and reports success while the refs "verify" against the
+# wrong repo; the tell is that both names advertise IDENTICAL refs.
 echo "leftover renamed repositories?"
 for spec in "$@"; do
   repo="${spec%%=*}"

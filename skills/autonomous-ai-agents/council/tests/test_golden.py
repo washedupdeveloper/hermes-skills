@@ -161,12 +161,9 @@ def test_it_catches_a_threshold_regression():
 
 
 # --- the CLI, which is what CI runs ----------------------------------------
-#
-# These spawn the module as a PROCESS, which is a hand-run as far as the module
-# can tell: `scripts/golden.py` refuses to execute unless the dispatcher set
-# REVIEW_COUNCIL_DISPATCHED. The test IS the dispatcher here, so it says so —
-# exactly as council.py does, and for the same reason: the guard must not have a
-# hole just because a caller happens to be Python.
+# These spawn the module as a PROCESS, which is a hand-run as far as it can tell:
+# `scripts/golden.py` refuses unless the dispatcher set REVIEW_COUNCIL_DISPATCHED. The
+# test IS the dispatcher — the guard must not have a hole because the caller is Python.
 
 def _as_dispatcher():
     env = dict(os.environ)

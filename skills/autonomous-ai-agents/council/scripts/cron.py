@@ -33,8 +33,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-#: Daily at 09:00. A review is a diff-shaped job, so daily is a sane default; a team
-#: that wants per-push runs should wire the forge, not a timer.
+#: Daily at 09:00. A team that wants per-push runs should wire the forge, not a timer.
 DEFAULT_SCHEDULE = "0 9 * * *"
 DEFAULT_DELIVER = "local"
 
@@ -81,9 +80,8 @@ def build(repo: Path, schedule: str = DEFAULT_SCHEDULE, deliver: str = DEFAULT_D
 
 
 def render(plan: Dict[str, Any]) -> List[str]:
-    # A one-line command is unreadable once the prompt is in it, and the prompt has to
-    # be in it — the job must be self-contained. Backslash continuations keep it both
-    # copy-pasteable and legible.
+    # The prompt must be inline (the job is self-contained), so backslash continuations
+    # keep the command both copy-pasteable and legible.
     argv = plan["argv"]
     head, schedule, prompt = argv[:-2], argv[-2], argv[-1]
     lines = [

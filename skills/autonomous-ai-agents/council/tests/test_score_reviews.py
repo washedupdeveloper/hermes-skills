@@ -48,9 +48,8 @@ def _write_run(tmp_path: Path, scores: dict, blocking: bool = False) -> Path:
 
 
 def _gate(run: Path, *extra: str) -> subprocess.CompletedProcess:
-    # score_reviews.py refuses to execute without REVIEW_COUNCIL_DISPATCHED, so
-    # this helper declares itself the dispatcher — it is spawning the module as a
-    # program, which is exactly what the guard is about.
+    # score_reviews.py refuses to run without REVIEW_COUNCIL_DISPATCHED; this helper
+    # spawns it as a program, which is exactly what the guard is about.
     env = dict(os.environ, REVIEW_COUNCIL_DISPATCHED="1")
     return subprocess.run(
         [sys.executable, str(GATE), str(run), *extra],
@@ -265,9 +264,8 @@ def test_continuation_prompt_is_capped(tmp_path):
 
 
 # --- extracted verdict logic ------------------------------------------------
-#
-# The pass predicate is the most consequential line in the framework. It used to
-# be buried in the middle of a 100-line loader; now it is a function.
+# The pass predicate is the most consequential line in the framework; it was buried
+# mid-way through a 100-line loader, now it is a function.
 
 def test_verdict_passes_with_aggregate_and_no_blockers():
     satisfied, reason = _gate_mod().verdict_summary(90.0, 80.0, [])
@@ -459,10 +457,9 @@ def test_an_explicit_threshold_still_overrides(tmp_path):
 
 
 # --- severity-weighted density (§3) -----------------------------------------
-#
-# The density numerator was a raw count of open findings, so a reviewer that
-# RECORDED what it verified at `info` scored worse than one that stayed silent.
-# The incentive pointed away from the diligence the council exists to reward.
+# The numerator was a raw count of open findings, so a reviewer that RECORDED what
+# it verified at `info` scored worse than one that stayed silent — the incentive
+# pointed away from the diligence the council exists to reward.
 
 
 def test_info_weighs_nothing():
@@ -524,11 +521,11 @@ def test_a_thorough_reviewer_does_not_score_worse_than_a_silent_one():
 
 
 # ---------------------------------------------------------------------------
-# Invocation aliases. Observed on a real run: the reviewer reported running
-# `nix flake check --no-build --keep-going`, the probe table expects the tool
-# `flake-check`, and the generic rules produced {nix, nix-flake} -- so the tool
-# ran, beta could not see it, and correctness was scored as if it had not. The
-# canonical name there is the SUBCOMMAND PAIR, which no generic join reaches.
+# Invocation aliases. On a real run the reviewer reported
+# `nix flake check --no-build --keep-going`, the probe table expects `flake-check`,
+# and the generic rules produced {nix, nix-flake} — so the tool ran, beta could not
+# see it, and correctness scored as if it had not. The canonical name is the
+# SUBCOMMAND PAIR, which no generic join reaches.
 # ---------------------------------------------------------------------------
 
 
@@ -559,22 +556,15 @@ def test_the_alias_does_not_invent_a_match_it_should_not():
 
 
 # ---------------------------------------------------------------------------
-# An ARGUMENT containing a path must not destroy the command.
-#
-# Observed on a real run of this repository. `tool_name_candidates` stripped
-# everything before the LAST `/` in the whole command string, so:
-#
-#   PATH=$TC/bin:$PATH python3 -m pytest tests/ -q  ->  candidates {-q, -q-(308}
+# An ARGUMENT containing a path must not destroy the command: on a real run of this
+# repository `tool_name_candidates` stripped everything before the LAST `/` in the
+# whole string, so
+#   PATH=$TC/bin:$PATH python3 -m pytest tests/ -q  ->  {-q, -q-(308}
 #   PATH=$TC/bin:$PATH ruff check scripts/ tests/   ->  {(all, (all-checks}
 #   python3 -m py_compile scripts/*.py              ->  {*.py}
-#
-# The reviewers HAD run pytest, ruff and mypy, and the pinned toolchain provides
-# them, but beta could not see them: correctness measured 0.75 and readability
-# 0.60, so three of five dimensions were scored partly on judgement when they
-# could have been deterministic. Worse, the run's next-steps.md then advised
-# "install ruff, mypy (beta 0.60 -> 1.00)" for tools that were already installed
-# and already run.
-#
+# The reviewers HAD run pytest, ruff and mypy: correctness 0.75, readability 0.60, so
+# three of five dimensions were partly judgement. Worse, next-steps.md advised
+# "install ruff, mypy (beta 0.60 -> 1.00)" for tools already installed and run.
 # Only the EXECUTABLE may be path-stripped; a command's arguments are its own.
 # ---------------------------------------------------------------------------
 
@@ -642,8 +632,7 @@ def test_the_advice_says_not_run_rather_than_install():
 
 
 # --- scoring accuracy: dimension-aware blocking ----------------------------------
-#
-# Nine well-regarded repositories produced 93 of 94 blocking findings in security and
+# Nine well-regarded repositories put 93 of 94 blocking findings in security and
 # correctness. Those two are the hard requirements; the rest move the score without
 # vetoing a merge, and a `critical` anywhere still blocks so no dimension loses its floor.
 

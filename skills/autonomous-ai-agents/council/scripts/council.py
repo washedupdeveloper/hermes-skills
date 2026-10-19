@@ -25,10 +25,9 @@ try:
 except ImportError:  # pragma: no cover
     toolchain = None  # type: ignore
 
-# name -> (module, audience, takes arguments, one-line description)
-#   audience "user" ships in the app; "dev" is the devshell only.
-#   takes arguments false means the verb ACTS, so --help is answered here rather
-#   than passed through -- a --help that installs something is a trap.
+# name -> (module, audience, takes arguments, description). "user" ships in the app,
+# "dev" is devshell-only. takes_arguments false means the verb ACTS, so --help is
+# answered here: a --help that installs something is a trap. docs/EXTENDING.md.
 VERBS: Dict[str, Tuple[str, str, bool, str]] = {
     "review": ("council_loop.py", "user", True, "drive a review to a verdict (the loop)"),
     "gate": ("score_reviews.py", "user", True, "the deterministic gate: score a run directory"),
@@ -92,23 +91,9 @@ def _line(label: str, what: str) -> str:
 
 
 # ── The dispatch rule ────────────────────────────────────────────────────────
-#
-# A module under scripts/ is not a program. It is reached through this CLI, which
-# is what puts the pinned toolchain on PATH, sets the audience, and knows which
-# verb maps to which module. Running one directly skips all three, and several of
-# them act rather than report: `setup bots` writes into HERMES_HOME, `setup skill`
-# prunes the skill deployment, `corpus` plants defects in a repository it is pointed at,
-# and `review`, `sample` and `ablate` spend real agent turns over the network.
-#
-# So a module refuses a direct invocation unless this variable is set, and this
-# file sets it. Child processes inherit it, which is how the harness still runs
-# probes.py and score_reviews.py as subprocesses.
-#
-# WHAT THIS IS NOT: a security boundary. It stops an ACCIDENTAL `python3
-# scripts/x.py` -- someone exploring the tree -- and it says what to run instead.
-# It does not stop a caller who sets the variable, and nothing in this repository
-# could: an agent with a terminal can set it too. The boundary is the sandbox and
-# the filesystem, not this check. Do not describe it as more than it is.
+# A module under scripts/ is not a program: this CLI sets the toolchain PATH, the
+# audience and the verb map, and several verbs ACT rather than report. NOT a security
+# boundary -- it stops an accidental `python3 scripts/x.py`, nothing more.
 DISPATCH_VAR = "REVIEW_COUNCIL_DISPATCHED"
 
 
@@ -188,13 +173,9 @@ def _setup(args: List[str]) -> int:
             print(_line(f"setup {sub}", what))
         return 0
     if not name or name.startswith("-"):
-        # Bare `council setup`, or `council setup --yes`, is the first-run path: a
-        # newcomer should not have to know which sub-verb installs what. It runs
-        # the GUIDED setup, which asks the few questions that are theirs, writes
-        # one editable config, and then installs both halves in order (the skill
-        # first — it is the half that needs no Hermes profile to exist yet, and
-        # the half that carries the framework a machine without nix or docker
-        # runs). Flags are passed through to it.
+        # Bare `council setup` is the first-run path: a newcomer should not have to
+        # know which sub-verb installs what. Skill first -- it needs no Hermes profile
+        # to exist, and carries the framework where nix and docker are absent.
         return _exec(SETUP["init"][0], args if name else [])
     if name not in SETUP:
         print(f"council setup: expected one of: {' '.join(SETUP)}", file=sys.stderr)

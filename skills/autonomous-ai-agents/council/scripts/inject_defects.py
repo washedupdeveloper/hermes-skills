@@ -144,15 +144,9 @@ INJECTIONS: List[Dict[str, Any]] = [
                    "  programs.nh = {\n    enable = true;\n",
     },
     # --- the hard class -------------------------------------------------------
-    #
-    # The defects above all contradict a comment beside them, which makes them
-    # findable by reading one file carefully. A single generalist pass found eight
-    # of the ten. These next ones are the class that actually separates a
-    # specialist from a generalist: each is invisible in its own file, because
-    # nothing there is wrong. They only exist as a relationship BETWEEN files --
-    # a plain definition quietly beating another module's `lib.mkDefault`, or a
-    # list-typed option merging where a restriction was intended. Nothing is
-    # syntactically wrong, the tree evaluates, and the repo's gate passes.
+    # Invisible in their own file (nothing there is wrong, the tree evaluates): each
+    # exists only BETWEEN files, e.g. a plain definition quietly beating another
+    # module's `lib.mkDefault`. A single generalist pass found 8 of the 10 above.
     {
         "id": "SEC-5",
         "path": "modules/clanServices/wsl/default.nix",
@@ -290,10 +284,9 @@ INJECTIONS: List[Dict[str, Any]] = [
 ]
 
 
-# The exact text of each defect, used to locate it in the finished file. For a
-# deletion the marker is the anchor that remains, and the claim explains what is
-# missing. Kept separate from the edits so a line number can never be recorded
-# from a half-applied file.
+# Locates each defect in the FINISHED file: for a deletion the marker is the anchor
+# that remains. Separate from the edits so no line number is ever recorded from a
+# half-applied file.
 MARKERS: Dict[str, str] = {
     "SEC-1":  '                PasswordAuthentication = lib.mkForce true;',
     "SEC-2":  '                accept-flake-config = true;',
@@ -429,9 +422,8 @@ def main(argv: List[str] | None = None) -> int:
         print(f"council corpus: {base} is not a directory", file=sys.stderr)
         return 2
 
-    # Both checks run BEFORE the deletion. `out` is removed before it is written,
-    # so an overlapping or unusable input used to cost the caller data and only
-    # then report the mistake.
+    # Both checks run BEFORE the deletion: `out` is removed before it is written, so a
+    # bad input would cost the caller data first and report the mistake second.
     check_separation(base, out)
     check_targets(base)
 
@@ -443,10 +435,9 @@ def main(argv: List[str] | None = None) -> int:
 
     manifest = apply_and_locate(INJECTIONS, out)
 
-    # Nix only sees a file it knows about, so a copied tree that is not a git
-    # repository makes `nix eval` and `nix flake check` fail on the corpus and
-    # the probe layer reports nothing. Commit it. (Never `git add -N` here: the
-    # intent-to-add trap records empty blobs, which is a different failure.)
+    # Nix only sees a file git knows about: an uncommitted tree makes `nix eval` and
+    # `nix flake check` fail and the probe layer report nothing. Never `git add -N`:
+    # intent-to-add records empty blobs, which is a different failure.
     for cmd in (["git", "init", "-q"],
                 ["git", "add", "-A"],
                 ["git", "-c", "user.name=corpus", "-c", "user.email=corpus@localhost",

@@ -122,9 +122,9 @@ def test_a_foreign_destination_is_refused():
 
 
 # --- sync_to_skill: host caches are not content ------------------------------
-# `--check` used to flag bytecode as EXTRA, so a deployment went permanently red
-# the moment anyone verified it the documented way -- by running its suite in
-# place. 40 `.pyc` files from one pytest run were enough to fail the gate.
+# `--check` used to flag bytecode as EXTRA, so a deployment went permanently red the
+# moment anyone verified it the documented way, in place: 40 `.pyc` files from one
+# pytest run were enough to fail the gate.
 
 def _prune(src: Path, dst: Path) -> tuple[bool, str]:
     """Run prune_tree in CHECK mode; return (drifted, output)."""
@@ -150,8 +150,8 @@ def test_find_files_skips_host_caches():
         (root / "stray.pyc").write_bytes(b"\x00")
         (root / ".pytest_cache").mkdir()
         (root / ".pytest_cache" / "CACHEDIR.TAG").write_text("x\n", encoding="utf-8")
-        # as_posix(): relpath() yields OS separators, and this asserts WHICH files
-        # were found, not how the platform spells a path.
+        # as_posix(): relpath() yields OS separators; this asserts WHICH files were
+        # found, not how the platform spells a path.
         found = sorted(Path(os.path.relpath(p, root)).as_posix()
                        for p in sync.find_files(td))
         assert found == ["scripts/real.py"], found
@@ -291,11 +291,9 @@ def test_entrypoint_reports_no_hermes_rather_than_guessing():
 
 
 # --- entrypoint: what is a review, and what is the CLI ------------------------
-#
-# The container's Cmd is `--help`, and the entrypoint used to resolve Hermes
-# BEFORE looking at its arguments -- so `docker run review-council` printed a
-# credential error instead of the help, and `doctor` or `gate` were unreachable
-# in the image. Only a REVIEW needs Hermes.
+# The container's Cmd is `--help`, and the entrypoint resolved Hermes BEFORE looking
+# at its arguments — so `docker run review-council` printed a credential error
+# instead of the help, and `doctor`/`gate` were unreachable in the image.
 
 def test_entrypoint_sends_the_cli_verbs_to_the_cli():
     entry = _load("entrypoint")
@@ -322,17 +320,15 @@ def test_entrypoint_reads_the_real_verb_table():
 
 
 # --- the runtime uid needs a passwd entry ------------------------------------
-#
-# `--user "$(id -u):$(id -g)"` is how a mounted repo becomes writable, and it gives
-# the container a uid the image's passwd does not know. nix resolves $HOME through
-# getpwuid and fails without an entry -- "cannot determine user's home directory" --
-# even when HOME is set, so every nix probe degrades and beta silently drops.
+# `--user "$(id -u):$(id -g)"` makes a mounted repo writable but gives the container
+# a uid its passwd lacks. nix resolves $HOME through getpwuid and fails without an
+# entry — "cannot determine user's home directory" — even with HOME set, so every
+# nix probe degrades and beta silently drops.
 
-# `ensure_passwd_entry` needs `pwd`: the container path appends to /etc/passwd, and
-# Windows has no passwd database at all, so there the function reports "nothing
-# added" rather than raising. The capability is POSIX/container-only, so the test
-# that requires it is guarded; the Windows behaviour is pinned separately below, on
-# every platform, by hiding the module.
+# `ensure_passwd_entry` needs `pwd`: the container path appends to /etc/passwd and
+# Windows has no passwd database, so there it reports "nothing added" rather than
+# raising. The POSIX/container test is guarded; the Windows behaviour is pinned on
+# every platform below, by hiding the module.
 _HAS_PWD = importlib.util.find_spec("pwd") is not None
 _ABSENT = object()
 
@@ -401,17 +397,13 @@ def test_a_missing_passwd_file_is_not_an_error(tmp_path):
 
 
 # --- the dispatch rule --------------------------------------------------------
-#
-# A module under scripts/ is not a program. Several of them ACT rather than
-# report — `setup bots` writes into HERMES_HOME, `setup skill` prunes a skill
-# deployment, `corpus` plants defects in a repository it is pointed at, and
-# `review`, `sample` and `ablate` spend real agent turns — so a bare
-# `python3 scripts/<module>.py` must refuse.
-#
+# A module under scripts/ is not a program: `setup bots` writes into HERMES_HOME,
+# `setup skill` prunes a deployment, `corpus` plants defects, and `review`, `sample`
+# and `ablate` spend real agent turns — so `python3 scripts/<module>.py` must refuse.
+
 # The guard lives in `__main__`, never at import: the suite loads these files as
-# LIBRARIES and calls main() directly, which is not a hand-run. The tests above
-# depend on that, so this is also the test that keeps the guard from being moved
-# somewhere it would break them.
+# LIBRARIES and calls main() directly, which is not a hand-run. This test keeps the
+# guard from moving somewhere that would break the tests above.
 
 def _main_blocks():
     """(module, verb) for every module that has a `__main__` block."""

@@ -64,9 +64,8 @@ def check_tree(root: Path, quiet: bool = False, known: set | None = None) -> int
         print(f"no SKILL.md under {root}", file=sys.stderr)
         return 2
     names = {p.parent.name for p in files}
-    # Resolve against the UNION of every root given. A repo-only run cannot see
-    # the bundled skills this repo's skills reference, so without this every such
-    # reference reports as broken and the check becomes noise.
+    # Resolve against the UNION of every root given: a repo-only run cannot see the bundled
+    # skills this repo's skills reference, so each would report as broken - pure noise.
     resolvable = names | (known or set())
     failures = 0
 
@@ -108,8 +107,8 @@ def main(argv):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     roots = [Path(a).expanduser() for a in args]
-    # The union is computed across ALL roots before any is checked, so a
-    # reference is judged against the whole library rather than one slice of it.
+    # Union across ALL roots before any is checked, so a reference is judged against the whole
+    # library rather than one slice of it.
     known: set = set()
     for r in roots:
         known |= {p.parent.name for p in r.rglob("SKILL.md")}

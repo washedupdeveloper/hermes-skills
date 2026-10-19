@@ -21,15 +21,9 @@ REPO = HERE.parent
 GATE = HERE / "score_reviews.py"
 BASELINE = HERE / "baseline.py"
 
-# One entry per dimension: the rubric skill it loads and the prefix for its finding
-# ids. Kept as ONE table because the two values are always read together — as
-# parallel dicts they could drift out of step, and a dimension missing from one of
-# them would fail only at runtime.
-#
-# There is no `profile` field any more. Five per-dimension reviewer profiles used to
-# be spawned here; M8.5 measured that arrangement against one generalist sampled N
-# times and the generalist won (22/22 injected defects against 13/22), so the
-# profiles were deleted and this table is now just the rubric wiring.
+# One entry per dimension: the rubric skill and the finding-id prefix. ONE table, because
+# the two are always read together and parallel dicts drift. No `profile` field: five
+# specialist profiles lost to one generalist (13/22 vs 22/22, M8.5), which loads all five.
 DIMENSION_SPEC: Dict[str, Dict[str, str]] = {
     "security": {"rubric": "reviewer-security", "prefix": "SEC"},
     "correctness": {"rubric": "reviewer-correctness", "prefix": "COR"},
@@ -41,10 +35,9 @@ DIMENSIONS: List[str] = list(DIMENSION_SPEC)
 
 ORCHESTRATOR_PROFILE = "council-orchestrator"
 
-# The built-in goal per dimension, used when the orchestrator cannot set one.
-# Deliberately QUALITATIVE: a goal that names a score invites gaming, and the
-# threshold is held out of every child's context (§9, anti-gaming). These are the
-# fallbacks, not the norm — the orchestrator normally writes the round's goals.
+# The built-in goal per dimension, the fail-open fallback when the orchestrator cannot
+# set one. Deliberately QUALITATIVE: a goal naming a score invites gaming, and the
+# threshold is held out of every child's context (§9, anti-gaming).
 DEFAULT_GOALS: Dict[str, Dict[str, str]] = {
     "security": {
         "objective": "No new secret, credential, injection surface or unsafe default "
@@ -79,19 +72,9 @@ DEFAULT_GOALS: Dict[str, Dict[str, str]] = {
 }
 
 # --- Prompts ----------------------------------------------------------------
-# The HARNESS owns the fan-out: it spawns one reviewer per dimension, each in its
-# own profile so it gets its own rubric. The orchestrator aggregates.
-#
-# Why the harness and not the orchestrator: `delegate_task` children are in-process
-# and inherit the PARENT's HERMES_HOME, so they cannot load a reviewer rubric that
-# is installed only in the reviewer's own profile. Spawning profiles is the only
-# way a reviewer actually gets its rubric — and doing it here rather than through
-# the orchestrator's `terminal` makes the fan-out parallel and deterministic
-# instead of LLM-mediated. The orchestrator keeps the judgement: validation,
-# aggregation, the evidence matrix, and the control message.
-#
-# The threshold stays OUT of every child's context (§9, anti-gaming). A reviewer
-# gets its rubric and its probe slice and nothing about how it will be judged.
+# The HARNESS owns the fan-out: one reviewer per dimension, each in its own profile,
+# because `delegate_task` children inherit the PARENT's HERMES_HOME and cannot load a
+# rubric installed only there. The threshold stays OUT of every child's context (§9).
 
 AGGREGATE_PROMPT = """Load your review-council-orchestrator skill and aggregate this
 round of the council.
@@ -136,17 +119,9 @@ narrate what the reviewers said — the reader has their files. Cite finding ids
 
 GENERALIST_PROFILE = "council-generalist"
 
-#: The collapsed mode's prompt. One agent, all five rubrics, N samples.
-#:
-#: The ablation (docs/MILESTONES.md M8.5) measured five specialists against one
-#: generalist sampled five times and the generalist won: 22/22 defects against
-#: 13/22 on the same corpus at the same cost, with `generalist-bare` reaching 22/22
-#: with no rubric at all. The split into five isolated dimensions was not earning
-#: its cost, so this mode runs one reviewer several times and buckets what it finds
-#: by the dimension each finding declares.
-#:
-#: The output is deliberately shaped so the existing scorer reads it unchanged: the
-#: findings are regrouped into the same per-dimension files the specialists wrote.
+#: The collapsed mode's prompt: one agent, all five rubrics, N samples. M8.5 measured five
+#: specialists against this at equal cost and they lost — 22/22 injected defects against
+#: 13/22. Findings are reshaped into the per-dimension files the scorer already reads.
 GENERALIST_PROMPT = """Load these five skills and review this change as ONE generalist reviewer:
 {rubrics}
 
@@ -360,8 +335,7 @@ def find_project_root(start: Path) -> Tuple[Path, str, bool]:
         ("Cargo.toml", "Cargo.toml"),
         ("go.mod", "go.mod"),
     )
-    # Prefer the nearest ancestor that is a git root — that is the project
-    # boundary Hermes itself uses.
+    # Nearest git root wins: that is the boundary Hermes itself uses.
     for candidate in (start, *start.parents):
         if (candidate / ".git").exists():
             return candidate, f"git repository root at {candidate}", True
@@ -460,20 +434,13 @@ def run_hermes(binary: str, repo: Path, prompt: str, timeout: int, log: Path,
     The profile decides which skills that agent can load, which is exactly why a
     reviewer MUST run under its own profile: its rubric is installed only there.
     """
-    # Scoped by cwd rather than `--in`. `--in` is Hermes main only; the published
-    # wheel (0.19.0) rejects it and the run dies at argparse, before any agent
-    # starts. `--in DIR` means "change into DIR before starting", so the child's
-    # cwd is the equivalent that works on both. A container for non-Nix users
-    # depends on this: Hermes refuses to build from source via pip, so the wheel
-    # is the only install available there.
-    # The prompt goes in a FILE, never on the command line. `-q <prompt>` is
-    # capped by the kernel's per-argument limit (MAX_ARG_STRLEN — 65536 bytes on
-    # Linux), and a real repository's probe JSON alone runs to ~400 KB, so the
-    # spawn died with `[Errno 7] Argument list too long` and every sample came
-    # back rc=126 / NO FILE. It passed on a two-file fixture (3.6 KB of probes)
-    # and failed on every real repository — the worst way for this to fail.
-    # `--query-file` has no such limit and is not shell-interpreted, so quotes,
-    # `$(...)` and backticks in the prompt survive verbatim.
+    # Scoped by cwd, not `--in`: `--in` is Hermes main only and the published wheel
+    # (0.19.0) rejects it at argparse, before any agent starts. The container depends on
+    # this — Hermes refuses to build from source via pip, so the wheel is all it has.
+
+    # The prompt goes in a FILE: `-q <prompt>` hits MAX_ARG_STRLEN (65536 bytes) and a
+    # real repo's probe JSON runs ~400 KB, so the spawn died with `[Errno 7] Argument
+    # list too long` / rc=126 on every real repo. `--query-file` has no limit, no shell.
     log.parent.mkdir(parents=True, exist_ok=True)
     prompt_file = prompt_path_for(log)
     prompt_file.write_text(prompt, encoding="utf-8")
@@ -491,14 +458,9 @@ def run_hermes(binary: str, repo: Path, prompt: str, timeout: int, log: Path,
             fh.write(out + f"\n[timeout after {timeout}s]\n")
         return 124, out
     except OSError as exc:
-        # A spawn can be refused outright: on Windows an Application Control
-        # policy blocks CreateProcess with WinError 4551. That is THIS reviewer's
-        # failure, not the run's. Letting it propagate kills every sibling
-        # reviewer's finished work -- the samples run in one ThreadPoolExecutor
-        # and the first exception aborts the whole batch, which is how a 37-minute
-        # run that had already produced two good reviews reported nothing.
-        # Returning a failure code instead makes it a NO FILE gap for this
-        # dimension, which the round reports and the gate scores as an error.
+        # A spawn can be refused outright: on Windows an Application Control policy blocks
+        # CreateProcess with WinError 4551, and letting that propagate aborts the whole
+        # ThreadPoolExecutor batch (a 37-minute run reported nothing); rc 126 is a NO FILE gap.
         msg = f"[could not start the reviewer process: {exc}]"
         with log.open("a", encoding="utf-8") as fh:
             fh.write(msg + "\n")
@@ -598,12 +560,8 @@ def count_new_verified(round_dir: Path, previous_ids: set) -> Tuple[int, set]:
 
 
 # --- Convening the review ---------------------------------------------------
-#
-# ONE generalist profile, sampled `samples` times, then bucketed by the dimension
-# each finding declares (see run_generalist_reviewers). Five per-dimension reviewer
-# profiles used to be spawned here; M8.5 measured that arrangement against this one
-# at equal cost and it lost (13/22 injected defects against 22/22), so the profiles
-# and the fan-out were deleted rather than left as a mode nothing installs.
+# ONE generalist profile sampled `samples` times, bucketed by the dimension each finding
+# declares. Five specialist profiles lost to this at equal cost: 13/22 against 22/22 (M8.5).
 
 
 
@@ -899,10 +857,8 @@ def merge_generalist_samples(sample_paths: List[Path], round_dir: Path,
             entry["parsed"] = entry["parsed"] or bool(tool.get("parsed", True))
 
     if samples == 0:
-        # Nothing was readable. Writing five empty dimension files here would score as
-        # a clean 100 and PASS -- so a total reviewer failure would report success.
-        # Leave the dimensions MISSING instead: the gate treats a missing file as an
-        # error (exit 2) and the round reports them, which is the honest outcome.
+        # Nothing was readable. Five empty dimension files would score as a clean 100 and
+        # PASS, so leave them MISSING: the gate treats a missing file as an error (exit 2).
         _record_merge(round_dir, dropped, 0)
         return {"samples": 0, "dropped": dropped, **{d: 0 for d in DIMENSIONS}}
 
@@ -1146,8 +1102,8 @@ def run_generalist_reviewers(binary: str, repo: Path, run_dir: Path, scope: str,
     rc_by_dim: Dict[str, int] = {}
     for dim in DIMENSIONS:
         written = (run_dir / f"{dim}.json").exists()
-        # Report the worst sample rc when a dimension produced nothing, so a
-        # total failure still surfaces instead of reading as a clean empty review.
+        # Report the worst sample rc when a dimension produced nothing, so a total
+        # failure still surfaces instead of reading as a clean empty review.
         rc_by_dim[dim] = 0 if written and merged["samples"] else (
             max(codes.values()) if codes else 2)
     return rc_by_dim
@@ -1252,10 +1208,8 @@ def hermes_home() -> Optional[Path]:
         if candidate.is_dir():
             return candidate
 
-    # The cheap answers first. install_bots.py asks Hermes first because it
-    # needs the authoritative home to WRITE to; this only checks whether two
-    # directories exist, and spawning `hermes profile show default` costs ~550 ms
-    # (measured) -- which was most of a `--dry-run`'s 612 ms.
+    # Cheap answers first: `hermes profile show default` costs ~550 ms (measured), most
+    # of a `--dry-run`'s 612 ms. install_bots.py asks Hermes first because it WRITES there.
     candidates = [Path.home() / ".hermes"]
     local = os.environ.get("LOCALAPPDATA")
     if local:
@@ -1264,8 +1218,8 @@ def hermes_home() -> Optional[Path]:
         if candidate.is_dir():
             return candidate
 
-    # Last resort: a home that is neither the default nor named in the
-    # environment. Only here is the subprocess worth its cost.
+    # Last resort: a home that is neither the default nor in the environment. Only here is
+    # the subprocess worth its cost.
     binary = hermes_bin()
     if binary:
         try:
@@ -1337,9 +1291,8 @@ def resolve_target(explicit: Optional[str]) -> Tuple[Optional[Path], int]:
     """
     repo, why, confident = resolve_project(explicit)
     if not confident and explicit is None:
-        # The session route was tried first, by resolve_project. With no anchor
-        # and a person at the terminal, ask rather than refuse: the first run is
-        # exactly when the answer is needed.
+        # Ask rather than refuse when a person is at the terminal: the first run is exactly
+        # when the answer is needed.
         asked = _ask_for_project(repo)
         if asked is not None:
             repo, why, confident = asked, "answered at the prompt", True
@@ -1347,9 +1300,8 @@ def resolve_target(explicit: Optional[str]) -> Tuple[Optional[Path], int]:
         print(f"council_loop: not a directory: {repo}", file=sys.stderr)
         return None, 2
     if not confident:
-        # Refuse to review an arbitrary directory (e.g. an unanchored session
-        # whose cwd is the user's home). Failing loudly beats reviewing the
-        # wrong tree — and writing .review-council/ into it.
+        # Refuse an arbitrary directory (an unanchored session's cwd is the user's home):
+        # failing loudly beats reviewing the wrong tree — and writing .review-council/ there.
         print(
             "council_loop: could not identify a project from the session.\n"
             f"  looked in: {repo}\n"
@@ -1407,9 +1359,8 @@ def decide_stop(*, round_no: int, max_rounds: int, min_rounds: int,
     # --- hard limits: these end the run whatever the score ---
     hard: Optional[Tuple[str, str]] = None
     if round_no >= max_rounds:
-        # The reason must match the outcome. Saying "without clearing the minimum"
-        # on a run that DID clear it is the same class of error as reporting a
-        # blocked-but-passing aggregate as "below the minimum".
+        # The reason must match the outcome: "without clearing the minimum" on a run that
+        # DID clear it is the same error as calling a blocked-but-passing run "below".
         hard = ("satisfied" if met_minimum else "escalate",
                 f"round cap reached ({max_rounds})"
                 + (" with the minimum met" if met_minimum
@@ -1419,9 +1370,8 @@ def decide_stop(*, round_no: int, max_rounds: int, min_rounds: int,
                 "time budget exhausted"
                 + (" with the minimum met" if met_minimum else ""))
 
-    # The floor: with no hard limit binding, always attempt at least this many
-    # rounds, so a single unlucky round cannot end the run. A hard limit still
-    # outranks the floor, or the floor could overrun it.
+    # The floor: always attempt min_rounds, so one unlucky round cannot end the run. A hard
+    # limit still outranks it, or the floor could overrun the cap.
     if hard is None and round_no < min_rounds:
         return None
 
@@ -1454,9 +1404,8 @@ def decide_stop(*, round_no: int, max_rounds: int, min_rounds: int,
         ):
             specific = ("escalate", "semi mode: edits not approved")
 
-    # Prefer the specific reason when both apply: "oscillation" or "stalled"
-    # tells the next iteration what to change, where "round cap reached" does
-    # not. The decision to stop is the same either way.
+    # Prefer the specific reason when both apply: "oscillation" or "stalled" tells the next
+    # iteration what to change, where "round cap reached" does not.
     if specific is not None:
         return specific
     return hard
@@ -1489,9 +1438,8 @@ def render_next_steps(*, result: Dict[str, Any], history: List[Dict[str, Any]],
     if budget_seconds:
         lines.append(f"- **Time budget:** {budget_seconds:g}s")
     if aggregate is not None:
-        # Report the SCORE requirement and the blocking gate separately. They are
-        # independent, and saying "below the minimum" about an aggregate that is
-        # above it (but blocked by a finding) is simply wrong.
+        # Report the SCORE requirement and the blocking gate separately: calling a
+        # blocked-but-passing aggregate "below the minimum" is simply wrong.
         lines.append(f"- **Aggregate:** {aggregate:.2f} / minimum {threshold:g} "
                      f"({'meets the minimum' if score_met else 'BELOW the minimum'})")
     if blocking:
@@ -1646,9 +1594,8 @@ def priority_digest(verdict: Dict[str, Any], threshold: float,
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
 
-    # The threshold comes from the calibration manifest unless the caller names
-    # one, so the number the loop enforces and the number the calibration
-    # recommends cannot drift apart (they were hardcoded in three places).
+    # From the calibration manifest unless named, so the loop and the calibration cannot
+    # drift (it was hardcoded in three places).
     if args.threshold is None:
         args.threshold = float(_gate_module().calibrated_threshold())
 
@@ -1661,9 +1608,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("council_loop: `hermes` not found on PATH", file=sys.stderr)
         return 2
 
-    # Before the run directory exists, so a refusal writes nothing -- and before
-    # `--dry-run` returns, so a dry run answers "will this work?" and not only
-    # "what is the plan".
+    # Before the run dir exists, so a refusal writes nothing; before `--dry-run` returns, so
+    # a dry run answers "will this work?", not only "what is the plan".
     refusal = profile_preflight()
     if refusal:
         print(refusal, file=sys.stderr)
@@ -1671,10 +1617,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
     run_root = Path(args.run_root) if args.run_root else (repo / ".review-council" / stamp)
-    # A raw PermissionError here is the first thing a container user meets, and a
-    # traceback does not say what to change. The cause is almost always the image's
-    # uid: it runs as 1000, so a repo mounted from an account with any other uid is
-    # read-only to it.
+    # A raw PermissionError here is the first thing a container user meets, and a traceback
+    # does not name the cause: the image runs as uid 1000, so a repo mounted from another
+    # account is read-only to it.
     try:
         run_root.mkdir(parents=True, exist_ok=True)
     except PermissionError:
@@ -1720,19 +1665,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     probes = run_probes(repo)
     print(f"  {len(probes)} probe(s) ran")
 
-    # Persisted so a later incremental run can compare its own probe results
-    # against this run's. That comparison is the one invalidation signal that
-    # needs no file reading: a probe whose signal moved is the deterministic
-    # half of beta telling the next run that something changed underneath a
-    # carried finding. Written once per run -- the probes are run once.
+    # Persisted so a later incremental run can diff its probes against these: a signal that
+    # moved is the one invalidation signal needing no file reading. Written once, because
+    # the probes run once per run.
     (run_root / "probes.json").write_text(
         json.dumps(probes, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8", newline="\n",
     )
 
-    # Baseline-relative review, when asked for. Resolved once, before the loop:
-    # the baseline cannot change mid-run, and diffing once keeps every round of
-    # the run measuring the same change.
+    # Resolved once, before the loop: the baseline cannot change mid-run, and diffing once
+    # keeps every round measuring the same change.
     carry_ctx = resolve_carry(repo, args.baseline, log)
     meta_mode = "incremental" if carry_ctx else args.scope
     prompt_scope = (
@@ -1756,18 +1698,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         round_dir.mkdir(parents=True, exist_ok=True)
         print(f"\n=== round {round_no}/{args.max_rounds} — review ===", flush=True)
 
-        # 1. Goals: the orchestrator sets what this round is FOR, one goal per
-        #    dimension. Fail-open — a goal-setting failure is not a review
-        #    failure, so it degrades to the built-in set instead of aborting.
+        # 1. Goals: one per dimension, set by the orchestrator. Fail-open — a goal-setting
+        #    failure is not a review failure, so it degrades to the built-in set.
         write_meta(round_dir, repo, meta_mode, round_no, stacks, sha,
                    extra=meta_extra)
         print("  setting this round's goals…", flush=True)
         goals = set_goals(binary, repo, round_dir, args.scope, round_no,
                           args.timeout, log, probes, stacks, sha)
 
-        # 2. Convene. One generalist profile sampled N times; the findings are then
-        #    bucketed by the dimension each declares, so everything downstream reads
-        #    the same per-dimension files it always did.
+        # 2. Convene. One generalist profile sampled N times, then bucketed by dimension,
+        #    so everything downstream reads the same per-dimension files as before.
         print(f"  convening 1 generalist x {args.samples} samples…", flush=True)
         rc_by_dim = run_generalist_reviewers(
             binary, repo, round_dir, prompt_scope, round_no, args.timeout, log,
@@ -1824,9 +1764,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         _new_count, seen_ids, no_new_rounds = update_novelty(
             round_dir, seen_ids, no_new_rounds, args.k)
 
-        # 5. Goal review: the orchestrator explains the round against the goals it
-        #    set. The gate has ALREADY decided acceptance; this explains it and
-        #    never overrides it.
+        # 5. Goal review: the orchestrator explains the round against its goals. The gate
+        #    has ALREADY decided acceptance; this never overrides it.
         rc = review_goals(binary, repo, round_dir, round_no, goals,
                           args.timeout, log,
                           reviewers_ok=", ".join(ok),
@@ -1859,9 +1798,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             args.timeout, log,
         )
 
-    # The plan is produced on EVERY termination — satisfied or not. When the loop
-    # stops early (budget spent, gains stalled, cap reached) this is what lets the
-    # next iteration pick up instead of starting over.
+    # Produced on EVERY termination, satisfied or not: when the loop stops early (budget,
+    # stall, cap) this is what lets the next iteration pick up instead of starting over.
     plan_path: Optional[Path] = None
     if verdict:
         plan_path = run_root / "next-steps.md"

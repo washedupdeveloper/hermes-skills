@@ -215,20 +215,17 @@ def run_cli(argv: list[str]) -> None:
 def main() -> None:
     argv = sys.argv[1:]
 
-    # Before anything else: a caller who ran the container as themselves
-    # (`--user "$(id -u):$(id -g)"`) has a uid the image's passwd does not know,
-    # and `nix` needs it resolvable. See ensure_passwd_entry.
+    # First: `--user "$(id -u):$(id -g)"` gives a uid the image's passwd lacks, and
+    # `nix` needs it resolvable. See ensure_passwd_entry.
     if ensure_passwd_entry():
         log("added a passwd entry for the runtime uid (nix needs one)")
 
-    # Anything that is not a review goes to the CLI untouched, before Hermes is
-    # required. The setup below exists to run a REVIEW -- it resolves Hermes,
-    # installs the profiles and seeds credentials -- so gating `--help` and
-    # `doctor` behind a Hermes mount made the image useless without one.
+    # Anything that is not a review goes to the CLI before Hermes is required: the
+    # setup below exists to run a REVIEW, so gating `--help` and `doctor` behind a
+    # Hermes mount made the image useless without one.
     if is_cli_invocation(argv):
-        # First run: nothing is configured yet, and `setup` is the guided path.
-        # Said here rather than only in the docs, because a container is exactly
-        # where someone arrives without having read them.
+        # Said here, not only in the docs: a container is exactly where someone
+        # arrives without having read them.
         if argv and argv[0] != "setup" and not os.path.isfile(
                 os.path.join(HERMES_HOME, "review-council.toml")):
             log("first run: `setup` walks you through configuring this machine")
@@ -261,10 +258,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # Not reached through `council`: the container's ENTRYPOINT launcher (flake.nix)
-    # runs this file and sets the dispatch variable. A bare
-    # `python3 scripts/entrypoint.py` would install profiles into $HERMES_HOME and
-    # then start a real review, which is never what someone poking at the tree wants.
+    # Not reached through `council`: the container ENTRYPOINT (flake.nix) runs this and
+    # sets the dispatch variable. A bare run would install profiles, then start a review.
     import os
 
     if os.environ.get("REVIEW_COUNCIL_DISPATCHED") != "1":

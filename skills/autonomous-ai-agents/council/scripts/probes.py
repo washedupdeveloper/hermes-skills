@@ -64,9 +64,8 @@ def iter_files(root: Path, suffixes: tuple[str, ...], limit: int = 5000) -> List
             break
         if not path.is_file():
             continue
-        # A dotfile has NO suffix — `Path('.env').suffix` is `''` — so a suffix-only
-        # test silently skipped the very file the list names, and secret-grep
-        # reported "clean" on an unscanned `.env`. Match the bare name too.
+        # A dotfile has NO suffix — `Path('.env').suffix` is `''` — so a suffix-only test
+        # skipped the file the list names and secret-grep called an unscanned `.env` clean.
         if path.suffix.lower() not in suffixes and path.name not in suffixes:
             continue
         rel_parts = path.relative_to(root).parts[:-1]
@@ -128,12 +127,9 @@ def _kloc(root: Optional[Path]) -> float:
     return _KLOC_CACHE[key]
 
 
-# The half-point (d*) this curve uses: the density at which a probe's signal scores
-# 50. UNCALIBRATED, and named rather than a bare literal so the assumption is
-# greppable. The calibration MEASURES a per-tool d* table and derives a pooled
-# 1.8921 for the findings term (score_reviews.hill_density); this curve does not
-# use it. Measured, the two disagree by up to 26 points over the density range, and
-# 19 points on a probe reporting one finding per KLOC. See docs/CALIBRATION.md.
+# The density at which a probe's signal scores 50. UNCALIBRATED, and NOT the pooled
+# 1.8921 the findings term uses (score_reviews.hill_density): the two curves disagree by
+# up to 26 points, and 19 on a probe reporting one finding per KLOC. docs/CALIBRATION.md.
 PROBE_HALF_POINT = 5.0
 
 
@@ -163,8 +159,8 @@ def score_from_density(count: float, root: Optional[Path] = None,
 
 # --- probes -----------------------------------------------------------------
 
-# Secret patterns. Deliberately conservative: a probe that cries wolf trains the
-# council to ignore it (FRAMEWORK §9, the SNR term exists for this reason).
+# Deliberately conservative: a probe that cries wolf trains the council to ignore it
+# (FRAMEWORK §9, the SNR term exists for this).
 _SECRET_PATTERNS: List[tuple[str, str]] = [
     (r"(?i)\b(?:api[_-]?key|apikey|secret|token|passwd|password)\s*[:=]\s*['\"][A-Za-z0-9_\-/+]{16,}['\"]",
      "hardcoded credential"),
@@ -277,7 +273,7 @@ def probe_complexity(root: Path) -> Dict[str, Any]:
                 if isinstance(child, (ast.If, ast.For, ast.While, ast.ExceptHandler,
                                       ast.With, ast.BoolOp, ast.IfExp, ast.comprehension)):
                     complexity += 1
-            # 10 is the usual "refactor me" line; 20+ is a real hotspot.
+            # 10 is the usual "refactor me" line; 25+ is a real hotspot.
             if complexity >= 15:
                 findings.append({
                     "severity": "medium" if complexity >= 25 else "low",
@@ -394,9 +390,8 @@ def _json_objects(text: str) -> List[Dict[str, Any]]:
         try:
             obj, end = decoder.raw_decode(text, idx)
         except ValueError:
-            # Not valid JSON here — likely a banner/warning line. Skip to the
-            # next object start and carry on, rather than abandoning the rest of
-            # the stream (a single warning line must not hide every finding).
+            # Likely a banner/warning line: skip to the next `{` rather than abandoning the
+            # rest of the stream — one warning line must not hide every finding.
             nxt = text.find("{", idx + 1)
             if nxt == -1:
                 break
@@ -405,8 +400,8 @@ def _json_objects(text: str) -> List[Dict[str, Any]]:
         if isinstance(obj, dict):
             out.append(obj)
         elif isinstance(obj, list):
-            # ruff emits one JSON ARRAY; statix and deadnix emit concatenated
-            # objects. Accepting both keeps ONE parser for every tool.
+            # ruff emits one JSON ARRAY; statix and deadnix emit concatenated objects.
+            # One parser for both.
             out.extend(item for item in obj if isinstance(item, dict))
         idx = end
     return out
@@ -548,10 +543,9 @@ def probe_nix_eval(root: Path) -> Dict[str, Any]:
                   f"parsed {checked} files")
 
 
-# Where a pinned eval baseline may live. The first is the canonical, committed
-# location (a baseline is a pinned reference like flake.lock — it must be
-# version-controlled to mean anything across machines). The second is accepted
-# for compatibility with earlier runs.
+# Where a pinned eval baseline may live. The first is canonical and committed — a baseline
+# is a pinned reference like flake.lock, worthless across machines if untracked. The second
+# is accepted for compatibility with earlier runs.
 BASELINE_RELPATHS: Tuple[str, ...] = (
     "scripts/eval-baseline.json",
     ".review-council/eval-baseline.json",
@@ -583,16 +577,15 @@ def _workflows(root: Path) -> List[Path]:
                    if p.is_file() and p.suffix.lower() in {".yml", ".yaml"}])
 
 
-# A workflow "builds Nix" if it installs nix or invokes a nix command. Kept as a small
-# explicit list rather than a regex soup, so a new action is a visible edit.
+# A workflow "builds Nix" if it installs nix or invokes one. An explicit list, not a regex
+# soup, so a new action is a visible edit.
 _NIX_BUILD_MARKERS = (
     "install-nix-action", "nix-installer", "determinate-nix-action", "cachix",
     "nix build", "nix develop", "nix flake", "nix-shell", "nix-build", "nix eval",
 )
-# Ways a workflow reuses a Nix store between runs. A bare `/nix/store` mention is NOT
-# enough: `nix-store -qR` or a `path-info` call names that path without caching anything,
-# and counting it would report a cache that does not exist. `actions/cache` only counts
-# when it is actually pointed at the store.
+# Ways a workflow reuses the store. A bare `/nix/store` mention is NOT enough —
+# `nix-store -qR` names it without caching anything — and `actions/cache` counts only when
+# pointed at it.
 _STORE_CACHE_MARKERS = (
     "cachix/cachix-action", "nix-community/cache-nix-action", "cache-nix-action",
 )
@@ -618,9 +611,8 @@ def probe_ci_cache(root: Path) -> Dict[str, Any]:
     """
     files = _workflows(root)
     if not files:
-        # The property is "every Nix-building workflow reuses a store cache". With no
-        # workflows that is vacuously true, so this is a pass, not a missing tool: a
-        # probe that cannot apply must not depress beta.
+        # Vacuously true with no workflows: a pass, not a missing tool — a probe that cannot
+        # apply must not depress beta.
         return result("ci-cache", True, 100.0, [],
                       "no .github/workflows — nothing to cache")
     building, cached, uncached = 0, 0, []
@@ -663,8 +655,7 @@ def probe_ci_concurrency(root: Path) -> Dict[str, Any]:
     """
     files = _workflows(root)
     if not files:
-        # Same reasoning as ci-cache: "every workflow supersedes its own runs" is
-        # vacuously true when there are none, so this is a pass.
+        # Vacuously true with no workflows: a pass, not a missing tool (see ci-cache).
         return result("ci-concurrency", True, 100.0, [],
                       "no .github/workflows — nothing to serialise")
     with_conc, missing = 0, []
@@ -813,20 +804,9 @@ def pin_eval_baseline(root: Path, samples: int = 3) -> Dict[str, Any]:
 
 
 # --- Python analyzers, through the pinned toolchain --------------------------
-#
-# These run exactly the way the Nix ones do: through `_bridge`, which resolves the
-# PINNED toolchain. They exist because the gate EXPECTED them and nothing ran them
-# -- so beta measured the reviewer's diligence instead of the harness's coverage,
-# and a reviewer who did not invoke ruff cost the readability dimension 40% of its
-# determinism while ruff sat pinned on PATH the whole time.
-#
-# Running them here makes the deterministic half a property of the HARNESS. The
-# reviewer's own report stops being the measurement and becomes supporting
-# evidence, which is also why the fragile parsing of free-text command strings
-# stops mattering: a probe's tool name is exact.
-#
-# Every tool that caches by default is given a cache location OUTSIDE the tree it
-# is inspecting. A review must not leave files in the repository it reviews.
+# Run through `_bridge` like the Nix probes, so the deterministic half is the HARNESS's
+# measurement: skipping ruff cost readability 40% of its determinism while ruff sat pinned
+# on PATH. Cache dirs point OUTSIDE the tree — a review must not leave files behind.
 
 def _py_files(root: Path, limit: int = 5000) -> List[str]:
     return [p.relative_to(root).as_posix() for p in iter_files(root, (".py",))][:limit]
@@ -888,8 +868,8 @@ def probe_ruff(root: Path) -> Dict[str, Any]:
         code = str(item.get("code") or "")
         row = (item.get("location") or {}).get("row", "")
         findings.append({
-            # `F` is pyflakes -- an undefined name, an unused import that hides a
-            # missing call. `E` is pycodestyle, which is style.
+            # `F` is pyflakes (undefined name, an unused import hiding a missing call);
+            # `E` is pycodestyle, which is style.
             "severity": "medium" if code.startswith("F") else "low",
             "status": "open",
             "location": {"path": _shared.norm_path(item.get("filename")),
@@ -906,10 +886,9 @@ def probe_mypy(root: Path) -> Dict[str, Any]:
     files = _py_files(root)
     if not files:
         return result("mypy", False, None, [], "no .py files in the tree", parsed=False)
-    # `--python-executable` points mypy at the PINNED interpreter, so it resolves
-    # imports against the toolchain's site-packages instead of the host's. Without
-    # it every third-party import is reported as a missing stub -- a false positive
-    # that says more about mypy's search path than about the code.
+    # `--python-executable` points mypy at the PINNED interpreter, so imports resolve against
+    # the toolchain's site-packages. Without it every third-party import is a false
+    # "missing stub" that says more about mypy's search path than about the code.
     toolchain_python = toolchain.which("python3") or "python3"
     with tempfile.TemporaryDirectory(prefix="rc-mypy-") as tmp:
         rc, out = _bridge(root, ["mypy", "--output", "json",
@@ -975,9 +954,8 @@ def probe_bandit(root: Path) -> Dict[str, Any]:
                   f"{len(findings)} issues over {len(files)} files")
 
 
-# Lockfiles osv-scanner understands. A MANIFEST it cannot parse is not an audit --
-# pyproject.toml alone declares nothing it can read -- so the probe reports
-# ran=False with that reason rather than a clean bill of health.
+# Lockfiles osv-scanner can read. A MANIFEST is not an audit — pyproject.toml alone
+# declares nothing it can read — so the probe reports ran=False, not a clean bill.
 _OSV_LOCKFILES = frozenset({
     "requirements.txt", "poetry.lock", "uv.lock", "Pipfile.lock",
     "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
@@ -1029,10 +1007,8 @@ def probe_osv_scanner(root: Path) -> Dict[str, Any]:
     """
     locks = _lockfiles(root)
     if not locks:
-        # "Nothing to audit" and "cannot audit" are different facts, and only one
-        # of them is clean. A repo with no dependencies has no dependency risk;
-        # a repo that DECLARES dependencies in a manifest osv-scanner cannot read
-        # has unaudited risk, and the note says what to do about it.
+        # "Nothing to audit" and "cannot audit" are different facts, and only one is clean:
+        # a manifest osv-scanner cannot read means unaudited risk, and the note says so.
         if _declares_python_deps(root):
             return result("osv-scanner", False, None, [],
                           "dependencies are declared but no lockfile osv-scanner can "
@@ -1073,15 +1049,9 @@ def probe_osv_scanner(root: Path) -> Dict[str, Any]:
                   f"{len(locks)} lockfile(s)")
 
 
-#: `gitleaks detect --source .` walks the WHOLE tree: it does not honour
-#: .gitignore and knows nothing about SKIP_DIRS, so the harness re-reported its own
-#: `.review-council` logs -- the run's own quoted gitleaks output -- as open findings.
-#: Measured on a 377-file repository: 274 hits, 270 of them ignored scratch, so the
-#: probe inflated the finding count ~68x and buried the three real fixtures.
-#:
-#: `[extend] useDefault` keeps the shipped rule set; the allowlist only removes paths
-#: that are not source. `paths` are regexes over the file path, anchored on a segment
-#: boundary so `.gitignore` is not caught by `.git`.
+#: `gitleaks detect --source .` walks the WHOLE tree — no .gitignore, no SKIP_DIRS — so it
+#: re-reported the harness's own `.review-council` logs: 274 hits on a 377-file repo, 270
+#: ignored scratch, ~68x over three real fixtures. `useDefault` + segment-anchored paths.
 _GITLEAKS_CONFIG = """[extend]
 useDefault = true
 
@@ -1159,8 +1129,8 @@ def probe_gitleaks(root: Path) -> Dict[str, Any]:
         # `Description` names the RULE, never the value.
         desc = str(entry.get("Description") or "").split(",")[0].strip()[:120]
         findings.append({
-            # A committed credential is the one finding class the rubric already treats
-            # as blocking, so `high` is the framework's own convention for it.
+            # `high`: a committed credential is the one class the rubric already treats as
+            # blocking.
             "severity": "high", "status": "open",
             "location": {"path": path,
                          "line_range": str(start) if start == end else f"{start}-{end}"},
@@ -1195,17 +1165,16 @@ def probe_zizmor(root: Path) -> Dict[str, Any]:
                       "no GitHub Actions workflows in the tree", parsed=False)
 
     with tempfile.TemporaryDirectory(prefix="rc-zizmor-") as tmp:
-        # stdout only: zizmor's JSON is on stdout and its progress is on stderr, so
-        # the merged stream does not parse. `--no-progress` and `--color=never` keep
-        # the payload clean even on a TTY.
+        # stdout only: zizmor's JSON is on stdout, progress on stderr, so the merged stream
+        # does not parse. `--no-progress`/`--color=never` keep the payload clean on a TTY.
         rc, out = _bridge(root, ["zizmor", "--format=json", "--no-progress",
                                  "--color=never", "."],
                           env_extra=_scratch_env(tmp), timeout=900, merge_stderr=False)
     if rc == 127:
         return result("zizmor", False, None, [], out[:200], parsed=False)
 
-    # zizmor exits non-zero when it has findings, so the exit code is not the
-    # verdict; the JSON is. A non-JSON answer IS a failure and says why.
+    # zizmor exits non-zero when it HAS findings, so the exit code is not the verdict; the
+    # JSON is. A non-JSON answer IS a failure and says why.
     try:
         doc = json.loads(out)
     except json.JSONDecodeError:
@@ -1230,15 +1199,13 @@ def probe_zizmor(root: Path) -> Dict[str, Any]:
         location = (entry.get("locations") or [{}])[0]
         symbolic = (location.get("symbolic") or {})
         local = (symbolic.get("key") or {}).get("Local") or {}
-        # One path normaliser for every probe: `_shared.norm_path` strips a leading
-        # `./` PREFIX (a `lstrip("./")` would strip a character set and turn
-        # `.github/x.yml` into `github/x.yml`).
+        # `_shared.norm_path` strips a leading `./` PREFIX: `lstrip("./")` strips a character
+        # set and turns `.github/x.yml` into `github/x.yml`.
         path = _shared.norm_path(local.get("verbatim_path"))
         concrete = (location.get("concrete") or {})
         span = (concrete.get("location") or {}).get("start_point") or {}
-        # `row` is 0-BASED (tree-sitter coordinates). Used unshifted it cited the
-        # line above the offender -- 44 for a `uses:` on line 45 -- which points a
-        # reviewer at a comment and makes the finding look wrong.
+        # `row` is 0-BASED (tree-sitter): unshifted it cited line 44 for a `uses:` on 45,
+        # pointing a reviewer at a comment and making the finding look wrong.
         row = span.get("row")
         line = int(row) + 1 if isinstance(row, int) else 0
         # `feature` is the offending source text, which makes the finding checkable

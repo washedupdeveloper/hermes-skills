@@ -85,8 +85,7 @@ def main() -> int:
         dest = root / target / Path(meta["path"]).name
         if dest.exists():
             problems.append(f"{dest.relative_to(root).as_posix()} already exists")
-        # Would the promoted page be an orphan? outbound links are in the page;
-        # inbound links are whatever currently points at this slug.
+        # Orphan check: outbound links are in the page; inbound are whatever points at this slug.
         if not meta["outbound"] and not meta["inbound"]:
             problems.append(
                 "promotion would leave the page an orphan (no inbound or outbound links) - "

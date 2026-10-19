@@ -1,12 +1,7 @@
 # Starter home-manager module: link agent skills from a pinned upstream repo into
-# ~/.hermes/skills/<name> as symlinks into the Nix store.
-#
-# Wire-up:
-#   1. flake.nix:
-#        inputs.caveman = { url = "github:JuliusBrussee/caveman"; flake = false; };
-#   2. pass it to the module:  extraSpecialArgs = { inherit inputs; };
-#   3. import this file and set my.hermesRepoSkills.enable = true;
-#
+# ~/.hermes/skills/<name> as symlinks into the Nix store. Wire-up: flake.nix gets
+# `inputs.caveman = { url = "github:JuliusBrussee/caveman"; flake = false; }`, the module
+# gets `extraSpecialArgs = { inherit inputs; }`, then set my.hermesRepoSkills.enable = true.
 # Swap `src` for the fetchFromGitHub form below when you do not want a new input.
 { config, lib, pkgs, inputs, ... }:
 
@@ -24,7 +19,7 @@ let
   #   hash = lib.fakeHash;   # build once; Nix prints the real hash
   # };
 
-  # Directory whose children are the skills (each child holds a SKILL.md).
+  # Children are the skills; each holds a SKILL.md.
   skillsRoot = src + "/skills";
 
   # Discover by marker file: new skills appear after `nix flake update`, and
@@ -68,10 +63,9 @@ in
         + lib.concatStringsSep ", " missing;
     }];
 
-    # ~/.hermes/skills/<name> -> /nix/store/.../skills/<name>
-    # Hermes discovers symlinked skill dirs (os.walk followlinks=True), so these
-    # load exactly like real directories. Read-only by design: update with
-    # `nix flake update caveman && home-manager switch`.
+    # ~/.hermes/skills/<name> -> /nix/store/.../skills/<name>. Hermes discovers
+    # symlinked skill dirs (os.walk followlinks=True), so they load like real ones.
+    # Read-only by design: `nix flake update caveman && home-manager switch`.
     home.file = lib.mapAttrs'
       (name: _:
         lib.nameValuePair "${cfg.hermesHome}/skills/${name}" {

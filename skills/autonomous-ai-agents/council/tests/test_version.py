@@ -120,18 +120,15 @@ def test_the_real_repository_is_consistent():
 
 # --- prose that quotes the version ------------------------------------------
 
-# "Current release **v1.5.0**" is a checkable claim, and it is the one nobody
-# was checking: pyproject, CHANGELOG and tags all agreed at 1.5.2 while
-# docs/MILESTONES.md still advertised v1.5.0. The pattern and the file list now live
-# in version.py, because `bump` rewrites those claims and `check` validates them;
-# a copy here would be a third definition to keep in step.
+# "Current release **v1.5.0**" is a checkable claim nobody checked: pyproject,
+# CHANGELOG and tags agreed at 1.5.2 while docs/MILESTONES.md still said v1.5.0.
+# The pattern and file list live in version.py — `bump` rewrites, `check` validates.
 
 
 def _prose_version_claims(root: Path = REPO) -> list[tuple[str, str]]:
     """(where, version) for every "current release" claim in the prose."""
-    # Delegates to version.py. `check` validates these claims and `bump` now rewrites
-    # them, so a second copy of the pattern here would let the test and the tool drift
-    # apart -- which is the exact failure this check exists to catch.
+    # Delegates to version.py: a second copy of the pattern would let the test and
+    # the tool drift apart, which is the failure this check exists to catch.
     return [(path.relative_to(root).as_posix(), claimed)
             for path, claimed in version.prose_version_claims(root)]
 
@@ -196,10 +193,8 @@ def test_a_historical_version_is_not_a_current_claim():
 
 
 # --- `bump` rewrites the claims, so the test must not be the only defence ----
-# `version.rewrite_prose_versions` is called from `cmd_bump` and nowhere else, and it
-# had no test: the behaviour that makes the check above survivable was unproven. A
-# bump that silently failed to rewrite would leave the release commit red for the
-# next person, which is exactly what happened three releases running.
+# `version.rewrite_prose_versions` is called only from `cmd_bump` and had no test: a
+# bump that silently failed to rewrite left the release commit red three releases running.
 
 def test_a_bump_rewrites_every_prose_claim():
     with tempfile.TemporaryDirectory() as td:
@@ -432,8 +427,8 @@ def test_bump_is_devshell_only():
 
 # --- which repository is meant ----------------------------------------------
 #
-# The CLI runs from a nix store copy, so `__file__` is not the working tree. This
-# is the bug that made `council version check` read the store's missing
+# The CLI runs from a nix store copy, so `__file__` is not the working tree: this is
+# the bug that made `council version check` read the store's missing
 # `pyproject.toml` instead of the repository the user was standing in.
 
 def test_find_root_prefers_the_directory_you_stand_in():

@@ -29,17 +29,14 @@ import sys
 import time
 from pathlib import Path
 
-# A batch of 8 sessions was empirically too large: the cron run was cut off by the
-# 3-minute hard interrupt after writing proposals but before the bookkeeping. The
-# pipeline self-heals (the vault is the record of what has been distilled), but a
-# batch that reliably finishes is better than one that reliably gets truncated.
-# Raise KB_DISTILL_MAX_SESSIONS only with a measured run time to justify it.
+# A batch of 8 was empirically too large: the cron run was cut off by the 3-minute hard
+# interrupt after writing proposals but before the bookkeeping. A batch that reliably
+# finishes beats one that reliably gets truncated. Raise only with a measured run time.
 MAX_SESSIONS = int(os.environ.get("KB_DISTILL_MAX_SESSIONS", "3"))
 MIN_MESSAGES = int(os.environ.get("KB_DISTILL_MIN_MESSAGES", "6"))
 
-# A proposal records the sessions it came from in two places: `proposed_by:` and
-# `sources: [session:<id>]`. Both are read, because one proposal can cover several
-# sessions and one session can be cited by several proposals.
+# A proposal records its sessions in two places, `proposed_by:` and `sources: [session:<id>]`;
+# both are read, because one proposal can cover several sessions and vice versa.
 PROPOSED_BY_RE = re.compile(r"^proposed_by:\s*(\S+)\s*$", re.MULTILINE)
 SESSION_REF_RE = re.compile(r"session:([0-9A-Za-z_][0-9A-Za-z_.-]*)")
 
@@ -110,9 +107,8 @@ def main() -> int:
     rows = [r for r in rows if r[0] not in done][:MAX_SESSIONS]
 
     if not rows:
-        # STABLE sentinel, not empty output: --monitor-script suppresses the agent
-        # run only when stdout is byte-identical to the previous tick. An empty
-        # string would differ from a non-empty one and fire one wasted run.
+        # STABLE sentinel, not empty output: an empty string would differ from a
+        # non-empty one and fire one wasted agent run.
         print(f"KB DISTILL: idle (cursor {int(since)})" if since else "KB DISTILL: idle (no cursor)")
         return 0
 

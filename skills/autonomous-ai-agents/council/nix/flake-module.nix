@@ -1,12 +1,10 @@
 # What another flake gets from
 #   imports = [ inputs.review-council.flakeModules.default ];
 #
-# The consumer-facing surface only: the packages, the formatter and the one app.
-# This repo's own gates live in nix/checks.nix, because a consumer does not want
-# its tree run through this repo's test suite.
-#
-# The builders are shared with nix/checks.nix rather than copied, so the packages a
-# consumer builds and the packages this flake's checks exercise are one definition.
+# Consumer-facing surface only: packages, formatter, one app. This repo's gates
+# stay in nix/checks.nix — a consumer does not want its tree run through this
+# repo's suite. The builders are shared with checks.nix, not copied, so what a
+# consumer builds and what this flake's checks exercise are one definition.
 { lib, inputs, ... }:
 let
   builders = import ./builders.nix {
@@ -21,15 +19,13 @@ in
       packages = {
         toolchain = builders.mkToolchain pkgs;
         # The deployable skill as a read-only store path — what
-        # programs.council.mode = "external-dirs" points Hermes at.
+        # programs.council.mode = "external-dirs" points at.
         skill = builders.mkSkill pkgs;
-        # What ships: the runtime tree. `dev-framework` adds the development
-        # verbs and the suite, which is what the devshell runs from — the same
-        # split the `audience` of a verb expresses.
+        # What ships. `dev-framework` adds the dev verbs and the suite — the same
+        # split a verb's `audience` expresses.
         framework = builders.mkFramework pkgs "user";
         dev-framework = builders.mkFramework pkgs "dev";
-        # `nix shell .#review-council` — the command plus the analyzers on one
-        # PATH, which is what you want when running it by hand.
+        # `nix shell .#review-council` — the command plus the analyzers on one PATH.
         review-council = pkgs.symlinkJoin {
           name = "review-council";
           paths = [
@@ -39,21 +35,20 @@ in
         };
         default = builders.mkToolchain pkgs;
       }
-      # The image is a Linux userspace; dockerTools cannot build one from
-      # darwin. Guarded rather than left to fail on the darwin systems above.
+      # dockerTools cannot build a Linux userspace from darwin, so this is guarded
+      # rather than left to fail on the darwin systems above.
       // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
         # `nix build .#container` -> an OCI image tarball for `docker load`.
         container = builders.mkContainer pkgs;
-        # `nix build .#image-root` -> the same runtime tree as a directory,
-        # whose closure is what the Dockerfile copies. Same definitions as
-        # `container`, so the two paths cannot drift.
+        # `nix build .#image-root` -> the runtime tree as a directory, whose
+        # closure the Dockerfile copies. Same definitions as `container`.
         image-root = builders.mkImageRoot pkgs;
-        # `nix build .#image-prep-tools` -> the build-only tools the Dockerfile
-        # needs. Never part of the image; see builders.mkImagePrepTools.
+        # `nix build .#image-prep-tools` -> build-only tools for the Dockerfile,
+        # never part of the image. See builders.mkImagePrepTools.
         image-prep-tools = builders.mkImagePrepTools pkgs;
-        # `nix build .#vm-test` -> runs the council end-to-end in a NixOS VM.
-        # A VM test needs KVM, so it is NOT in `checks`: the fast gate must not
-        # require hardware a contributor may not have.
+        # `nix build .#vm-test` -> the council end-to-end in a NixOS VM. Needs KVM,
+        # so it is NOT in `checks`: the fast gate must not require hardware a
+        # contributor may not have.
         vm-test = builders.mkVmTest pkgs;
       };
 

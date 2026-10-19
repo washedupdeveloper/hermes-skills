@@ -31,11 +31,10 @@ host = "machines/host/configuration.nix"
 
 
 # --- the output path is deleted before it is written --------------------------
-#
-# `--out` is rmtree'd, so an `--out` that overlaps `--base` destroys the base, and
-# an `--out` that is somebody else's directory destroys that. Reported by the
-# council on this repository, with the damage reproduced: `--base B --out B` left
-# B gone, and `--base B --out V` emptied V and only then said B was the wrong base.
+# `--out` is rmtree'd, so an `--out` overlapping `--base` destroys the base and one
+# pointing at somebody else's directory destroys that. Reported by the council on this
+# repository, reproduced: `--base B --out B` left B gone; `--base B --out V` emptied V
+# and only then said B was the wrong base.
 
 def test_out_equal_to_base_is_refused():
     with tempfile.TemporaryDirectory() as td:
@@ -131,10 +130,9 @@ GIT = "modules/home/git.nix"
 GIT_HOOKS = "modules/flake/git-hooks.nix"
 HOME_DEFAULT = "modules/home/default.nix"
 
-# A fixture carrying exactly the strings the injections look for, once each. If an
-# injection gains an anchor that is missing here, apply_and_locate aborts and the
-# test fails -- which is the point: the fixture cannot silently drift from the
-# injections it exists to exercise.
+# A fixture carrying exactly the strings the injections look for, once each. An
+# injection gaining an anchor missing here makes apply_and_locate abort and the test
+# fail — the fixture cannot silently drift from the injections it exercises.
 FIXTURE = {
     BASE_SYSTEM: (
         "{\n"

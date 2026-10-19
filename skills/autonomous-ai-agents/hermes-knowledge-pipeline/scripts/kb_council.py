@@ -111,8 +111,8 @@ def build_page(project: Path, run_root: Path, vault: Path) -> tuple[str, str]:
     project_name = project.name
     run_id = run_root.name
     today = datetime.date.today().isoformat()
-    # Always project-relative: an absolute path hardcodes this machine, breaks on the
-    # host the board is read from, and leaks a local layout into a shared vault.
+    # Always project-relative: an absolute path hardcodes this machine, breaks on the host
+    # the board is read from, and leaks a local layout into a shared vault.
     try:
         rel_run = run_root.relative_to(project).as_posix()
     except ValueError:

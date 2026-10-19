@@ -44,43 +44,33 @@ except ImportError:  # pragma: no cover - only when loaded without its sibling
     def resolve_hermes_home() -> str:
         return os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")
 
-# The file a user edits. Named for the project, not the skill, so it survives a
-# skill update and is obvious in a directory listing.
-#
-# TOML, not YAML: the framework is stdlib-only (README, docs/CI.md), and the
-# pinned toolchain's interpreter has no PyYAML. `tomllib` is stdlib from 3.11 and
-# the toolchain is 3.14, so the config is parsed by a real parser instead of a
-# hand-rolled subset that would accept our own output and misread a user's edit.
+# Named for the project, not the skill, so a skill update cannot orphan it.
+# TOML, not YAML: the toolchain's interpreter has no PyYAML and `tomllib` is
+# stdlib from 3.11 (toolchain is 3.14). docs/CI.md has the stdlib-only rule.
 CONFIG_NAME = "review-council.toml"
 
-# Bumped when a key changes meaning. A config older than this is still READ (a
-# missing key falls back), but `council init` offers to add what is new.
+# Bumped when a key changes meaning. An older config is still READ (a missing key
+# falls back), but `council init` offers to add what is new.
 SCHEMA_VERSION = 1
 
 # ── the reviewer's rubrics ──────────────────────────────────────────────────
-# The shipped set, as a constant. `CORE_SKILLS` below is what the installer
-# actually installs, and it is an explicit list rather than a glob of this —
-# a glob made the set a side effect of adding a file. This constant is the
-# namespace the installer prunes stale rubrics from.
+# The namespace the installer prunes stale rubrics from. NOT the install list:
+# CORE_SKILLS below is explicit, so a file added here installs nothing.
 RUBRIC_GLOB = "reviewer-*"
 
-# Toolsets. A reviewer is a leaf: it reads, it runs commands, it writes its
-# findings file. It has NO delegation (the harness is the only fan-out) and no
+# A reviewer is a leaf: NO delegation (the harness is the only fan-out) and no
 # kanban/cronjob (it does not schedule work).
 REVIEWER_TOOLSETS = [
     "file", "terminal", "code_execution", "skills", "web", "todo",
     "memory", "session_search", "clarify",
 ]
 
-# The orchestrator additionally reads the board and the scheduler, because
-# planning is its job. It still has no delegation — see the skill.
+# Also reads the board and scheduler, because planning is its job. No delegation.
 ORCHESTRATOR_TOOLSETS = REVIEWER_TOOLSETS + ["kanban", "cronjob"]
 
-# The skills a member cannot function without — named explicitly, not globbed.
-# A glob makes the set a side effect of adding a file to the repo; an explicit
-# list makes it a decision someone made, and lets validation say so when one is
-# missing. `skills` (below) is the OPTIONAL half: skills the member may load on
-# demand, resolved from the mounted library and never force-installed.
+# Required, explicit — not globbed, so a new rubric file installs nothing and
+# validation can name a missing one. `skills` below is the OPTIONAL half: loaded
+# on demand from the mounted library, never installed.
 CORE_SKILLS: Dict[str, tuple] = {
     "reviewer": (
         "reviewer-architecture",
@@ -95,11 +85,10 @@ CORE_SKILLS: Dict[str, tuple] = {
 DEFAULTS: Dict[str, Any] = {
     "schema_version": SCHEMA_VERSION,
     "review": {
-        # The gate. Lower is stricter. A REGRESSION DETECTOR, not an absolute bar:
-        # of nine well-regarded repos reviewed at --samples 5, one is clean, so
-        # there is no known-good class to calibrate against. docs/CALIBRATION.md.
+        # A REGRESSION DETECTOR, not an absolute bar: of nine well-regarded repos at
+        # --samples 5, one is clean, so no known-good class exists. docs/CALIBRATION.md.
         "threshold": 80.0,
-        # How many reviewer samples per round. More is more recall, more time.
+        # Reviewer samples per round: more recall, more time.
         "samples": 5,
         # advisory = report only; semi = fix with confirmation; full = fix and
         # re-review until the gate passes or it stops improving.
@@ -114,12 +103,9 @@ DEFAULTS: Dict[str, Any] = {
             "toolsets": list(REVIEWER_TOOLSETS),
             # Installed into the profile: always present, always loaded.
             "core_skills": list(CORE_SKILLS["reviewer"]),
-            # Optional, on demand. Not installed — the member loads these by name
-            # from the mounted library only when the work calls for them. The
-            # security rubric points at web-app-security when a diff touches a web
-            # project; a Nix-only review never loads it. The voice itself is in this
-            # member's SOUL.md (injected every turn), so `caveman` here is the long
-            # form, loaded only when the short one is not enough.
+            # Optional: loaded by name from the mounted library, never installed.
+            # web-app-security only matters when a diff touches a web project, and
+            # the voice is already in SOUL.md, so `caveman` here is the long form.
             "skills": ["web-app-security", "caveman", "caveman-review"],
             "model": None,         # None = inherit the profile's model
             "provider": None,      # None = inherit; never ship a private one
@@ -138,8 +124,8 @@ DEFAULTS: Dict[str, Any] = {
     },
 }
 
-# The members a review cannot run without. A user may add members; removing
-# these breaks the harness, so validation says so rather than failing later.
+# A user may add members; removing one of these breaks the harness, so validation
+# says so rather than failing later.
 REQUIRED_ROLES = ("reviewer", "orchestrator")
 
 
@@ -168,17 +154,14 @@ def load(hermes_home: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[Pa
     """
     path = config_path(hermes_home)
     if not path.is_file():
-        # deepcopy, not a dict() comprehension: `dict(v)` copies only the outer
-        # mapping, so the nested member dicts and their toolsets/core_skills lists
-        # stayed the SAME objects as DEFAULTS. A caller mutating the returned config
-        # — a test appending "delegation" — then corrupted the module default for
-        # the rest of the process, which surfaced as a later unrelated test failing.
+        # deepcopy, not dict(): a shallow copy shares the nested member dicts and
+        # their lists with DEFAULTS, so one caller's mutation corrupted the module
+        # default and surfaced as an unrelated test failing later.
         return copy.deepcopy(DEFAULTS), None
     try:
         raw = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
-        # A real parser's message names the line and column, which is what a
-        # person editing the file needs.
+        # tomllib's message names the line and column, which is what an editor needs.
         raise SystemExit(f"{CONFIG_NAME}: {path} is not valid TOML: {exc}")
     except OSError as exc:
         raise SystemExit(f"{CONFIG_NAME}: cannot read {path}: {exc}")
@@ -226,9 +209,8 @@ def validate(cfg: Dict[str, Any]) -> List[str]:
         toolsets = member.get("toolsets")
         if not isinstance(toolsets, list) or not all(isinstance(t, str) for t in toolsets):
             problems.append(f"{where}.toolsets: must be a list of strings")
-        # The harness fans out itself. A member with delegation could spawn its
-        # own agents and apply none of the rubrics -- the exact failure the
-        # profile-per-dimension design exists to prevent.
+        # A member with delegation would spawn agents that apply no rubric.
+        # docs/DECISIONS.md #1.
         if isinstance(toolsets, list) and "delegation" in toolsets:
             problems.append(
                 f"{where}.toolsets: must not include 'delegation' -- the harness is "
@@ -339,8 +321,8 @@ def write(cfg: Dict[str, Any], path: Optional[Path] = None,
         raise SystemExit(f"{target} already exists; pass force=True to overwrite")
     target.parent.mkdir(parents=True, exist_ok=True)
     text = render(cfg)
-    # Round-trip before writing. A config this framework cannot read back is
-    # worse than no config: every later verb would fail on a file we wrote.
+    # Round-trip before writing: every later verb would fail on a config we wrote
+    # and cannot read back.
     try:
         tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:  # pragma: no cover - a bug, not input

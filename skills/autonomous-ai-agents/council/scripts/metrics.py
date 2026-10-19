@@ -182,8 +182,8 @@ def summarise(run_dirs: Iterable[Path], dims: Optional[Sequence[str]] = None) ->
         "rejected": rejected,
         "pending": pending,
         "coverage": (judged / total) if total else None,
-        # null, never 0.0: no data is not a zero rate, and the two read identically
-        # in a table, which is exactly the confusion this module exists to avoid.
+        # null, never 0.0: no data is not a zero rate, and the two read identically in
+        # a table.
         "acceptance_rate": (accepted / judged) if judged else None,
         "addressed_rate": (addressed / judged) if judged else None,
         "iterations": {
@@ -283,9 +283,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     else:
         for line in render(result):
             print(line)
-    # Exit 0 even with no data: "no data" is a valid answer to a question whose
-    # input is the operator's, and a non-zero exit would read as a failure of the
-    # tool. Unknown statuses DO fail, because those are a mistake in the record.
+    # Exit 0 with no data: that is a valid answer when the input is the operator's, and
+    # non-zero would read as tool failure. Unknown statuses DO fail -- a record mistake.
     return 1 if result.get("unknown_statuses") else 0
 
 

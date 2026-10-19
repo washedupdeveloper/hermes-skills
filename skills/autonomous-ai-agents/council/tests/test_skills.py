@@ -242,11 +242,9 @@ def test_no_text_file_carries_crlf():
     skip = {".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"}
     offenders = []
     for p in REPO.rglob("*"):
-        # A symlink is not shipped source either, and `is_file()` FOLLOWS the link:
-        # `nix build .#container` -- the README's own build command -- leaves
-        # `result -> /nix/store/<...>.tar.gz`, so this walked into a 348 MiB gzip
-        # and failed on bytes that were never in the repository. Check the link
-        # before the target.
+        # `is_file()` FOLLOWS symlinks: `nix build .#container` (the README's own
+        # command) leaves `result -> /nix/store/<...>.tar.gz`, so this walked into a
+        # 348 MiB gzip and failed on bytes never in the repository. Check link first.
         if p.is_symlink() or not p.is_file() or any(part in skip for part in p.parts):
             continue
         if p.suffix.lower() in crlf_ok:
@@ -345,10 +343,9 @@ def main() -> int:
             print(f"  FAIL {name} -> {exc}")
             failed += 1
         except BaseException as exc:  # noqa: BLE001
-            # pytest.skip raises its own Skipped, which derives from BaseException
-            # rather than Exception — so a bare `except Exception` lets it escape
-            # and the standalone runner dies with a traceback instead of skipping.
-            # Matched by name so this file needs no pytest import.
+            # pytest.skip raises Skipped, which derives from BaseException — a bare
+            # `except Exception` lets it escape and the runner dies with a traceback
+            # instead of skipping. Matched by name so this file needs no pytest import.
             if type(exc).__name__ == "Skipped":
                 print(f"  SKIP {name} -> {exc}")
                 skipped += 1

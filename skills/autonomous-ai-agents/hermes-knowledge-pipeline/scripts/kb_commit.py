@@ -97,10 +97,9 @@ def main() -> int:
 
     upstream = git(root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
     if upstream.returncode != 0:
-        # Only worth saying when this run stranded a commit. A vault with push enabled
-        # but no upstream is a configuration choice, not a finding, and reporting it
-        # every hour would make the job permanently noisy - the one thing this channel
-        # must never be. Silence is the healthy signal.
+        # Only worth saying when this run stranded a commit: push-enabled with no upstream
+        # is a configuration choice, and reporting it hourly makes the channel permanently
+        # noisy - the one thing it must never be. Silence is the healthy signal.
         if committed:
             print("KB PUSH SKIPPED: no upstream configured for this branch "
                   "(`git push -u <remote> <branch>` once to set it)")

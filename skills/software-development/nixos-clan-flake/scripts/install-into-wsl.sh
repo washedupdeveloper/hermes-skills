@@ -1,10 +1,8 @@
 #!/bin/sh
 # install-into-wsl.sh <windows-src> <wsl-dest> [<windows-src> <wsl-dest> ...]
-#
-# Copies Windows-staged files into a repo inside a WSL distro, stripping CR, and
-# prints a before/after hash per file. The patch/write_file tools cannot write a
-# //wsl.localhost/... path, so this is how an edit gets landed.
-#
+# Copies Windows-staged files into a repo inside a WSL distro, stripping CR, and prints a
+# before/after hash per file. The patch/write_file tools cannot write a //wsl.localhost/...
+# path, so this is how an edit gets landed.
 # Run it INSIDE the distro:
 #   wsl.exe -d <distro> -- /bin/bash /mnt/c/<scratch>/install-into-wsl.sh src dst ...
 set -eu

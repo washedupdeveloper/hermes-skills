@@ -20,9 +20,9 @@ REPO = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("swarm", REPO / "scripts" / "swarm.py")
 swarm = importlib.util.module_from_spec(spec)
 # Registered BEFORE exec_module because swarm.py uses @dataclass, and dataclasses
-# resolves `cls.__module__` through sys.modules — loading by path without this
-# raises "AttributeError: 'NoneType' object has no attribute '__dict__'" at the
-# decorator. Harmless in production (the dispatcher runs it as __main__).
+# resolves `cls.__module__` through sys.modules — loading by path without this raises
+# "AttributeError: 'NoneType' object has no attribute '__dict__'" at the decorator.
+# Harmless in production (the dispatcher runs it as __main__).
 sys.modules["swarm"] = swarm
 spec.loader.exec_module(swarm)
 

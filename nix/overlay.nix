@@ -1,28 +1,13 @@
 # nix/overlay.nix — add the harness-audit plugin to a Hermes Agent package, without
-# patching Hermes.
+# patching Hermes: `pkgs.hermes-agent.override { extraPythonPackages = [ … ]; }` gives the
+# wrapper `--suffix PYTHONPATH`, and Hermes finds the plugin through the
+# `hermes_agent.plugins` entry point. No Hermes source tree or profile home is touched.
 #
-# Hermes' own flake documents the seam this uses:
+# `default` rebuilds Hermes, and is the only shape that gets upstream's plugin/core
+# collision check; `wrapper` wraps the EXISTING binary instead. See plugins/README.md.
 #
-#     pkgs.hermes-agent.override { extraPythonPackages = [ ... ]; }
-#
-# The wrapper it generates then carries `--suffix PYTHONPATH` pointing at those packages,
-# and the agent discovers the plugin through the `hermes_agent.plugins` entry point. So
-# neither the Hermes source tree nor the profile home is touched: the overlay changes only
-# the wrapper's PYTHONPATH.
-#
-# Two shapes, because they cost very different amounts:
-#
-#   overlays.default   rebuilds the Hermes derivation with the extra package — correct,
-#                      upstream-sanctioned, and the only shape that gets upstream's own
-#                      plugin/core collision check.
-#   overlays.wrapper   wraps the EXISTING binary instead, so Hermes is not rebuilt at all.
-#                      Verified against the installed store path: the wrapped `hermes
-#                      plugins list` reports the plugin with source `entrypoint`.
-#
-# Each overlay builds the plugin from the consumer's own pkgs, so this file needs no
-# arguments and the flake exposes it one level deep, where `nix flake check` expects it:
-#
-#     nixpkgs.overlays = [ hermes-skills.overlays.default ];
+# Takes no arguments (each overlay builds the plugin from the consumer's pkgs) and is
+# exposed one level deep, where `nix flake check` expects it.
 { }:
 let
   pluginOf = prev: prev.callPackage ./plugin.nix { };

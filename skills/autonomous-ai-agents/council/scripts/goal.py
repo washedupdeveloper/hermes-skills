@@ -151,8 +151,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     cfg, _path = cfg_mod.load()
     problems = cfg_mod.validate(cfg)
     if problems:
-        # The threshold is what the contract promises, so a broken config must
-        # not silently produce a contract that names a different bar.
+        # The contract promises this threshold, so a broken config must not produce a
+        # contract naming a different bar.
         print("council goal: your review-council.yaml has problems:", file=sys.stderr)
         for problem in problems:
             print(f"  - {problem}", file=sys.stderr)

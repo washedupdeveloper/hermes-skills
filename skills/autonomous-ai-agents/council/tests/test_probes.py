@@ -18,8 +18,8 @@ _spec = importlib.util.spec_from_file_location("probes", REPO / "scripts" / "pro
 probes = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(probes)
 
-# The gate's own definition of what a dimension expects, so the toolchain<->gate
-# contract is asserted against the real table rather than a copy of it.
+# The gate's own table, so the toolchain<->gate contract is asserted against the
+# real definition rather than a copy.
 _sspec = importlib.util.spec_from_file_location(
     "score_reviews", REPO / "scripts" / "score_reviews.py")
 score = importlib.util.module_from_spec(_sspec)
@@ -28,11 +28,9 @@ _sspec.loader.exec_module(score)
 
 
 # --- output parsing ---------------------------------------------------------
-#
-# This is the bug that mattered: statix pretty-prints each JSON object across
-# many lines, deadnix emits one object per line. A line-based parser works for
-# one and silently returns ZERO for the other — a false clean bill of health on a
-# file that does not even parse.
+# statix pretty-prints each object across many lines, deadnix emits one per line:
+# a line-based parser returns ZERO for statix — a false clean bill on a file that
+# does not even parse.
 
 def test_parses_deadnix_jsonl():
     """deadnix: one object per line."""
@@ -135,9 +133,7 @@ def test_declared_rules_scores_absence():
 
 
 # --- nix probes: honest degradation -----------------------------------------
-#
-# When the toolchain is unavailable every nix probe must report ran=False. It
-# must NEVER invent a result — claiming ran=True would inflate beta.
+# Without the toolchain every nix probe reports ran=False; ran=True would inflate beta.
 
 def test_nix_probes_degrade_without_nix():
     """When the toolchain cannot resolve, every nix probe reports ran=False and
@@ -176,25 +172,19 @@ def test_run_probe_never_raises():
 
 
 # --- python probes: the same honest degradation ------------------------------
-#
-# The gate EXPECTED ruff, mypy, bandit, a dependency scanner and pytest, and left
-# them to the reviewer -- so beta measured the reviewer's diligence on the Python
-# side while being deterministic on the Nix side. They are harness probes now, and
-# a probe that cannot run must say so rather than let the reviewer's report stand
-# in for a measurement.
+# The gate EXPECTED ruff, mypy, bandit, a dependency scanner and pytest and left
+# them to the reviewer — beta measured diligence on the Python side, the toolchain
+# on the Nix side. They are harness probes now; one that cannot run must say so.
 
 def test_python_probes_degrade_without_a_toolchain():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "a.py").write_text("x = 1\n", encoding="utf-8")
-        # A lockfile, so the dependency probe has something to audit and therefore
-        # actually needs the toolchain. With no dependencies at all it reports
-        # "nothing to audit" without invoking anything -- a correct answer that
-        # does not require osv-scanner to exist.
+        # A lockfile, so the dependency probe actually needs the toolchain: with no
+        # dependencies it reports "nothing to audit" without invoking osv-scanner.
         (root / "requirements.txt").write_text("requests==2.31.0\n", encoding="utf-8")
-        # Both of these need a file of the right kind before they reach the toolchain:
-        # shellcheck reports "no shell files" without invoking anything, and gitleaks
-        # needs a file to scan at all.
+        # Both need a file of the right kind before reaching the toolchain:
+        # shellcheck says "no shell files", gitleaks needs something to scan.
         (root / "a.sh").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
         original = probes._bridge
         probes._bridge = lambda *a, **k: (127, "toolchain unavailable (test)")
@@ -210,9 +200,9 @@ def test_python_probes_degrade_without_a_toolchain():
             probes._bridge = original
 
 
-#: The stacks this toolchain ships for. `STACK_TOOLS` also lists tools for
-#: JavaScript, Rust and Go, which the framework does not claim to cover — asserting
-#: those would demand probes for tools that are deliberately absent.
+#: The stacks this toolchain ships for. `STACK_TOOLS` also lists JavaScript, Rust
+#: and Go tools, which the framework does not claim to cover — asserting those
+#: would demand probes for tools that are deliberately absent.
 SUPPORTED_STACKS = ("nix", "python", "shell")
 
 
@@ -283,13 +273,9 @@ def test_the_qa_toolchain_ships_every_external_scored_tool():
 
 
 #: Tools that SHIP in the toolchain but must NOT be probed.
-#:
-#: `vulnix` is the case, and both halves of the decision matter. It is available on
-#: demand, because closure CVEs are a real question for a Nix reviewer. It is not
-#: probed, because running it is the expensive half — it fetches NVD data over the
-#: network (minutes, and the answer varies with the date) — and it is unmaintained
-#: with a high false-positive rate, so a routine review would pay a large cost for an
-#: unusable signal.
+#: `vulnix` ships on demand — closure CVEs are a real question for a Nix reviewer —
+#: but probing it fetches NVD over the network (minutes, answer varies by date) and
+#: it is unmaintained with a high false-positive rate: unusable signal for the cost.
 ON_DEMAND_TOOLS = {"vulnix"}
 
 
@@ -346,11 +332,10 @@ def test_osv_scanner_separates_nothing_to_audit_from_cannot_audit():
 
 
 # --- the two probes added by the toolchain audit ----------------------------
-#
-# Both need the PINNED toolchain, which CI's nix job provides and a bare pytest run
-# does not. `checks.probes` requires both to have RUN, so the real exercise happens
-# there; here the positive case is skipped when the toolchain does not resolve, and the
-# degradation test above covers the absent case.
+# Both need the PINNED toolchain: CI's nix job provides it, a bare pytest run does
+# not. `checks.probes` requires both to have RUN, so the real exercise is there; here
+# the positive case skips when the toolchain does not resolve, and the degradation
+# test above covers the absent case.
 
 def _toolchain_unresolved(out: dict) -> bool:
     """True when the probe reached the toolchain and could not resolve it.
@@ -369,10 +354,8 @@ def test_gitleaks_finds_a_credential_without_reporting_it():
         return
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        # Built at runtime rather than written as a literal: this test exists
-        # to prove a credential never reaches a report, and a committed
-        # `sk_live_` string is that mistake in the test itself. The SHAPE is
-        # what gitleaks matches, so the fixture still exercises the rule.
+        # Built at runtime, not a literal: a committed `sk_live_` string is the very
+        # mistake this test exists to prevent. gitleaks matches the SHAPE.
         secret = "sk_" + "live_" + "".join(
             "0123456789abcdef"[i % 16] for i in range(48)
         )
@@ -442,11 +425,9 @@ def test_density_falls_back_to_a_count_with_no_measurable_size():
 
 
 # --- probing must not modify the repo under review --------------------------
-#
-# `nix flake check` and `nix eval` write `flake.lock` into the repo they run
-# against. A review is a read: probing `tests/golden/target` created a
-# `flake.lock` there, and the fixture's own hashes picked it up. `_bridge`
-# injects `--no-write-lock-file` so it cannot happen again.
+# `nix flake check` and `nix eval` write `flake.lock` into the tree they run
+# against: probing `tests/golden/target` created one and the fixture's own hashes
+# picked it up. `_bridge` injects `--no-write-lock-file` so it cannot recur.
 
 def test_bridge_forbids_writing_a_lock_file():
     """Every `nix flake` / `nix eval` call carries `--no-write-lock-file`."""
@@ -495,10 +476,9 @@ def test_bridge_leaves_other_commands_alone():
 
 
 # --- zizmor: GitHub Actions workflow security ---------------------------------
-#
-# The only probe that reads `.github/`. Two invariants matter more than the parsing:
-# a repository without workflows must not be penalised, and a non-JSON answer must be
-# a reported failure rather than a silent clean.
+# The only probe reading `.github/`. Two invariants matter more than the parsing: a
+# repo without workflows must not be penalised, and non-JSON must be a reported
+# failure rather than a silent clean.
 
 def test_zizmor_is_not_an_expected_tool():
     """It reads `.github/workflows`, which many repositories do not have.
@@ -612,9 +592,9 @@ def test_zizmor_clean_repo_scores_100():
 
 
 def main() -> int:
-    # Tests that take a fixture (`tmp_path`) cannot run here: this runner calls
-    # `fn()` with no arguments, so it reported them as ERROR while pytest ran them
-    # green — a runner that invents failures teaches a reader to ignore it.
+    # Tests taking a fixture (`tmp_path`) cannot run here: this runner calls `fn()`
+    # with no arguments, so it reported them ERROR while pytest ran them green —
+    # a runner that invents failures teaches a reader to ignore it.
     import inspect
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
@@ -643,7 +623,6 @@ if __name__ == "__main__":
 
 
 # --- the performance probes taken from the nine reference repositories -------------
-#
 # Each of these three was an actual finding: naersk reads Cargo.toml during evaluation
 # (IFD); nix-direnv builds Nix in CI with no store cache and no concurrency key.
 
@@ -766,11 +745,10 @@ def test_the_ci_cache_finding_names_a_check_that_matches_the_logic(tmp_path):
     assert "/nix/store" not in check.split("grep")[1], check
 
 # --- path normalisation -----------------------------------------------------
-#
-# `str(x).lstrip("./")` strips a CHARACTER SET, not a prefix. Measured: `.env`
-# became `env`, `.review-council/run/council.log` became `review-council/...`, and
-# `.github/workflows/ci.yml` became `github/...` — a path that exists nowhere, cited
-# as the location of a real finding. Nine call sites did this.
+# `str(x).lstrip("./")` strips a CHARACTER SET, not a prefix. Measured: `.env` ->
+# `env`, `.review-council/run/council.log` -> `review-council/...`, and
+# `.github/workflows/ci.yml` -> `github/...` — a path that exists nowhere, cited as
+# the location of a real finding. Nine call sites did this.
 
 def test_a_leading_dot_survives_path_normalisation():
     """The prefix `./` is stripped; a dot that BELONGS to the name is not."""
@@ -793,10 +771,9 @@ def test_no_probe_strips_a_character_set_from_a_path():
 
 
 # --- zizmor line numbers ----------------------------------------------------
-#
-# `start_point.row` is 0-BASED. Used unshifted, every workflow finding cited the line
-# ABOVE the offender — 44 for a `uses:` on line 45 — which points a reviewer at a
-# comment and makes a true finding look false.
+# `start_point.row` is 0-BASED. Unshifted, every workflow finding cited the line
+# ABOVE the offender — 44 for a `uses:` on line 45 — pointing a reviewer at a
+# comment and making a true finding look false.
 
 def test_zizmor_reports_the_line_the_finding_is_on(tmp_path):
     if shutil.which("zizmor") is None:
@@ -822,11 +799,10 @@ def test_zizmor_reports_the_line_the_finding_is_on(tmp_path):
 
 
 # --- gitleaks must not scan what SKIP_DIRS skips ----------------------------
-#
-# `gitleaks detect --source .` walks the whole tree: it does not honour .gitignore and
-# knows nothing about SKIP_DIRS, so the harness re-reported its own `.review-council`
-# logs — the run's own quoted gitleaks output — as open findings. Measured on a
-# 377-file repository: 274 hits, 270 of them ignored scratch.
+# `gitleaks detect --source .` walks the whole tree, ignoring .gitignore and
+# SKIP_DIRS, so the harness re-reported its own `.review-council` logs — including
+# the run's quoted gitleaks output. Measured on a 377-file repo: 274 hits, 270
+# ignored scratch.
 
 def test_the_gitleaks_allowlist_covers_every_skip_dir():
     """Structural: the config and SKIP_DIRS must not drift apart.
@@ -835,8 +811,8 @@ def test_the_gitleaks_allowlist_covers_every_skip_dir():
     reopens the bug, and nothing else in the suite would notice.
     """
     config = probes._GITLEAKS_CONFIG
-    # Compare escaping-agnostically: the config holds TOML literal strings, so a
-    # directory name appears as `\.git`, while the name itself has no backslash.
+    # Compare escaping-agnostically: the config holds TOML literal strings, so the
+    # name appears as `\.git` while the name itself has no backslash.
     plain = config.replace("\\", "")
     missing = [name for name in probes.SKIP_DIRS if f"/){name}(/|$)" not in plain]
     assert not missing, f"SKIP_DIRS entries missing from the gitleaks allowlist: {missing}"

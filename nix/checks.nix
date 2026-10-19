@@ -1,24 +1,13 @@
-# The run tier, and why this repository has no build tier.
+# Run tier: what needs an interpreter. The eval tier is `nix/tests.nix`.
 #
-# `nix/tests.nix` holds the eval tier: pure properties of the source tree.
-# This file holds what needs an interpreter.
-#
-# THERE IS NO BUILD TIER, and that is a finding rather than an omission. An
-# earlier version of this file built a simulated "shipped" tree -- SKILL.md plus
-# the four support directories -- and asserted self-containment against it. That
-# copier does not exist: Hermes reads `external_dirs` in place (README: "No copy,
-# no symlink, no junction"), and AGENTS.md forbids adding a sync script. So the
-# artifact under test was fiction, and the properties it asserted were already
-# covered by the eval tier and by `test_no_dead_references`. It was deleted
-# rather than kept for the sake of having a middle tier.
-#
-# The end-to-end claim lives in `scripts/verify-live.py`, which asks the REAL
-# Hermes binary -- it cannot be a flake check, because the product is not a flake
-# input of this repository. `.github/workflows/ci.yml` runs it in its own job.
+# NO BUILD TIER, deliberately: Hermes reads `external_dirs` in place, so the simulated
+# "shipped" tree an earlier version built was fiction.
+# See docs/adr/0001-reference-not-symlink.md.
+# End-to-end is `scripts/verify-live.py` — it needs the real binary, so it cannot be a flake
+# check; `.github/workflows/ci.yml` runs it in its own job.
 { lib, pkgs, src }:
 let
-  # The eval tier, one check per group so `--keep-going` reports every failing
-  # group rather than stopping at the first.
+  # One check per group, so `--keep-going` reports every failing group, not just the first.
   evalGroups = import ./tests.nix { inherit lib src; };
 
   mkEvalCheck =
@@ -33,20 +22,12 @@ let
 
   python = pkgs.python3.withPackages (ps: [ ps.pytest ]);
 
-  # A writable copy: the store is read-only and both pytest and the audit write
-  # caches. `__pycache__` is stripped so a stale bytecode file cannot be what
-  # makes a test pass.
-  #
-  # `patchShebangs` is load-bearing: a Nix build sandbox has no `/usr/bin/env`, so
-  # a script whose shebang is `#!/usr/bin/env bash` cannot be spawned at all --
-  # `claim-audit.py` executes `setup.sh` and died with a FileNotFoundError that
-  # named the script rather than its interpreter.
-  #
-  # The `sed` reaches a shebang `patchShebangs` cannot: `tests/e2e/test_setup.sh`
-  # writes a stub `hermes` inside a heredoc, so its `#!/usr/bin/env bash` is not
-  # the file's first line. It is patched here, in the check's copy, because the
-  # sandbox limitation is the harness's and not the test's -- the repo's test is
-  # unchanged and still runs on a real machine.
+  # Writable copy: the store is read-only, and pytest and the audit write caches.
+  # `__pycache__` is stripped so stale bytecode cannot be what makes a test pass.
+  # `patchShebangs` is load-bearing: no `/usr/bin/env` in the sandbox, so `claim-audit.py`
+  # exec'ing `setup.sh` died with a FileNotFoundError naming the script, not the interpreter.
+  # The `sed` reaches the heredoc stub `hermes` in `tests/e2e/test_setup.sh` (its shebang is
+  # not line 1); patched here only — the repo's test still runs on a real machine.
   srcWritable = pkgs.runCommand "hermes-skills-src" { } ''
     cp -r ${src} $out
     chmod -R u+w $out
@@ -56,15 +37,13 @@ let
     find $out -name __pycache__ -type d -prune -exec rm -rf {} +
   '';
 in
-# The eval tier first: milliseconds, so a tree-shape mistake fails before
-# anything is built.
+# Eval tier first: milliseconds, so a tree-shape mistake fails before anything is built.
 (lib.mapAttrs mkEvalCheck evalGroups)
 // {
   # --- run tier -------------------------------------------------------------
-  # The Python suite: the prose claims, which need a real regex engine, and the
-  # pointer heuristics -- including the `../` escape rule, which cannot be an eval
-  # assertion because it needs the write-verb heuristic to avoid flagging a path
-  # a skill tells the reader to CREATE.
+  # The Python suite: the prose claims (a real regex engine) and the `../` escape rule,
+  # which cannot be eval because it needs the write-verb heuristic to avoid flagging a
+  # path a skill tells the reader to CREATE.
   tests =
     pkgs.runCommand "check-tests"
       {
@@ -81,8 +60,8 @@ in
         touch $out
       '';
 
-  # Every mechanical claim in the prose, checked against the tree. Exits 1 on a
-  # FALSE claim; a claim it cannot establish reports UNPROVEN rather than passing.
+  # Every mechanical claim in the prose, checked against the tree: exit 1 on a FALSE claim,
+  # UNPROVEN (never a pass) on one it cannot establish.
   claim-audit =
     pkgs.runCommand "check-claim-audit"
       {
@@ -98,10 +77,9 @@ in
         touch $out
       '';
 
-  # `setup.sh` against a stubbed `hermes`: the merge path can only be exercised by
-  # lying to the script about the current config, and doing that against the real
-  # config would edit it. The stub is the SCRIPT's dependency, not a stand-in for
-  # the product -- `scripts/verify-live.py` is the check that uses the real one.
+  # `setup.sh` against a stubbed `hermes`: the merge path needs a fake current config, and
+  # using the real one would edit it. The stub is the SCRIPT's dependency, not the product —
+  # `scripts/verify-live.py` is the check that uses the real binary.
   setup-e2e =
     pkgs.runCommand "check-setup-e2e"
       {
