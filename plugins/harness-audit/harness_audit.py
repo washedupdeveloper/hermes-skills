@@ -1,4 +1,4 @@
-"""harness_audit — two harness invariants, implemented rather than described.
+"""harness_audit — three harness invariants, implemented rather than described.
 
 Importable two ways, and both are supported by Hermes:
 
@@ -21,6 +21,13 @@ Read out of DeepSeek Harness and mapped onto Hermes mechanics that exist today:
    cannot be read, or one whose frontmatter is unparseable, currently just yields fewer
    entries — indistinguishable from "the skill is not there". `harness_audit` reports the
    distinction explicitly.
+
+3. **A model request is a logged fact, not an inferred one.** dsh records a
+   `request/header` per call. Here the prompt is assembled from the skill table, the tool
+   schemas and the conversation, so "what did the model see, and how big was it" is the
+   measurement every context change is argued from — and Hermes keeps none of it. One
+   line per request records the counts, the sizes and a digest of the system prompt. The
+   text is never stored: a log that quotes the prompt is a second copy of it.
 
 What is deliberately NOT here, because Hermes has no seam for it: dsh's two invocation
 switches (model-invocable vs user-invocable). Hermes gates skills at offer time on
@@ -69,6 +76,12 @@ def _log_dir() -> Path:
     return d
 
 
+def _request_log_dir() -> Path:
+    d = _home() / "logs" / "model-requests"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:16]
 
@@ -96,6 +109,13 @@ def _redact(value: Any, depth: int = 0) -> Any:
 def _write(record: Dict[str, Any]) -> None:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     path = _log_dir() / f"{day}.jsonl"
+    with path.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _write_request(record: Dict[str, Any]) -> None:
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    path = _request_log_dir() / f"{day}.jsonl"
     with path.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -137,7 +157,100 @@ def on_post_tool_call(tool_name: str, args: Dict[str, Any], result: str,
     return None
 
 
+def _request_record(kw: Dict[str, Any]) -> Dict[str, Any]:
+    """One model request as sizes and digests. Never the prompt, never a message body."""
+    raw_prompt = kw.get("system_prompt")
+    prompt = raw_prompt if isinstance(raw_prompt, str) else ""
+    return {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "phase": "request",
+        "session": kw.get("session_id") or "",
+        "task": kw.get("task_id") or "",
+        "turn": kw.get("turn_id") or "",
+        "request": kw.get("api_request_id") or "",
+        "platform": kw.get("platform") or "",
+        "provider": kw.get("provider") or "",
+        "model": kw.get("model") or "",
+        "api_mode": kw.get("api_mode") or "",
+        "api_call": kw.get("api_call_count"),
+        "retry": kw.get("retry_count"),
+        "messages": kw.get("message_count"),
+        "tools": kw.get("tool_count"),
+        "approx_input_tokens": kw.get("approx_input_tokens"),
+        "request_chars": kw.get("request_char_count"),
+        # None, not 0 and not the digest of an empty string: the host not passing a
+        # system prompt is a different fact from a request that carried an empty one.
+        "system_prompt_bytes": len(prompt.encode("utf-8", "replace")) if prompt else None,
+        "system_prompt_sha256": _digest(prompt) if prompt else None,
+    }
+
+
+def on_pre_api_request(**kw: Any):
+    """Record what the model is about to see, before it is sent."""
+    try:
+        _write_request(_request_record(kw))
+    except Exception:  # noqa: BLE001 - a logging hook must never break a request
+        pass
+    return None
+
+
 # --- tools ------------------------------------------------------------------
+
+def _tail_records(directory: Path, limit: int) -> List[Dict[str, Any]]:
+    """The last `limit` JSONL records across the day files, newest file last.
+
+    An unparseable line is returned as an error record rather than dropped: a log with a
+    hole in it reads exactly like a log that never held the entry.
+    """
+    days = sorted(directory.glob("*.jsonl"))
+    lines: List[str] = []
+    for path in reversed(days):
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()[-limit:]
+        if len(lines) >= limit:
+            break
+    out: List[Dict[str, Any]] = []
+    for line in lines[-limit:]:
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            out.append({"error": "unparseable line", "raw": line[:120]})
+    return out
+
+
+def _summarize_requests(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Prompt growth over the window, and which of the facts were actually reported.
+
+    `growth` is interval-wide, not causal: the window spans turns, and several requests
+    share one conversation. `complete` is false when the host did not report a size, so
+    a smaller number is never mistaken for a measured one.
+    """
+    usable = [r for r in records if isinstance(r.get("approx_input_tokens"), (int, float))]
+    tokens = sorted(int(r["approx_input_tokens"]) for r in usable)
+    prompts = {r.get("system_prompt_sha256") for r in records if r.get("system_prompt_sha256")}
+    sizes = [int(r["system_prompt_bytes"]) for r in records
+             if isinstance(r.get("system_prompt_bytes"), int)]
+    summary: Dict[str, Any] = {
+        "requests": len(records),
+        "sessions": len({r.get("session") for r in records if r.get("session")}),
+        "models": sorted({str(r.get("model")) for r in records if r.get("model")}),
+        "providers": sorted({str(r.get("provider")) for r in records if r.get("provider")}),
+        "tokens_reported": len(usable),
+        "tokens_missing": len(records) - len(usable),
+        "distinct_system_prompts": len(prompts),
+        "complete": len(usable) == len(records) and bool(records),
+    }
+    if tokens:
+        summary["input_tokens"] = {
+            "min": tokens[0],
+            "median": tokens[len(tokens) // 2],
+            "max": tokens[-1],
+            "growth": tokens[-1] - tokens[0],
+        }
+    if sizes:
+        summary["system_prompt_bytes"] = {"min": min(sizes), "max": max(sizes)}
+    return summary
+
 
 def _audit(params: Dict[str, Any], **kwargs) -> str:
     """Query the durable tool-call record, and report the skill catalog's completeness."""
@@ -150,40 +263,48 @@ def _audit(params: Dict[str, Any], **kwargs) -> str:
         if today:
             with today.open(encoding="utf-8", errors="replace") as fh:
                 entries = sum(1 for _ in fh)
+        req_days = sorted(_request_log_dir().glob("*.jsonl"))
+        req_today = req_days[-1] if req_days else None
+        requests = 0
+        if req_today:
+            with req_today.open(encoding="utf-8", errors="replace") as fh:
+                requests = sum(1 for _ in fh)
         return json.dumps({
             "log_dir": str(_log_dir()),
             "days_recorded": len(days),
             "latest": today.name if today else None,
             "entries_today": entries,
-            "writable": os.access(_log_dir(), os.W_OK),
-            "note": "every tool call is recorded pre and post; results are digested, not stored",
+            "request_log_dir": str(_request_log_dir()),
+            "requests_today": requests,
+            "writable": os.access(_log_dir(), os.W_OK) and os.access(_request_log_dir(), os.W_OK),
+            "note": (
+                "every tool call is recorded pre and post, and every model request by "
+                "size and digest; no result text, prompt text or message body is stored"
+            ),
         }, indent=2)
 
     if action == "recent":
         limit = max(1, min(int(params.get("limit") or 20), 200))
-        days = sorted(_log_dir().glob("*.jsonl"))
-        if not days:
-            return json.dumps({"entries": [], "note": "no audit log yet"}, indent=2)
-        lines: List[str] = []
-        for path in reversed(days):
-            with path.open(encoding="utf-8", errors="replace") as fh:
-                lines = fh.readlines()[-limit:]
-            if len(lines) >= limit:
-                break
-        out = []
-        for line in lines[-limit:]:
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                out.append({"error": "unparseable line", "raw": line[:120]})
-        return json.dumps({"entries": out}, indent=2)
+        return json.dumps({"entries": _tail_records(_log_dir(), limit)}, indent=2)
+
+    if action == "requests":
+        limit = max(1, min(int(params.get("limit") or 50), 500))
+        records = _tail_records(_request_log_dir(), limit)
+        return json.dumps({
+            "summary": _summarize_requests(records),
+            "note": (
+                "counts, sizes and a system-prompt digest per model request; no prompt "
+                "text and no message bodies are stored"
+            ),
+            "entries": records,
+        }, indent=2)
 
     if action == "catalog":
         return json.dumps(_catalog_report(), indent=2)
 
     return json.dumps({
         "error": f"unknown action {action!r}",
-        "actions": ["status", "recent", "catalog"],
+        "actions": ["status", "recent", "catalog", "requests"],
     }, indent=2)
 
 
@@ -315,6 +436,7 @@ def _catalog_report() -> Dict[str, Any]:
 def register(ctx):
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
     ctx.register_hook("post_tool_call", on_post_tool_call)
+    ctx.register_hook("pre_api_request", on_pre_api_request)
 
     ctx.register_tool(
         name="harness_audit",
@@ -322,25 +444,30 @@ def register(ctx):
         schema={
             "name": "harness_audit",
             "description": (
-                "Read the durable record of tool calls this profile has made, and report "
-                "whether the skill catalog is complete. Actions: 'status' (log location "
-                "and today's count), 'recent' (last N entries, each with the tool, its "
-                "redacted arguments, duration, result size and a digest — never the "
-                "result text), 'catalog' (every discovered skill plus any directory that "
-                "could not be read, which is otherwise indistinguishable from a skill "
-                "that is not installed)."
+                "Read the durable record of what this profile sent and did: every tool "
+                "call, and every model request's shape. Actions: 'status' (log locations "
+                "and today's counts), 'recent' (last N tool calls, each with the tool, "
+                "its redacted arguments, duration, result size and a digest — never the "
+                "result text), 'requests' (last N model requests with message and tool "
+                "counts, input-token sizes and a system-prompt digest, plus prompt growth "
+                "over the window), 'catalog' (every discovered skill plus any directory "
+                "that could not be read, which is otherwise indistinguishable from a "
+                "skill that is not installed)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["status", "recent", "catalog"],
+                        "enum": ["status", "recent", "catalog", "requests"],
                         "description": "Which report to return. Default: status.",
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "For 'recent': how many entries, 1-200. Default 20.",
+                        "description": (
+                            "For 'recent': how many entries, 1-200. For 'requests': 1-500. "
+                            "Default 20 and 50."
+                        ),
                     },
                 },
                 "required": [],

@@ -7,14 +7,15 @@ this repo that is installed rather than referenced, and the reason is stated onc
 
 ## harness-audit
 
-Two DeepSeek-Harness invariants, implemented against Hermes mechanics that exist today:
+Three DeepSeek-Harness invariants, implemented against Hermes mechanics that exist today:
 
 | Invariant | What it does here |
 |---|---|
 | **Model-visible means logged** | `pre_tool_call` / `post_tool_call` hooks append one JSONL line per call to `$HERMES_HOME/logs/tool-audit/<date>.jsonl`: tool, task, redacted arguments, duration, result size and a sha256 prefix. The result *text* is never stored, and anything credential-shaped is dropped before it is written. |
 | **Discovery reports complete or incomplete, never absence** | `harness_audit(action="catalog")` returns every discovered skill plus any directory or frontmatter that could not be read, so a shorter list is never mistaken for "not installed". |
+| **A model request is a logged fact** | `pre_api_request` appends one JSONL line per call to `$HERMES_HOME/logs/model-requests/<date>.jsonl`: provider, model, api mode, message and tool counts, input-token size, request chars, and a sha256 prefix of the system prompt. No prompt text and no message bodies — a log that quotes the prompt is a second copy of it. `harness_audit(action="requests")` returns the window plus prompt growth. |
 
-A third invariant — dsh's two invocation switches, model-invocable vs user-invocable —
+A fourth invariant — dsh's two invocation switches, model-invocable vs user-invocable —
 is **not** implemented, because Hermes has no seam for it. Hermes gates skills at offer
 time on relevance (`requires_toolsets`, `environments`, `platforms`, `skills.disabled`),
 which is a different axis. A naming convention pretending otherwise would be advice, not
@@ -65,9 +66,10 @@ hermes plugins list | grep harness-audit          # enabled; source `entrypoint`
 ls "$HERMES_HOME/logs/tool-audit/"                # a JSONL file, one line per tool call
 ```
 
-Inside a session, `harness_audit(action="status")` reports the log path and today's count;
-`action="recent"` reads the last entries back; `action="catalog"` reports the skill catalog
-with its completeness.
+Inside a session, `harness_audit(action="status")` reports both log paths and today's
+counts; `action="recent"` reads the last tool calls back; `action="requests"` reports model
+requests with their input-token sizes and prompt growth; `action="catalog"` reports the
+skill catalog with its completeness.
 
 ### What it deliberately does not do
 

@@ -8,7 +8,7 @@
 }:
 python3.pkgs.buildPythonPackage {
   pname = "hermes-harness-audit";
-  version = "1.0.0";
+  version = "1.1.0";
   # `pyproject = true` and `format` are mutually exclusive: setting both is an assertion
   # failure in nixpkgs.
   pyproject = true;
@@ -25,7 +25,7 @@ python3.pkgs.buildPythonPackage {
   pythonImportsCheck = [ "harness_audit" ];
 
   meta = {
-    description = "Durable tool-call audit and catalog-completeness reporting for Hermes Agent";
+    description = "Durable tool-call and model-request audit, plus catalog-completeness reporting, for Hermes Agent";
     homepage = "https://github.com/washedupdeveloper/hermes-skills";
     license = lib.licenses.mit;
     platforms = lib.platforms.unix;

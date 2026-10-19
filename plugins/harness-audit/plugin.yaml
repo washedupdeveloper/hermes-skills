@@ -1,7 +1,8 @@
 name: harness-audit
-version: "1.0.0"
+version: "1.1.0"
 description: >-
-  Makes two DeepSeek-Harness invariants real inside Hermes: every model-visible tool
-  call is recorded durably ("model-visible means logged"), and the skill catalog can
-  report itself complete or incomplete instead of silently returning fewer entries.
+  Makes three DeepSeek-Harness invariants real inside Hermes: every model-visible tool
+  call is recorded durably, every model request is recorded by size and digest ("model-visible
+  means logged"), and the skill catalog can report itself complete or incomplete instead
+  of silently returning fewer entries.
 author: user

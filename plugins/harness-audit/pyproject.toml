@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-harness-audit"
-version = "1.0.0"
-description = "Durable tool-call audit and catalog-completeness reporting for Hermes Agent"
+version = "1.1.0"
+description = "Durable tool-call and model-request audit, plus catalog-completeness reporting, for Hermes Agent"
 requires-python = ">=3.10"
 dependencies = []
 
