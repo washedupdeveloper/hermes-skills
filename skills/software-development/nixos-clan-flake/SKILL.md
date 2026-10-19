@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.8.0
+version: 1.11.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -295,6 +295,20 @@ no-match is the failure mode of an in-place edit. Write a `perl`/`python` script
 replaces an exact multi-line block and dies unless the match count is exactly 1, then
 run it. Same for bulk doc edits.
 
+**A comment-only edit is provable, not assertable — hash the parse tree.**
+`nix-instantiate --parse <file> | sha256sum` before and after; comments vanish in the
+AST, so an identical hash across every touched file is the evidence that no code
+moved. Do this instead of eyeballing a diff, and report the hashes rather than the
+claim. A bulk comment pass is the one edit where "I only changed comments" is easy to
+say and cheap to prove.
+
+**A comment inside `''` is NOT a comment — it is the string's content.** In an
+indented string it is shell/Python source, so editing it changes the derivation; and
+inside a `clan.core.vars.generators` script it can change the generator's inputs and
+**rotate a secret**. Grep for `''` before trimming comments in any file that has one.
+The AST hash is what catches this: the file whose hash moves when you believed you
+touched only comments is the file with a string in it.
+
 **The gate is `nix flake check --keep-going`, and only that.** `--no-build` only
 evaluates and will report `all checks passed!` while the real gate is red — that is
 exactly how a red gate stayed hidden behind a green summary. Then build:
@@ -308,6 +322,30 @@ you edited and show the value moved — the host-key list, the listener's creden
 field, a filtered `systemPackages`. A green build does not prove an option took
 effect; a concatenating list option in particular keeps the old value while looking
 edited.
+
+**A rendered `/etc/nix/nix.conf` lists DEFAULTS, so "who set this" is a question for
+the module, not for the file.** The NixOS nix module renders `cfg.settings` and every
+declared option carries a default, so `sandbox = true`, `require-sigs = true`,
+`max-jobs = auto` and `cores = 0` appear whether or not anyone asked for them. A
+review that reads them as local decisions invents findings and proposes "removals"
+that change nothing. Two of them get misread in opposite directions:
+
+- **`cores` defaults to `0` in BOTH layers, and `0` is the sentinel for "use all
+  cores"** — the builder receives `NIX_BUILD_CORES=nproc`. `cores = 1` is therefore
+  not a guardrail but a downgrade, forcing every `enableParallelBuilding` derivation
+  (cargo, `make -j`, gcc) onto one thread; the conservative-looking number is the
+  throttling one. Specifying `cores` at all is a no-op.
+- **`max-jobs` defaults to `"auto"` in the module but `1` in bare nix.conf.** So
+  "delete the setting and builds serialize" is true of Nix and false of NixOS. Both
+  statements are correct about different layers, and only the module one governs a
+  NixOS host.
+
+Read the module's `mkOption … default` before overriding, and prove a default is in
+force by **evaluating the config with the block removed**
+(`nix eval --json .#nixosConfigurations.<m>.config.nix.settings`) rather than by
+reasoning from the upstream manual — the manual documents the daemon default, not
+the module's. Same rule as the firewall: the option's value is not evidence about
+what the machine does.
 
 **Run `nixfmt` on every file you touched** (via the devshell). The pre-commit hooks
 run on commit and will reformat or fail; a green commit is extra evidence, not a
@@ -461,6 +499,14 @@ demonstrated nothing.
   after you rewrite the assertions inside it -- measured on two different spellings
   of one group. A green gate plus an unchanged hash therefore says nothing about
   whether the test still tests anything.
+- **Prove a comment-only rewrite with the AST.** `nix-instantiate --parse <file> |
+  sha256sum` drops comments but keeps code, so an identical hash proves the code did
+  not move -- the claim a reviewer cannot check by reading a 500-line comment diff.
+  Hash every file first, rewrite, hash again, diff the lists. The general rule and the
+  order to cut in are in the `writing-for-agents` skill; what is specific here is the
+  trap: a `#` line inside a `''` string is script content, not a comment. In a clan
+  vars generator, editing one changes the generator script hash and can **rotate a
+  secret**. That file's AST hash moving is how the mistake surfaces.
 
 **Testing a clan flake.** Eval assertions (`lib.runTests`), VM tests (clan's
 `clanTest`), the deployability checks, the "no undeclared ports" pair, and the
@@ -545,3 +591,8 @@ arrives: `references/adding-machines-to-a-clan.md`.
   VM/container experiment left on the host: what leaks, the audit commands, the
   preserve-before-delete order, the hash-comparison normalisation trap, and the
   `nix store gc` sequence.
+- `references/patching-a-package-not-in-nixpkgs.md` — adding a plugin/dependency to an
+  upstream package the consumer's nixpkgs does not carry: the upstream override seam
+  vs a wrapper, the seeded-pkgs trick that stops an overlay being a silent no-op, why
+  the extra package must be built with the TARGET's nixpkgs, and how to verify the
+  result by artifact rather than by build log.

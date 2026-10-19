@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: "Write documents agents read: skills, AGENTS.md, docs."
-version: 1.2.0
+version: 1.3.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -150,6 +150,28 @@ structural change: headings are link targets.
 original was edited after the rewriting agent read it, installing the rewrite restores
 the old text — a "fact-preservation check" passes while the doc regresses. Grep the
 rewrite for the specific text you added to the original before installing anything.
+
+**Cut in this order, and stop when every remaining line carries a fact.** When this user
+asks for shorter docs the bar is "only as long as it requires to bring up the necessary
+points" — a judgement, not a percentage. Measured on a repo whose inline comments ran
+717 lines across 23 files down to 426:
+
+1. **Commentary describing code that no longer exists.** The single largest block was
+   43 lines explaining a setting that had since been removed. Nothing goes stale faster
+   than an explanation of a decision that was reversed, and the reasoning belongs in the
+   decision record rather than beside an absent line. This is always the first thing to
+   look for, and it is invisible in a diff that only adds.
+2. **Restatement of the line below it**, and of what an upstream option or default does.
+3. **History and evidence trails** ("verified with…", "this used to be…").
+4. **Section banners stay.** They are navigation, not prose, and cost one line.
+
+**Prove a comment-only pass mechanically; do not assert it.** Hash the parse tree before
+and after — `nix-instantiate --parse f | sha256sum`, `ast.dump` for Python — because
+comments vanish in the tree, so identical hashes are the evidence. The hash is also what
+catches the one edit that is not comment-only: a comment inside a multi-line string is
+that string's content, so changing it changes the artifact (in a secret-generating
+script, it changes the inputs). The file whose hash moves when you believed you touched
+only comments is the file with a string in it.
 
 Measure the ceiling before promising a cut: code blocks, tables and headings are
 locked, so the compressible fraction is the prose. On fact-dense technical docs that
