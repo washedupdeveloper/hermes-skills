@@ -13,6 +13,14 @@ counts as evidence, and how to avoid asserting more than you ran.
 | Generated config (`/etc/*`, `nix.conf`) | read the generated file out of the derivation chain, do not trust the merge |
 | A build result | `nix build --no-link --print-out-paths`, and compare the path |
 | A new custom flake output | it is invisible to `nix flake check` unless paired with a `checks` entry |
+| Does the running machine match this tree? | `readlink -f /run/current-system` must **equal** `nix build .#nixosConfigurations.<host>.config.system.build.toplevel --no-link --print-out-paths` |
+| Is a generator a no-op? | exit 0, no output, `git status --short` still empty, and the file count under its output dir unchanged |
+
+**"A switch happened" and "the machine runs this tree" are different claims.**
+`nixos-rebuild list-generations` proves only the former. The equality above is the one that
+answers "is the config I just edited live", and it costs one build that is usually already
+in the store. Same shape for a generator: silence is not proof of a no-op — an empty
+diff plus an unchanged file count is.
 
 ## Test a requirement by varying one variable
 

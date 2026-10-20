@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: "Write documents agents read: skills, AGENTS.md, docs."
-version: 1.5.0
+version: 1.6.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -257,6 +257,14 @@ Three rules that each cost a wrong document:
   number.** A number misleads one reader; a wrong statement that something is read-only,
   sandboxed, or already gated becomes the **enabling assumption** for the next mistake —
   nobody re-checks a boundary a document says is there. Audit those claims first.
+- **A claim whose value changes faster than the document is read is not a claim, it is a
+  chore.** Compare the fact's half-life with how often the artifact is opened: a three-hour
+  DHCP lease written into a diagram is wrong before the next read, and a reader who catches
+  it stale stops trusting the rest of the file. Record the part that does not move (a MAC, a
+  static gateway, a CIDR range) and name what would make the value stable — a reservation on
+  the router, a pinned tag — because that is a decision with an owner, unlike re-copying a
+  number. Where nothing consumes the value at all, delete it: an unconsumed fact is
+  maintenance with no reader.
 
 ## Verify it as the consumer receives it
 
@@ -292,5 +300,7 @@ gate** — `git add` it before believing the pointer works.
 - [ ] Nothing in the document restates what a linked artifact already holds
 - [ ] Every line would change the agent's behaviour, or it is gone
 - [ ] Every factual claim is PROVEN by a re-runnable command, or labelled UNPROVEN
+- [ ] No recorded value rots faster than the document is read, or it names what would make
+      it stable
 - [ ] The document was fetched the way the agent receives it (`skill_view` for a skill,
       a real build for a tracked support file), not merely read back off disk

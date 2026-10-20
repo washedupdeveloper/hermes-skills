@@ -1,7 +1,7 @@
 ---
 name: domain-modeling
-description: "Sharpen a project's glossary and record its decisions."
-version: 1.0.0
+description: "Use when sharpening a glossary or an ADR set."
+version: 1.1.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -72,6 +72,35 @@ Offer an ADR only when **all three** hold:
 
 Miss any one, skip the ADR. Formats: `references/glossary-format.md`,
 `references/adr-format.md`.
+
+## Maintaining the ADR set
+
+An ADR is a **decision record**. Its `Action Items` are the temporary part, and the failure
+mode is a checklist nobody closes — the record then reads as open work forever, and the next
+session cannot tell a live decision from an abandoned one.
+
+**Audit by running, not reading.** For each unchecked item, find the command that would prove
+it and run it. A completed item keeps the command and its result, so the record needs no
+rerun; a bare `[x]` is a claim with nothing behind it.
+
+**Work that is not a decision leaves.** "Add the second architecture when that machine
+exists" is a task with a trigger, not a trade-off: move it to the project's work list and
+leave a pointer. An ADR that grows a to-do list is two documents in one, and the to-do list
+is the half that rots.
+
+**An item that cannot converge is a design defect.** A chore like "re-check this value when
+it changes" usually means a fact was recorded with the wrong half-life. Replace the chore
+with the decision — record what is stable, drop what is not — instead of performing it
+forever.
+
+**Retiring an ADR takes two empty greps**: no file in the tree points at it
+(`grep -rn 'adr/000N'` — code comments and docs cite these files), and none of its decisions
+is still in force. Either one present and the record stays; the checklist was temporary, the
+decision is not.
+
+**A superseded ADR is the one to keep longest.** Its decision was reversed, so what survives
+in it is the trap that reversed it. That is the only place the trap is written down, and
+deleting the record invites the same change again.
 
 ## Verification
 

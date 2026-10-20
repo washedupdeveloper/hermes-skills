@@ -1,7 +1,7 @@
 ---
 name: nix-declarative-config
 description: "Use when making declarative Nix or home-manager changes."
-version: 1.1.0
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -256,6 +256,35 @@ the oracle to capture first, the order of gates, the `let`-binding mechanics and
 the rename discipline: `references/restructuring-a-nix-tree.md`. One ownership
 boundary per commit, and say which candidate was deliberately left alone.
 
+## Auditing the decision records
+
+When the ask is "go through the ADRs — is there work left, can any be deleted", the answer
+comes from running the items, not reading them.
+
+1. **List every unchecked item and run the command that would prove it.** Two oracles recur:
+   `/run/current-system` must equal `nix build .#nixosConfigurations.<host>.config.system.build.toplevel
+   --no-link --print-out-paths` (the switch landed *and* this tree is what runs), and a
+   generator is a no-op when it exits 0 with no output and `git status --short` is still
+   empty.
+2. **A completed item keeps its evidence** — the command and what it returned — so the
+   record needs no rerun. A bare `[x]` is a claim with nothing behind it.
+3. **Work that is not a decision moves out.** "Add `aarch64-linux` when the Pi exists" is a
+   task with a trigger, not a trade-off: it belongs in `docs/recommendations.md`, with the
+   ADR keeping a one-line pointer. A decision record that grows a to-do list is two
+   documents in one, and the to-do list is the half that rots.
+4. **An item that cannot converge is a design defect, not a chore.** "Re-check the DHCP
+   address when the lease renews" has no end state — the value changes hourly and nothing
+   reads it. Replace the chore with the decision: record the stable neighbours (MAC, static
+   gateway, CIDR) and drop the volatile value.
+5. **Deleting an ADR needs two greps, both empty**: no file points at it
+   (`grep -rn 'adr/000N'` — code comments and docs cite these), and none of its decisions is
+   still in force. Either one present and the record stays; the checklist was the temporary
+   part, the decision is not.
+6. **A superseded ADR is the one to keep longest.** Its decision was reversed, so what
+   survives in it is the trap that reversed it (`cores = 1` is a *downgrade* from the
+   default `0`; bare `nix.conf` `max-jobs` is `1` while the NixOS module's is `"auto"`).
+   Deleting it invites the same change again.
+
 ## Verifying what you wrote without a build
 
 When the sandbox genuinely has no Nix and none can be installed the flake cannot be evaluated, but the *logic inside* a `writeShellScript` or `runCommand` can be — and that is where the bugs actually are. Extract the generated body, run it against stub binaries that drive every branch, cross-check any authored config artifact against the set that actually ships, and report the residue honestly rather than shipping unrun code with a caveat. Branch matrix and working harness: `references/verifying-generated-shell.md`.
@@ -280,6 +309,20 @@ Option names, defaults, deprecations and published guidance differ between the u
   accepted, `nix flake --no-write-lock-file check` fails with `unrecognised flag`. Inject
   it at the one place every nix invocation funnels through rather than at each call site,
   and test both halves — flag present and positioned, and non-nix commands untouched.
+- **`lib.mkForce` on a *sub-attribute* stops the overridden definition's thunk from being
+  evaluated — that is how a broken upstream extractor is worked around without copying it.**
+  Measured: nix-topology's mosquitto extractor builds `details = … "${l.address}:…"` and dies
+  on a `null` address; forcing `topology.self.services.mosquitto.details` alone made the
+  error disappear while the extractor's `name`, `icon` and `id` still came from upstream —
+  the discarded definition was never evaluated. Forcing the whole service instead restates
+  every field and loses the rest. Verify the scoping claim by removing the override and
+  watching the original error return; do not assume `mkForce` suppresses evaluation.
+  Two corollaries: **`toString null` is `""`, not `"[::]"`**, so "use `toString` on both
+  sides" is a different fix from a null conditional and renders `:1883` — pin the displayed
+  value in a test, or the two look equivalent; and **an assertion whose subject is derived
+  from an attribute key can never fail** (the service's `id` comes from the attrset key, so
+  a test that forcing the whole service "drops the id" passes under every mutation). Watch
+  each new assertion fail once, and delete the ones that do not.
 - **A flake input's `ref` is `null` after resolution, so a package built from a flake
   cannot know its own version.** `inputs.x.ref` and `inputs.x.rev` are both discarded for a
   tag or branch URL — measured: `inputs.ha.ref` is null with `url = "github:o/r/v1.2.3"`,
