@@ -1,7 +1,7 @@
 ---
 name: agent-harness-design
 description: "Use when changing harness seams, tools, or registries."
-version: 2.1.0
+version: 2.2.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -123,6 +123,38 @@ each fact once.
 Measure, do not estimate: `harness_audit(action="requests")` reports input tokens and
 system-prompt bytes per request, so a change to the offered surface has evidence beside it.
 
+## Exercising a hook against a real run
+
+A hook that imports cleanly proves nothing. Run it under the real binary in a throwaway
+home, so it fires through the same path a session takes and the real `$HERMES_HOME` is
+never the test's to edit:
+
+```sh
+S=~/.hermes/cache/scratch/plugin-probe
+mkdir -p "$S/plugins"
+cp -r plugins/<name> "$S/plugins/<name>"
+cat > "$S/config.yaml" <<'YAML'
+model: { default: "scratch-model", provider: "custom:scratch" }
+custom_providers:
+  - { name: scratch, base_url: "http://127.0.0.1:9/v1", api_key: "scratch", model: scratch-model }
+plugins: { enabled: [<name>] }
+YAML
+HERMES_HOME="$S" timeout 180 hermes -z "say hi"
+```
+
+- **Point the provider at a dead address on purpose.** `pre_api_request` fires before the
+  call, so a hook on it is verified with no key and no reachable model: the records appear
+  while the request fails. Waiting for a 200 measures the provider, not the hook.
+- **Bound the run.** An agent retrying against a dead port keeps going; `timeout` turns a
+  hang into an exit code instead of a session that never returns.
+- **Read the artifact, and assert the absence too.** Count the records, check a field
+  against a value you know is real (a tool count, a token count), then grep the log for a
+  sentence you know was in the prompt. A redactor nobody tested is a redactor that does
+  not work.
+- **Then run the repo's gate, with new files staged.** `git add` any new support file
+  first: the Nix sandbox copies only git-visible paths, so an untracked reference file
+  fails there while passing on disk (`writing-for-agents` owns that rule).
+
 ## When a rule cannot be implemented
 
 Say so, and say what it would cost. The failure mode to avoid is a document that reads like
@@ -135,4 +167,6 @@ builds on them.
 - [ ] Every "implemented" row names a file or a command that proves it
 - [ ] Every rule with no Hermes seam is listed under "not implemented", with the reason
 - [ ] A new invariant is in `nix flake check` with a negative control beside it
+- [ ] A new hook was exercised under the real binary in a throwaway `HERMES_HOME`, not
+      only imported
 - [ ] No row claims a config key or frontmatter field without a `grep` behind it

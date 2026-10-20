@@ -1,7 +1,7 @@
 ---
 name: skill-library-curation
 description: "Curate the skill library: sourcing, overlap, conflicts."
-version: 1.0.0
+version: 1.1.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -37,6 +37,8 @@ Three adjacent skills, each with a distinct job:
 - **"Add this external skill" / "keep it updated" / "I don't want to maintain it
   myself"** — choosing which of a source's skills to adopt, and whether to
   reference it or vendor it (Step 9).
+- **"Learn everything from this repository, then delete it"** — mining a foreign tree
+  for rules rather than skills, then retiring the source safely (Step 10).
 
 ## Step 1 — Establish provenance before touching anything
 
@@ -253,6 +255,60 @@ Intake is a different entry point from auditing your own library: the question i
    "I don't want to maintain this myself" as an instruction to reference, not vendor —
    and when a skill is already vendored that way, say so rather than leaving it.
 
+## Step 10 — Mine a repository as a design document, then retire it
+
+The source is not a skill pack here, it is a whole tree of rules, review standards and
+incident write-ups. The transferable artifact is usually the **rule format**, not the rules:
+a statement of *what must hold, the defect it prevents, the check that can fail, and the
+boundary past which it does not apply* survives translation into another language and
+another harness. The instances do not, and porting them produces a document about someone
+else's codebase.
+
+1. **Triage by size before reading.**
+   `find . -name '*.md' -not -path './.git/*' | xargs wc -l | sort -n`. The small files are
+   usually the decisive ones — the review standard, the testing policy, the postmortems; the
+   largest is often generated (a config catalog, a module graph) and yields nothing a summary
+   would not.
+2. **Read the enforcement documents, not the marketing.** The agent instructions, the review
+   skill, the incident postmortems and the defensive-pattern pages state what the project
+   actually requires. A README states intent.
+3. **Sort every candidate into adopted or refused, and write the refusals down** with the
+   cost that made each a refusal. A decision record is the cheapest home: what was taken,
+   what was not, and why. Without it the next session re-evaluates the same list and
+   reaches a different answer.
+4. **Port into the skill that already owns the subject**, not into one new skill per source.
+   A rule about proving acceptance belongs in the acceptance skill; a bug class belongs in
+   the review skill. A new umbrella only when the source supplies a class nothing covers.
+5. **Say which rules have no seam in your harness**, and what implementing them would cost.
+   A mapping table asserting a mechanism that does not exist is worse than an empty section,
+   because the next session builds on it.
+6. **Retire the source only after proving its content exists elsewhere.**
+
+### Proving a directory's content before deleting it
+
+```sh
+# Per DIRECTORY: a clone is re-clonable, an untracked snapshot is not.
+git -C "$D" remote -v
+git -C "$D" rev-list --left-right --count origin/HEAD...HEAD
+
+# Per FILE: compare against the counterpart path, not the basename.
+for f in $(cd "$A" && find . -type f -not -path './.git/*'); do
+  cmp -s "$A/$f" "$B/$f" || echo "UNIQUE $f"
+done | tee /tmp/unique.txt
+```
+
+- **Check the remote per directory, never by project name.** A clean clone of a published
+  repo and an untracked snapshot of the same project sit side by side under near-identical
+  names, and only the first is recoverable.
+- **Compare against the flattened counterpart.** A snapshot often drops a repo's layout
+  (`docs/x.md` becomes `x.md`), so a basename comparison reports every file as unique and
+  hides that all of them match.
+- **A count is the verdict, a resemblance is not.** "356 files byte-identical, 21 present
+  only here, and all 21 match their counterpart under `docs/`" is evidence; "looks like a
+  copy of the clone" is a guess with a file listing behind it.
+- **Confirm an irreversible delete in full sentences, naming which directories are
+  recoverable and which are not**, before running it.
+
 ## Pitfalls
 
 - **Editing a bundled skill.** Hash-tracked and refreshed; the change disappears.
@@ -302,6 +358,10 @@ answer to "which copy is in play" when a local copy could be shadowing the mount
 - **Reading a check's result through a pipe.** `cmd | tail` reports the *pipe's*
   exit status, not the command's, so a failing check looks like it passed. Check
   `$?` on the command itself, or redirect to a file and inspect that.
+- **`rm -rf` on a directory you assumed was a clone.** Run `git remote -v` *in that
+  directory*: a clean clone and an untracked snapshot of the same project can sit side by
+  side, and only the first comes back. Step 10 has the per-file comparison that proves
+  nothing unique is lost.
 - **Treating a secret-scanner's own pattern as a finding.** A probe that detects a
   private-key header contains that literal, so a naive grep over the tree flags the
   detector itself. Audit each hit by reading it: a token-shaped placeholder in
@@ -324,4 +384,6 @@ answer to "which copy is in play" when a local copy could be shadowing the mount
 - [ ] External skills adapted to local conventions, source revision pinned, and the
       sync semantics (snapshot vs subscribed) stated
 - [ ] Rejected candidates recorded with a reason and the skill that already covers them
+- [ ] A mined source is retired only after a per-file byte comparison against the copy
+      kept, and only after confirming which directories have a remote
 - [ ] Any secret-scan hits audited by reading them, not by count

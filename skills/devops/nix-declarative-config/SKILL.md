@@ -280,6 +280,17 @@ Option names, defaults, deprecations and published guidance differ between the u
   accepted, `nix flake --no-write-lock-file check` fails with `unrecognised flag`. Inject
   it at the one place every nix invocation funnels through rather than at each call site,
   and test both halves — flag present and positioned, and non-nix commands untouched.
+- **An overlay cannot move a package onto another nixpkgs; only the input's
+  `nixpkgs.follows` can.** Upstreams frequently publish an overlay that is a *pure alias* for
+  the package their own nixpkgs built — hermes-agent's `nix/overlays.nix` says exactly that —
+  so `nixpkgs.overlays = [ flake.overlays.default ]` hands back the same frozen derivation
+  and changes nothing. To build it against the machine's nixpkgs, set
+  `inputs.<flake>.inputs.nixpkgs.follows = "nixpkgs"` and expect a local rebuild: the
+  derivation stops matching the binary cache, and the cost is real (hermes-agent: 157
+  derivations). Read the built wrapper's `HERMES_PYTHON` and PATH store paths to prove which
+  nixpkgs won — the flake evaluating says nothing about that. A `git+file://` profile entry
+  then moves with `nix profile upgrade <name>`, which re-evaluates the tree's `flake.lock`
+  and leaves the lock itself untouched.
 - **A nix-built CLI cannot find the working tree from `__file__`.** The installed command
   is a launcher into a store copy of the package, so `Path(__file__).parent.parent` is a
   `/nix/store/…` path — and a shipped tree deliberately carries no build metadata
