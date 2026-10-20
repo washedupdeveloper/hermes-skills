@@ -291,6 +291,12 @@ Option names, defaults, deprecations and published guidance differ between the u
   wrong version is worse than none. Pin a **tag** rather than a rev when the label
   matters: `nix flake update <input>` re-resolves the tag to the same commit (verified
   byte-identical lock), so it stays an exact pin with a readable name.
+  **A branch URL is also an exact pin** — `locked.rev` is what every rebuild reads, so
+  `main` moves only when `nix flake update <input>` runs — and it is the right choice when
+  the ask is "latest" rather than "labelled": the price is the version string, which falls
+  back to `0.0.0` with the commit as the only identity. Say that price out loud instead of
+  letting the user discover it; it is a trade, not a defect to paper over with a fabricated
+  version.
 - **An overlay cannot move a package onto another nixpkgs; only the input's
   `nixpkgs.follows` can.** Upstreams frequently publish an overlay that is a *pure alias* for
   the package their own nixpkgs built — hermes-agent's `nix/overlays.nix` says exactly that —
