@@ -134,6 +134,35 @@ the evidence that the layout and the crypto agree. If the machine's key does not
 to `sops/machines/<m>/key.json`, the machine cannot decrypt its own vars — that is the
 failure a `hashedPasswordFile` override exists to paper over.
 
+## What the store does NOT protect: the machine's age key is on that machine's disk
+
+Clan's vars store protects the **repository** and the backups. It does not protect a machine
+at rest, and the reason is one file:
+
+```bash
+nix eval --raw .#nixosConfigurations.<m>.config.sops.age.keyFile   # /var/lib/sops-nix/key.txt
+```
+
+`nixosModules/clanCore/vars/secret/sops/default.nix` sets that automatically when
+`sops/secrets/<machine>-age.key/secret` exists, pointing `sops.age.keyFile` into
+`clan.core.vars.sops.secretUploadDirectory` (default `/var/lib/sops-nix`) — which clan's own
+option description calls the place that "includes the age private key used for decryption".
+The key is therefore a **plaintext file on the target machine's filesystem**.
+
+The decrypted values themselves are not on disk: they land in tmpfs (`/run/secrets/vars/…`
+for the SSH host key, `/run/secrets-for-users/vars/…` for a password hash — both measured).
+That is not the comfort it sounds like. The ciphertexts are committed, so the checkout on the
+same disk carries them; key plus ciphertext is plaintext, and a powered-off stolen disk yields
+the host key, both password hashes, and every var a later generator adds.
+
+So: **never describe a clan vars store as protecting a machine at rest unless that machine's
+disk is encrypted.** Disk encryption is a separate, deliberate decision — the current shape is
+LUKS2, because `systemd-cryptenroll` supports only LUKS2 volumes (it stores token metadata in
+the format's JSON area), enrolled to a TPM2 device bound to PCR 7 so an unattended reboot stays
+reachable, with a recovery key kept in the sops store. Read the owner's stance from the repo's
+milestone/ADR before assuming either way, and state the consequence where the vars story is
+told rather than leaving it to be rediscovered.
+
 ## An escrowed key that decrypts to nothing is a false recovery path
 
 A `sops/secrets/<name>/secret` whose decrypted key is **not a recipient of any file in

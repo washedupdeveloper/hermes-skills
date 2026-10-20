@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.11.0
+version: 1.12.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -352,7 +352,9 @@ run on commit and will reformat or fail; a green commit is extra evidence, not a
 substitute for the gate. Markdown is gated too, and the two rules that bite are
 mechanical: a `$` prompt inside a ```console fence fails markdownlint's MD014
 (commands must be shown with their output), and a table whose separator row is
-`|---|` fails MD060 -- write bare commands and `| --- | --- |`.
+`|---|` fails MD060 -- write bare commands and `| --- | --- |`. A third rule bites on every document written in a
+single call: **MD047** wants exactly one trailing newline, which `write_file` does not add —
+`printf '\n' >> <file>` is part of finishing a document, not polish.
 
 **Nix needs new files git-tracked — but never stage them with `git add -N`.** Nix
 cannot see an untracked path, and its error message tells you to run `git add -N`;
@@ -466,8 +468,10 @@ secret on it — and if one does escape, tell the user in the same reply and tre
 disclosed, because it is.
 
 **Verifying that a clan/sops secret store is wired the RIGHT way is its own audit** —
-symlink markers, recipient↔key agreement, and the orphaned-escrow check that catches a
-recovery path which recovers nothing: `references/sops-store-coherence.md`.
+symlink markers, recipient↔key agreement, the orphaned-escrow check that catches a
+recovery path which recovers nothing, and the at-rest boundary it does not cover — a
+machine's age key is a plaintext file on that machine's disk, so disk encryption is a
+separate decision: `references/sops-store-coherence.md`.
 
 **Confirm scope before a consequential change.** Rotating a credential, changing a
 host key, or deleting state has an operational tail: a device or a client needs to
@@ -524,6 +528,15 @@ VM test's assertions are, and a unit registered in several places needs a
 rule, the reserved tags, the vars a machine needs before its toplevel will build at
 all, and the reason a test suite has to be fleet-shaped *before* the second machine
 arrives: `references/adding-machines-to-a-clan.md`.
+
+**A machine on new hardware takes its board support as a MODULE, not as a system
+builder.** Clan makes the `nixpkgs.lib.nixosSystem` call itself, so an upstream flake
+whose support ships as its own system-builder helper cannot be used at that seam; the
+support goes in through `clan.specialArgs.<input>` plus
+`imports = [ <input>.nixosModules.<board>.base ]` in the machine, and what that module
+takes from its own flake gets read rather than inferred. Reading a clan service's real
+interface from the pinned store, and why an overlay's public nodes do not make an
+offline machine reachable, are in the same reference.
 
 ## Procedure
 
@@ -584,7 +597,9 @@ arrives: `references/adding-machines-to-a-clan.md`.
   the ports pair, deployability checks, and how the gate wires into git hooks.
 - `references/adding-machines-to-a-clan.md` — growing a clan from one machine to
   many: clan's directory discovery, the reserved `all`/`nixos` tags, the vars store
-  as a build prerequisite, fleet-shaped assertions, and the deploy target.
+  as a build prerequisite, fleet-shaped assertions, the deploy target, third-party
+  board support at the `specialArgs` seam, and how to read a clan service's
+  interface -- role options, exports, vars generator -- from the pinned store.
 - `scripts/install-into-wsl.sh` — copy Windows-staged files into a WSL repo with CR
   stripped and before/after hashes.
 - `references/host-side-leakage-and-reclamation.md` — auditing and reclaiming what a
