@@ -128,6 +128,30 @@ var. A false pointer is worse than the long paragraph it replaced, because the r
 stops looking. Grep the target for the specific claim before writing the pointer, and
 when it is absent either keep the fact inline or add it to the target in the same edit.
 
+## Preserve the complete proposition
+
+Before cutting a sentence, list the propositions in it: the actor and action, the condition
+and timing, the modality (must / may / never), the negative guarantee and the exception, the
+ownership and side effect, the failure mode and the consequence. Every one that survives
+makes the sentence shorter; any one that is dropped makes the document wrong.
+
+**A smaller word count is not an improvement.** DeepSeek Harness's prose standard states the
+same rule from the other direction: write enough to preserve the contract, then remove the
+reasoning transcript, the repetition and the decoration. A contract is an obligation,
+invariant, precondition, postcondition or compatibility promise that a caller, callee or
+consumer relies on.
+
+Two consequences worth applying literally:
+
+- **Keep a complete local contract at the point of use** — behaviour, failure, ownership,
+  consequence — and link away only the architecture, the rationale, the algorithm, the
+  history and the extended examples. One explanation has one home; an essential contract
+  fact may repeat locally.
+- **Comments state non-obvious contracts and rationale that code cannot express.** Delete
+  control-flow narration and restatement of the line below. In a test, explain only the
+  non-obvious design decision — why this fixture, this real entry path, this platform
+  accommodation — never a walkthrough of the assertions.
+
 ## Compressing an existing document
 
 Delegating "make this shorter" to a model reliably destroys facts, and the usual

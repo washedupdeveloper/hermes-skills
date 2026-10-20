@@ -26,6 +26,10 @@ For the concrete failure patterns that make a check lie about itself — a filte
 skips the very file it names, a copy that aliases nested state, a payload past the
 kernel's per-argument limit — see `references/silent-failure-patterns.md`.
 
+For a suite that has to be correct under real CI concurrency — shared host ports, global
+state, platform-owned semantics, timeout budgets, quiescent teardown, and the fixes that
+mask a flake instead of closing it — see `references/test-reliability.md`.
+
 ## When to Use
 
 - Designing or changing a scoring model, weight table, normalization curve, or

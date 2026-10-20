@@ -107,6 +107,16 @@ lifetime? *Boundary:* pure infrastructure — logging, transport, storage — do
 through a business registration surface. A new branch in a centre layer must explain why it
 cannot live in the owning module.
 
+**Split a capability by business boundary, not by caller count.** A new capability is its
+own service or module; growing one large object a method at a time leaves it answering for
+auth, data, transport and events at once, so every later change to one capability touches
+all of them. A capability with a single caller today still gets its own service, and a
+moved endpoint appears on its new owner rather than joining the object it is leaving.
+*Check:* which object holds the new method. A new business line added to an object that
+already owns another line is the defect. *Boundary:* a service whose methods all serve one
+business boundary stays whole, and a new private helper of that capability belongs on it.
+A single caller is not a reason to merge.
+
 **Contain listener exceptions in the dispatcher.** Catch and report each listener's failure
 without rejecting the dispatch or starving later listeners — and the listener's owner must
 still handle the state it mutated. Catching is not recovery.
