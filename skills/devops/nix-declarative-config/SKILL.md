@@ -280,6 +280,17 @@ Option names, defaults, deprecations and published guidance differ between the u
   accepted, `nix flake --no-write-lock-file check` fails with `unrecognised flag`. Inject
   it at the one place every nix invocation funnels through rather than at each call site,
   and test both halves — flag present and positioned, and non-nix commands untouched.
+- **A flake input's `ref` is `null` after resolution, so a package built from a flake
+  cannot know its own version.** `inputs.x.ref` and `inputs.x.rev` are both discarded for a
+  tag or branch URL — measured: `inputs.ha.ref` is null with `url = "github:o/r/v1.2.3"`,
+  while `rev` holds the resolved commit. A package whose flake takes `version ? "0.0.0"`
+  therefore reports `0.0.0` forever. The tag survives only in `flake.lock`'s
+  `original.ref`, and `outputs` can read it back — `builtins.fromJSON (builtins.readFile
+  ./flake.lock)` — then pass it as the version override. One fact, and bumping the release
+  is one edit. Do not restate the version beside the URL; the two drift, and a silently
+  wrong version is worse than none. Pin a **tag** rather than a rev when the label
+  matters: `nix flake update <input>` re-resolves the tag to the same commit (verified
+  byte-identical lock), so it stays an exact pin with a readable name.
 - **An overlay cannot move a package onto another nixpkgs; only the input's
   `nixpkgs.follows` can.** Upstreams frequently publish an overlay that is a *pure alias* for
   the package their own nixpkgs built — hermes-agent's `nix/overlays.nix` says exactly that —
