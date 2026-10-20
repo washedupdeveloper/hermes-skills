@@ -135,19 +135,152 @@ And delete the homogeneity assertion (`every machine is x86_64-linux`). It forbi
 the heterogeneous machine you are adding, and it duplicates the declared-systems
 check.
 
+## A machine on new hardware: the support arrives as a module
+
+Clan builds each machine itself -- `modules/clan/module.nix` calls
+`nixpkgs.lib.nixosSystem` and passes `specialArgs = { inherit clan-core; } //
+clan.specialArgs` -- so an upstream flake that ships its own system-builder helper
+cannot be used at that seam. Board support (a vendor kernel and firmware, the
+bootloader options for a single-board computer) is therefore consumed as **modules
+plus a specialArg**:
+
+```nix
+# flake.nix
+clan.specialArgs.<support-flake> = inputs.<support-flake>;
+
+# machines/<name>/configuration.nix
+{ <support-flake>, ... }: {
+  imports = [ <support-flake>.nixosModules.<board>.base ];
+}
+```
+
+The helper that applies that flake's *global* overlays is unreachable from clan's
+call site, so what the base module takes from its own flake -- kernel packages,
+firmware, the options it defines -- is something to read in the pinned source rather
+than infer from the helper's documentation. The same rule covers any module that
+expects a `specialArg`: the module is what arrives, the arg is how it finds its flake.
+
+Check whether that module provisions the firmware partition **on activation**. Where
+it does, an install needs no hand-prepared image and a deployment tool can run the
+whole thing non-interactively; where it does not, the card is a manual step and
+saying so is part of the answer.
+
+## Reading a service's interface from the pinned store
+
+An instance is written against `manifest.name` and the role's interface, so read both
+from `clanServices/<name>/default.nix` in the store path `flake.lock` pins:
+
+```nix
+manifest.name = "clan-core/mycelium";  # the instance says module.name = "mycelium"
+roles.peer.interface = { openFirewall; addHostedPublicNodes; };
+perInstance = { settings, mkExports, machine, ... }: { ... };
+```
+
+Three things to lift from it before writing the instance:
+
+- **the options the role actually exposes**, which live in `interface` -- a setting
+you invented from the prose is a silently ignored key;
+- **what it generates and exports** -- `clan.core.vars.generators.<gen>` and its
+  `files.*.secret` flags say which values are secret, and `exports` says what other
+  machines may read (a peer's overlay address, for instance);
+- **what it already sets**, so your config adds to it instead of fighting it.
+
+Instances then use the shape the built-in ones do: `module.name = "<name>"` with
+`module.input = "clan-core"`, and a local module must say `"self"` because
+`"clan-core"` is the default. Assign roles by tag so a machine added later joins with
+no edit.
+
+**An overlay's public nodes are discovery and NAT traversal, not reachability.** A
+peer that is switched off stays unreachable however many public nodes exist, which is
+why a roaming machine needs at least one always-on peer at home. Two design
+consequences: that peer is a machine's whole justification, and a roaming machine's
+`deploy.targetHost` has to be its overlay address rather than a LAN name, which is
+wrong the first time it leaves the house.
+
+## A machine from a template, so the skeleton cannot forget
+
+Clan reads machine skeletons from `clan.templates.machine.<name>` in the clan module, and
+applies one with either spelling:
+
+```bash
+clan machines create <name> --template <template>     # writes machines/<name>/ AND the inventory entry
+clan templates apply machine <template> <name>        # an alias for the same call
+```
+
+Two properties decide what a skeleton can do. **It is a plain directory copy** -- clan
+substitutes nothing in a machine template, unlike disk templates which take `--set` for
+their `{{placeholders}}` -- so a skeleton knows nothing about the machine's name and must
+derive what it can: `networking.hostName = config.clan.core.settings.machine.name` cannot
+disagree with the machine's name, whereas a hand-typed string can and does. **And clan
+then writes `inventory.json`** for what it creates, while a repo whose checks read its
+`clan.nix` declaration still needs that block: the file speaks for the keys it carries and
+clan merges both.
+
+A skeleton is the right place for the two lines a copied file forgets -- the platform and
+`topology.self` -- and for nothing the machine should decide. Keep the platform in a
+`platform.nix` the skeleton imports: the repo's own assertion over `systems` can then read
+the same file, which is what lets a flake declare a system *before* the machine that will
+use it exists. Putting the platform back into the assertion as a literal is a second copy
+and drifts.
+
+## Building another machine's architecture on the host you have
+
+Adding `aarch64-linux` to `systems` is only half the contract: the gate BUILDS what it
+asserts, and without a builder for that platform nix refuses with `a 'aarch64-linux' ... is
+required to build ... but I am a 'x86_64-linux'`. `boot.binfmt.emulatedSystems = [ ... ]` on
+the x86_64 machine closes it -- qemu-user through the kernel's binfmt_misc, with the module
+also adding the platform to `nix.settings.extra-platforms`. Measured on an x86_64 host with
+the aarch64 leg enabled: the same rebuilt check takes **8.6 s against 8.3 s native**,
+because that leg is evaluation and trivial builders; a compiling build pays for the
+emulation in full.
+
+- **`nix flake check` builds the CURRENT system's checks only.** The other leg is
+  `--all-systems`, and a repo whose hook runs the bare command is not gating the emulated
+  architecture at all.
+- **Gate the VM tier off an emulated leg.** `runNixOSTest` boots a QEMU guest of the
+  system under test, so on aarch64 it would be qemu-user running qemu-system-aarch64:
+  nested emulation, minutes per test, and no claim about the other board. `lib.optionalAttrs
+  pkgs.stdenv.hostPlatform.isx86_64` around the e2e checks is the whole fix.
+- **Under WSL, `systemd-binfmt` works, and the flush error is a warning.** A host that
+  disables it "because binfmt_misc's status file is read-only" is repeating a claim worth
+  re-measuring: it applies `/etc/binfmt.d/nixos.conf` and exits 0, while the flush of
+  pre-existing rules fails with EROFS. Two consequences -- enabling it makes
+  `wsl.interop.register = true` load-bearing (WSLInterop must stay declared in binfmt.d or
+  `.exe` execution is at the mercy of that flush; verify with `cmd.exe /c echo ok` after the
+  switch), and the emulated interpreter lands as `/run/binfmt/<system>`.
+
+## When a service joins the fleet, the ports assertions fail -- and that is the point
+
+Enabling a service that opens a firewall port turns the `ports` unit group red, because
+that group enumerates the fleet's declared exposure in full on purpose. Read the failure as
+a list, then edit the expectations deliberately with the port's reason next to it.
+Measured example: clan-core's mycelium instance adds **TCP 9651 and UDP 9650/9651** (its
+nixpkgs module writes them straight into `networking.firewall` rather than exposing them as
+options, so an assertion can only see them by restating the numbers). The bare-port
+assertion is worth keeping as "the only bare ports have a reason" -- a service whose
+listener cannot be scoped to one interface (sshd, an overlay) is a decision, and the test
+should make someone write it down.
+
 ## The procedure
 
-1. `machines/<name>/configuration.nix` -- `networking.hostName` equal to the machine
-   name, `nixpkgs.hostPlatform`, `topology.self`.
-2. `clan.nix`: `machines.<name>._module.args.username`, and
-   `inventory.machines.<name>` with its tags, `description`, and
+1. `clan machines create <name> --template <template>` -- or write
+   `machines/<name>/configuration.nix` by hand; the skeleton carries the platform, a
+   hostname derived from the machine's name, `topology.self`, and (for bare metal) a
+   bootloader.
+2. `clan.nix`: `inventory.machines.<name>` with its tags, `description`, and
    `deploy.targetHost` if it is remote. `workstation` has no deploy block on purpose
-   -- it is self-managed and it is where the command runs.
+   -- it is self-managed and it is where the command runs. Nothing per-machine is needed
+   for `username` or any other global: those go in `clan.specialArgs` once, and a machine
+   that needs module args is a sign they should have been global.
 3. `git add` the new directory.
-4. `clan vars generate <name>` then `git add vars/`.
-5. Add the architecture to `systems` if it is new.
-6. `nix flake check --keep-going`, then build `nixos-<name>` -- the gate builds every
-   machine's toplevel, so an eval-clean machine that cannot build still fails there.
+4. `clan vars generate <name>` then `git add vars/` -- scoped to the generator you added
+   where possible, and never `--regenerate` unless rotation is intended. Prove nothing
+   else moved by hash-diffing `vars/` before and after; clan commits the new files itself.
+5. Add the architecture to `systems` if it is new -- and see the emulation section above
+   for the builder that platform needs.
+6. `nix flake check --all-systems --keep-going`, then build `nixos-<name>` -- the gate
+   builds every machine's toplevel, so an eval-clean machine that cannot build still
+   fails there.
 
 Expect the gate to fail on the first run; that is the design working. The groups are
 separate checks that run in parallel, so there is no "order" — read them together. What

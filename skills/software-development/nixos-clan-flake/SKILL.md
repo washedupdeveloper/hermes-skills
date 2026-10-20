@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.12.0
+version: 1.13.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -311,7 +311,12 @@ touched only comments is the file with a string in it.
 
 **The gate is `nix flake check --keep-going`, and only that.** `--no-build` only
 evaluates and will report `all checks passed!` while the real gate is red — that is
-exactly how a red gate stayed hidden behind a green summary. Then build:
+exactly how a red gate stayed hidden behind a green summary. **It fails in the other
+direction too, and that one is newer:** a machine's secret is a store path, and
+evaluating a consumer calls `pathExists` on it, so `--no-build` refuses to realise it
+and the evaluation dies with `error: path '<...>-per-machine-<machine>-<generator>_key'
+is not valid` while the real gate passes. Use it only on something with no secrets in
+it. And to build the leg that is not the current system: `--all-systems`. Then build:
 
 ```bash
 nix build --no-link --print-out-paths '.#nixosConfigurations.<machine>.config.system.build.toplevel'
@@ -538,6 +543,13 @@ takes from its own flake gets read rather than inferred. Reading a clan service'
 interface from the pinned store, and why an overlay's public nodes do not make an
 offline machine reachable, are in the same reference.
 
+**"What is missing to reach the milestone?" cannot be answered from the code — the target has
+to exist as a document first.** Grep for it before measuring anything (`grep -rni milestone`);
+with none in the tree, the deliverable is the target, defined with the owner, not a gap list
+against an imagined one. One home per fact, how to interview for an undefined target, the sweep
+a reversed decision requires, and why a deferral must carry its measured consequence:
+`references/planning-documents.md`.
+
 ## Procedure
 
 1. **Recon**: `wsl.exe -l -v`; then in the distro, `git log --oneline -5`,
@@ -586,6 +598,10 @@ offline machine reachable, are in the same reference.
 
 ## References
 
+- `references/planning-documents.md` — the milestone/recommendations/ADR set as one plan: one
+  home per fact, interviewing the owner to close an undefined target, the sweep a reversed
+  decision requires, verifying every identifier against the pinned source, and what a deferral
+  or a "reached" criterion has to contain.
 - `references/fetchurl-hash-modes.md` — flat vs recursive FOD hashes, and how to test
   a pin correctly.
 - `references/clan-vars-generators.md` — authoring a `clan.core.vars.generators`
