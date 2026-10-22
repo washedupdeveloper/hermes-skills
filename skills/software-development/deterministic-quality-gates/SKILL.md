@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.8.0
+version: 1.4.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -82,7 +82,36 @@ part of the path. When a check fails, the first hypothesis is the check.
 
 **Bound everything the gate executes.** A gate with an unbounded child process hangs
 forever, and a hung gate is indistinguishable from a slow one — the run never reports
-at all. Pass an explicit timeout to every subprocess a gate spawns.
+at all. Pass an explicit timeout to every subprocess a gate spawns. When the cap fires
+the producer returns **nothing**, and the gate's only honest answer is the same one a
+missing analyzer gets: no verdict, said out loud — never a pass.
+
+**A producer that ran out of time leaves artifacts on disk anyway — re-run COLLECTION
+before re-running the producers.** A gate cannot score what its producers never wrote,
+but "never wrote" is often "wrote after the collector ran": the collection step is
+deterministic and cheap, the producers are slow and paid for, and the two race. Measured
+on the council: five reviewer samples hit a 1800 s per-turn cap (`rc=124`, distinct from
+the `143` a lifecycle kill leaves and the `126` an argv overrun leaves), the merge that
+runs at round end read 0 of them and wrote no dimension files, so the gate reported it
+could evaluate nothing — and re-running the *merge verb alone* recovered 4 of 5 samples
+into a real verdict. Reach for the deterministic half first, widen the producer's own
+`--timeout` for the next round, then read the gate's exit code rather than the summary.
+
+**Where the gate runs decides who may trigger it — never the guards inside the trigger's
+file.** A gate that executes on your own hardware must not be reachable by a ref an
+outsider can write. `pull_request` runs the workflow file **from the PR's merge commit**,
+so on a fork-controlled PR the file is attacker-authored: an `if:` that skips forks is
+deleted by the fork that edits it, along with every other control written inside it
+(github/docs, "Securely using pull_request_target"). A public repository makes that
+reachable by anyone who can open a pull request, and the payload runs as that job's user
+on a machine that is not disposable. The trust boundary is therefore the **trigger set**:
+the self-hosted job takes `push` to the protected branch plus manual dispatch, and any
+PR-triggered job runs on hosted infrastructure instead. A read-only token, a commit-pinned
+checkout, `persist-credentials: false` and refusing flake-supplied substituters all
+constrain honest runs only; a repository fork-approval policy is a real control but the
+tree cannot assert it, so name it as a precondition rather than implying the workflow
+enforces it. Verify the exposure claim before writing the boundary into a comment —
+`curl -s https://api.github.com/repos/<owner>/<repo> | jq -r .private`.
 
 **Mock the boundary, never the pipeline.** Mock only the expensive or non-deterministic
 edge — the model adapter, the network, the clock — and keep the registry, the persistence and
@@ -327,6 +356,25 @@ unrecorded calibration is a guess with extra steps: the moment the manifest is
 missing the gate silently reverts to defaults. Ship the parameters alongside the
 code, and document that deleting the file restores uncalibrated behaviour.
 
+**A self-hosted gate's trust boundary is the TRIGGER SET, not a guard inside the
+workflow file.** GitHub runs a `pull_request` workflow from the PR's merge commit
+(github/docs, "Securely using pull_request_target"), so a fork that edits the
+workflow deletes any `if:` written inside it — the guard lives in the file the
+attacker controls. Measured on a public repository, where anybody can fork: four of
+four reviewer samples falsified a narrowing `if:` that had been added for exactly
+this reason, and the repository was `"private": false` by the finding's own check.
+What a self-hosted runner then executes is attacker-authored YAML plus
+attacker-authored builders, on a host with the maintainer's filesystem, network and
+persistent `/nix/store`. Hold the boundary in the layers the tree owns: triggers that
+never fire on a fork-controllable ref (push to the default branch,
+`workflow_dispatch`), `permissions: contents: read`, a checkout pinned to a commit
+with `persist-credentials: false` — and **not** `--accept-flake-config`, which makes
+nix trust the `nixConfig` of the tree under test, so a PR can add its own
+substituters and signing keys and land arbitrary paths in that store. Fork-safe PR CI
+needs the repository's fork-approval policy set to require approval for ALL external
+contributors first; that is a repository setting no file can assert, so name it as
+the prerequisite rather than claiming the workflow closes it.
+
 ## Procedure
 
 1. **Decide the input shapes** — findings lists vs scalar metrics — and write down
@@ -413,6 +461,13 @@ happened to mention first.
   the one calibrated. The tell that this has already happened: a baseline whose members
   cluster suspiciously high, or one whose lowest clean member sits within a couple of
   points of the threshold.
+- **A gate's coverage depends on the environment it runs in.** A coverage fraction that
+  depends on which analyzers are on `PATH` scores the same commit differently under a
+  devshell and outside one — measured, β 1.0 against 0.33, and the lower number silently
+  hands the deterministic half back to the producer's own opinion, which makes the two
+  scores incomparable. Invoke the gate the way its pinned toolchain is exposed whenever
+  the number will be compared against another run, and say which invocation produced any
+  number you quote.
 - **Retracting a published measurement without retracting its dependents.** When a
   baseline turns out to be under-sampled or misclassified, the number is the smallest part
   of the correction: the derived interval, the class membership of every member, the
