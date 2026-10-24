@@ -94,7 +94,8 @@ skills/
 │                           hermes-terminal-backend
 ├── communication/          caveman  ultracave  caveman-review  cavecrew
 │                           caveman-explore  caveman-compress
-├── devops/                 hermes-s6-container-supervision
+├── devops/                 ephemeral-cleanup
+│                           hermes-s6-container-supervision
 │                           nix-declarative-config
 ├── productivity/           wait-what
 ├── security/               oss-forensics  web-app-security
