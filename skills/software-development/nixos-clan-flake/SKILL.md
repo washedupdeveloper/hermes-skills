@@ -1,7 +1,7 @@
 ---
 name: nixos-clan-flake
 description: "Use when working on a NixOS/Clan flake over WSL."
-version: 1.13.0
+version: 1.14.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -309,6 +309,21 @@ inside a `clan.core.vars.generators` script it can change the generator's inputs
 The AST hash is what catches this: the file whose hash moves when you believed you
 touched only comments is the file with a string in it.
 
+**And when a linter forces code to MOVE, the AST hash is the wrong proof — hash the
+evaluated strings.** `statix` W20 ("repeated key") makes you fold several
+`clan.core.vars.generators.<x>` assignments into one block, which moves every generator
+body, so the parse-tree hashes legitimately change and prove nothing at all. What must
+not change is each generator's *script*, because that is the thing that can rotate a
+secret — evaluate them before and after and compare:
+
+```bash
+nix eval --raw .#nixosConfigurations.<m>.config.clan.core.vars.generators.<g>.script | sha256sum
+```
+
+Identical hashes across a pure move is the evidence, and it belongs in the commit body.
+"The diff reads like a move" is not evidence, and a re-indented `''` body is exactly
+where a real change hides.
+
 **The gate is `nix flake check --keep-going`, and only that.** `--no-build` only
 evaluates and will report `all checks passed!` while the real gate is red — that is
 exactly how a red gate stayed hidden behind a green summary. **It fails in the other
@@ -359,7 +374,10 @@ mechanical: a `$` prompt inside a ```console fence fails markdownlint's MD014
 (commands must be shown with their output), and a table whose separator row is
 `|---|` fails MD060 -- write bare commands and `| --- | --- |`. A third rule bites on every document written in a
 single call: **MD047** wants exactly one trailing newline, which `write_file` does not add —
-`printf '\n' >> <file>` is part of finishing a document, not polish.
+`printf '\n' >> <file>` is part of finishing a document, not polish. `editorconfig-checker`
+enforces the same property on files markdownlint never sees, a YAML workflow included
+(`wrong line endings or no final newline`), so add the newline before the first gate run
+rather than after it fails.
 
 **Nix needs new files git-tracked — but never stage them with `git add -N`.** Nix
 cannot see an untracked path, and its error message tells you to run `git add -N`;
@@ -376,6 +394,18 @@ rollback fails, the stash it tried to re-apply is still at
 and holds the complete lost diff. Copy it out first, then `git reset`, delete the
 emptied 0-byte files, and `git apply` it. Never reach for `git reset --hard` or
 `git checkout -- .`: the damage is to *unstaged* changes, which those destroy.
+
+**A co-writer may have already built the feature you were about to write — read the index
+before implementing.** On a tree shared with a background curator or a second agent,
+`git status --short`'s FIRST column is theirs: `A ` or `M ` means the change is staged, not
+absent, and a clean-looking `git diff` hides it. Check `git diff --cached --stat` and read
+the target file whole before adding to it. Measured: the workflow and its matching runner
+config were already staged, so writing "the same feature" produced a second
+`services.github-runners.<name>` block — which fails evaluation as a conflicting definition
+rather than as an obvious duplicate. When their version is better (a prompts-based token
+over a plain secret, a comment that explains more), keep theirs, delete yours, and name in
+the commit body whose work it carries. A refused `write_file` ("has not seen its full
+current content") is this situation announcing itself — read, then merge, never overwrite.
 
 **Once the gate has run on the exact content, commit with `--no-verify`.**
 `pre-commit run --all-files` with everything staged (nothing unstaged, so nothing to
@@ -583,6 +613,10 @@ a reversed decision requires, and why a deferral must carry its measured consequ
    became three lines of `command not found`, and the commit succeeded anyway. Write
    the body to a file and pass `-F <file>`, or use a quoted heredoc (`<<'MSG'`), then
    read it back with `git log -1 --format=%B` before pushing.
+   **Every flag has to precede `--`, or git reads it as a pathspec.**
+   `git commit --only -- <paths> -F /tmp/msg` dies with `'/tmp/msg' is outside repository`:
+   the separator ended option parsing, so `-F` became a path. The working order is
+   `git commit --no-verify --only -F /tmp/msg -- <paths>`.
 6. **Re-verify LAST, and name the snapshot -- branch included.** A verdict is a claim
    about one commit on one branch at one instant. On a tree another process can write,
    `HEAD` moves between the measurement and the report, so a green gate reported from a
@@ -598,6 +632,10 @@ a reversed decision requires, and why a deferral must carry its measured consequ
 
 ## References
 
+- `references/external-mesh-peers.md` — joining someone else's overlay network from a clan
+  machine: their peer list as pinned-input DATA rather than modules, the keypair generator
+  whose public half leaves the repo, the minimum interface that opens nothing inbound, and
+  the impact statement that has to accompany it.
 - `references/planning-documents.md` — the milestone/recommendations/ADR set as one plan: one
   home per fact, interviewing the owner to close an undefined target, the sweep a reversed
   decision requires, verifying every identifier against the pinned source, and what a deferral

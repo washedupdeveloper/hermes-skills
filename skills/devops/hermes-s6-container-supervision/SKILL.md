@@ -5,6 +5,7 @@ version: 1.1.0
 author: Hermes Agent
 license: MIT
 platforms: [linux]
+category: devops
 environments: [s6]
 metadata:
   hermes:

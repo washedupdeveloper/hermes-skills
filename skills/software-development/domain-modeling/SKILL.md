@@ -93,6 +93,19 @@ it changes" usually means a fact was recorded with the wrong half-life. Replace 
 with the decision — record what is stable, drop what is not — instead of performing it
 forever.
 
+**A fully-ticked checklist is not a retirement signal -- it is the part that finished.**
+"Every box is checked, so can it go?" answers itself once you ask what the record still
+carries: the decision in force, the options rejected and why, and the consequences. Only the
+action items ever reach done; the rest describes the system as it is, and it stays until
+something replaces it. A record whose decisions have left the tree is the one that goes,
+whatever its boxes say.
+
+**One fact, one home -- and confirm the target carries it before deleting a copy** (the rule
+and its failure mode are `writing-for-agents`'s). Applied to a record and its site: leave the
+site the half it cannot borrow -- that the absence is deliberate, and the surprising part --
+and the record keeps the reasoning and the measurement. The two copies must agree first; the
+second is often the stale one, and deleting the wrong one loses the fact.
+
 **Retiring an ADR takes two empty greps**: no file in the tree points at it
 (`grep -rn 'adr/000N'` — code comments and docs cite these files), and none of its decisions
 is still in force. Either one present and the record stays; the checklist was temporary, the

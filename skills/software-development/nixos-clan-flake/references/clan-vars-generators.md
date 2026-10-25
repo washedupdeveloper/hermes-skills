@@ -17,6 +17,31 @@ Consume a generated file as a path:
 Before generation `.path` evaluates to `/no-such-path`. That is the normal
 not-yet-generated state, not an error.
 
+## A secret only the owner can supply: `prompts`, not a script
+
+A PAT, an API key, a token a third party mints — a value no script can produce — is a
+**prompt** generator, not a scripted one. There is no `script` at all; the prompt collects
+the value:
+
+```nix
+clan.core.vars.generators.github-runner-token.prompts.token = {
+  description = "fine-grained PAT with Administration: read/write";
+  type = "hidden";   # no echo while typing
+  persist = true;    # the answer becomes the secret var `token`
+};
+```
+
+`clan vars generate <machine> --generator <gen>` asks once and stores the answer as the
+secret file; `--regenerate` replaces it, which is how a revoked token is rotated. Prefer
+this over `clan vars set <machine> <gen>/<file>`: both work, but the prompt carries the
+description and the hidden type, so the next person is told what to paste rather than left
+to guess the format.
+
+Until it is generated the path is `/no-such-path` (above), so a service consuming it
+**builds** and then fails to start — the failure is in `journalctl -u <unit>`, not in the
+gate. Say that plainly in the handover: "one interactive step" is accurate, and it is the
+only part of the change a non-owner cannot finish.
+
 ## Generate without rotating anything else
 
 ```bash

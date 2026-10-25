@@ -85,6 +85,41 @@ run the published entry point under the plain runtime at least once.
 **Guard that closes the class:** pin resolution explicitly for test subprocesses, and keep a
 built-artifact smoke test green.
 
+## A scenario inherits the composition it is not about
+
+**Detection:** name the composition each scenario boots and where any pin or header came
+from. A pin inherited from another composition tests the wrong wiring.
+**Guard that closes the class:** boot the composition from its own definition, and make the
+pin an explicit input of that composition.
+
+## A control acts on a layer that does not decide the outcome
+
+**Detection:** trace the decision to the layer that *reads* the control. A flag, an env
+var or a guard that acts elsewhere changes nothing but the reading of the test.
+**Guard that closes the class:** assert at the deciding layer, or change the composition —
+widening the reading of the control is not a fix.
+
+## A boundary fake covers only the happy grammar
+
+**Detection:** list the protocol's own enumeration — line kind by status — and diff it
+against the fake. The state the real host reaches only on legacy paths is the one missing.
+**Guard that closes the class:** the fake's matrix is derived from the protocol's
+enumeration rather than hand-picked, including the ambiguous state.
+
+## Evidence delivered on the untrusted party's channel is replayable by it
+
+**Detection:** for each piece of inbound evidence, ask who could produce the same bytes.
+A tighter conjunction stops collisions; it never authenticates the writer.
+**Guard that closes the class:** authenticate the writer (origin, keys, a nonce the peer
+cannot choose) rather than pattern-matching the payload.
+
+## A during-run property is sampled after the run
+
+**Detection:** name the instrumentation point. A property asserted after the process exits
+cannot distinguish the transition that matters from the state it left behind.
+**Guard that closes the class:** instrument the boundary itself, so a guard's failure is
+attributable to exactly one transition.
+
 ## Using these in the write-up
 
 The class belongs in "why the tests missed it", and the guardrail closes the class rather

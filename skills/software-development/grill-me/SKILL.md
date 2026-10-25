@@ -5,6 +5,7 @@ version: 2.1.0
 author: "Rafael Zendron (rafaumeu) + Matt Pocock (mattpocock/skills, grilling) + Hermes Agent"
 license: MIT
 platforms: [linux, macos, windows]
+category: software-development
 metadata:
   hermes:
     tags: [planning, adversarial, interview, decision-tree, pre-implementation, review, alignment]

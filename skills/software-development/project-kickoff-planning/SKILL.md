@@ -5,6 +5,7 @@ version: 1.0.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
+category: software-development
 metadata:
   hermes:
     tags: [planning, kickoff, greenfield, research, milestones, interview, scaffold]
@@ -20,6 +21,10 @@ milestone plan in a real project directory — before any build code is written.
 Load this when the user asks to plan/scope/set up a new system or project from scratch, asks for a
 "milestone plan", or says "research this and interview me about the decisions". Not for a single
 feature or bug inside an existing codebase — this is the greenfield kickoff.
+
+Also load it when an **existing** repo is asked what it is missing "to reach the milestone":
+that question is a kickoff in reverse, and when no milestone exists anywhere it cannot be
+answered at all until one is written. See "When the milestone does not exist yet".
 
 ## Procedure
 
@@ -57,6 +62,52 @@ feature or bug inside an existing codebase — this is the greenfield kickoff.
 
 7. **Reconcile research → plan.** Every major plan decision traces to either a research finding or
    a user answer; keep a traceability table so the plan is auditable and not vibes.
+
+## When the milestone does not exist yet (an existing repo)
+
+"What is this missing, to reach the milestone?" has no referent until the target is written
+down, and guessing one produces a plan nobody agreed to.
+
+1. **Prove the absence first, with tools.** Grep the repo for `milestone`/`roadmap`, search
+   past sessions, and read the repo's work list. A list of review findings is not a plan, and
+   a documented target is a different task from an absent one -- the difference decides
+   whether you interview or implement.
+2. **Interview in batched rounds.** One `clarify` call per round, up to 5 questions, one
+   decision per question, **your recommendation first** (the UI labels it), choices as
+   pickable rows and never enumerated inside the question text. Two or three rounds is normal
+   for a fleet- or product-scale target; stop when what is left is a hardware-time or
+   later fact rather than a design choice.
+3. **Take the decisions the user delegates.** "Undecided -- choose whatever coheres" is a
+   decision handed to you: choose, state the choice and its reason in one line, and proceed.
+   Never hand it back as an open question.
+4. **Verify every mechanism you are about to name, in the pinned source, before writing it
+   down.** A plan naming a seam that does not exist is worse than a vague plan: read the
+   pinned upstream (the store path from the lock file) for option names, module paths,
+   service interfaces, and whether an upstream helper is even usable at that call site -- and
+   say which one you read.
+5. **Record deferrals as decisions, not open flags.** "At hardware time", "not chosen", "out
+   of scope for this milestone", each with its reason. An unresolved flag is not a plan.
+
+### The doc it produces
+
+Name it for the repo's own conventions (`docs/milestone.md` where a docs tree exists) and make
+it the plan, not a second work list:
+
+- **The target**, stated as decisions with the constraints each imposes ("X is the transport",
+  "Y is the always-on peer") and what each one forecloses -- not a wish list.
+- **What is already in place**, so the gap is sized correctly and the plan does not read as a
+  rewrite.
+- **The gaps in dependency order**, each naming the file, option or input that has to change,
+  and marked when it needs hardware in hand.
+- **Deferred on purpose**, with the reason.
+- **What "reached" means** -- an observable end state (the gate builds every machine; a deploy
+  changed something remotely), never a restatement of the goal.
+- **Point at the existing work list by number** (`recommendations.md` item N) rather than
+  copying it: one home per fact (`writing-for-agents`), or the two drift apart.
+
+Then register the doc where the repo indexes its documentation (a README map row is the usual
+place) and run the repo's own gate before committing -- a docs tree with a lint hook will fail
+on mechanical things a `write_file` call does not satisfy.
 
 ## Doc set (write all of these)
 

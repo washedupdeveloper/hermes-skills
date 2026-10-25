@@ -70,7 +70,8 @@ Three different objects, and the postmortem needs the third:
 | the guardrail | the *class* cannot return unnoticed — a gate, a rule with a home, a check in CI |
 
 Prove the middle one by reintroducing the defect and watching the check fail, then
-restoring it. A guardrail with no negative control is prose with a filename.
+restoring it. A guardrail with no such check is prose with a filename — the rule behind it is
+`deterministic-quality-gates`'s *every acceptance rule needs a negative control*.
 
 ## Trust the trace, not the theory
 

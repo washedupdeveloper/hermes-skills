@@ -337,8 +337,8 @@ pass over a 34-skill library. Fix by removing the pointer — **do not invent th
 content** — and say plainly that the missing depth is a real gap worth writing.
   Detect with the audit script's `dead_refs`; ignore its false positives from
   command arguments (`<url>`, `link` placeholders) by reading each hit.
-- **Descriptions over 60 characters.** The validator allows 1024 and the index
-  truncates at 57, so a trigger buried past the cutoff never fires.
+- **Descriptions over 60 characters.** The window and its cost belong to
+  `hermes-agent-skill-authoring` (the index truncates); past it, a trigger never fires.
 - **`related_skills` naming a skill that does not exist** in the scanned tree — a
   dead reference the reader cannot follow.
 - **A drift check that has never fired.** A `--check` reporting clean is

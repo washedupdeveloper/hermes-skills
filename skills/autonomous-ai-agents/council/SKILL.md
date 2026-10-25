@@ -1,7 +1,7 @@
 ---
 name: council
 description: "Convene the code-review council on a repo."
-version: 3.4.0
+version: 3.5.0
 author: user
 license: MIT
 platforms: [linux, macos, windows]
@@ -371,6 +371,13 @@ nix the `council.py` call still works; the built-in probes need no installs.
 A flag with no verb means `review`, so existing flags keep working unchanged.
 `advisory` reviews and reports but never edits; `--max-rounds 1` stops after the one
 review. There is no separate manual path: the loop *is* the council.
+
+**Pick the scope from the tree, not from habit: a clean working tree makes
+`--scope working-tree` (the default) review nothing.** When every change is already
+committed — the normal state after a chunk of work lands — the working-tree diff is empty,
+so the round costs full price and reads no code. Use `--scope whole-repo` for a first look
+or a milestone check, and keep `working-tree` / `diff` for a tree with uncommitted edits.
+Never compare a diff-scoped score against a whole-repo threshold (see `--baseline` below).
 
 Run it with `terminal(background=True, persist_on_release=True, notify=True)` — a full
 round takes minutes, and a plain background job is killed at turn end.

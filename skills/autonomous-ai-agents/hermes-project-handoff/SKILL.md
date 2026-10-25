@@ -5,6 +5,7 @@ version: 1.0.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
+category: autonomous-ai-agents
 metadata:
   hermes:
     tags: [hermes-agent, handoff, export, bundle, profiles, portability, migration]

@@ -5,6 +5,7 @@ version: 1.0.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
+category: autonomous-ai-agents
 metadata:
   hermes:
     tags: [hermes-agent, bots, profiles, personas, soul-md, capabilities, toolsets, multi-agent]

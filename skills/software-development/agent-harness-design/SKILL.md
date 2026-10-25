@@ -79,6 +79,41 @@ Each states the defect it prevents and the check that can fail.
 - **One home per fact**; **a decision is a record with a lifecycle** (proposed → implemented →
   archived, frozen once archived). The tier table is in `writing-for-agents`.
 
+### From the third pass: session record, lifecycle, and seam shape
+
+Each states the defect it prevents and the check that can fail.
+
+- **A stored-artifact migration is additive.** Encode and publish the new generation beside
+  the byte-identical source; never rename, replace or delete a committed generation. Check:
+  the previous generation still replays.
+- **Settle every attempt into the durable record.** A successful call commits its whole
+  stream as one message; a finish with no content is still a settled fact. Check: replay the
+  record and get the same session.
+- **Model-visible content is derived through registered pure projections.** A plugin that
+  changes logged content registers a deterministic projection, not a mutation of history.
+  Check: re-derive twice, byte-identical.
+- **A cancellable phase commits nothing until it completes.** A cancellation during
+  preparation commits neither the system prompt nor partial state. Check: cancel
+  mid-preparation, then diff the stored session.
+- **Retry only when the retry changes the cause.** A recovery that repeats the same call
+  leaves the original error authoritative. Check: name what the retry alters.
+- **Retiring a definition revision revokes new bindings, not existing ones.** Keep the
+  revision until its last bound user releases it. Check: an old binding still resolves.
+- **A seam's definition is normalized to its consumers' operations**, with no pass-through
+  to the provider's protocol. Check: the consumer compiles against the definition, not the
+  provider's SDK.
+- **Extensions depend on the seam's events and interface, never on the shipped
+  implementation package.** Check: replace the provider; the extension is unchanged.
+- **A permission ask is one-shot and fails closed.** With no answerer registered, or an
+  unavailable or cancelled answer, the call is refused — never silently allowed. Check: run
+  with the answerer absent.
+- **Pick the event domain by lifetime.** A fact that must survive a reload is a durable
+  session event; in-flight observation and interceptor state are transient. Check: reload
+  and see which facts are still there.
+- **Vendor a third-party layer that is a peer dependency of everything, and publish it under
+  your own scope** — a rescue of one tree, adopted only with the vendoring discipline
+  (a pinned upstream hash and a documented un-vendoring path) attached.
+
 ## Where a policy goes in the tool pipeline
 
 dsh runs one ordered pipeline per call, and each stage has exactly one job. Hermes has the

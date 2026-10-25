@@ -133,6 +133,31 @@ Three `bind` traps, each silent:
 For Ctrl+Space (the terminal sends NUL), only the spelling `ctrl-space` matches
 the byte; `\c@` and `\x00` register a binding that lists as `''` and never fires.
 
+## Reproduce an upstream defect against the pinned revision
+
+An upstream bug is a claim like any other, and its fix is rarely obvious from the source.
+Reproduce it in one file against the exact revisions in `flake.lock`, so the repro is a fact
+about what this machine runs rather than about `main`.
+
+- **Take the inputs from the store, not from GitHub.** Every locked input already sits at
+  `/nix/store/<hash>-source`, so `builtins.getFlake "path:/nix/store/<hash>-source"` pins the
+  same revision with no refetch and no change to `flake.lock`. Find the path with
+  `nix eval --impure --raw --expr 'builtins.toString (builtins.getFlake "/path/to/repo").inputs.<name>.outPath'`.
+- **Force the failing option, not the whole system.** `nix eval --impure --json --file repro.nix`
+  over the smallest expression that reaches the defect — one node's service block, one
+  `home.file` source, `config.system.build.etc` — reproduces it in seconds and prints the
+  value once it evaluates.
+- **Isolate by varying one input.** Set the offending option to a literal and re-run: if the
+  expression now evaluates, the defect is that option and not the module around it.
+- **Verify the proposed fix on a copy of the upstream source**, never by reasoning about it:
+  `cp -r /nix/store/<hash>-source ./upstream-fixed`, `chmod -R u+w ./upstream-fixed`, edit,
+  and point the repro flake at the copy. A store path is read-only, so a copy is the only way
+  to test a patch before it exists upstream.
+- **Then move the expectation into the repo's own test and mutate it until it fails**: the
+  hardcoded value, the plausible-but-wrong coercion, and removing the workaround entirely. An
+  assertion that survives all three is measuring nothing — the `mkForce` pitfall in `SKILL.md`
+  records one that had to be deleted for exactly that reason.
+
 ## Report what you ran
 
 - Name the check and its result. Do not compress several checks into "verified".

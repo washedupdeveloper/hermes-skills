@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance. Smallest proof set.
-version: 1.7.0
+version: 1.8.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -166,6 +166,19 @@ it is the one that gets skipped because the edit was "only a doc".
   gate failure names a file, confirm whose it is before anything else —
   `git status --short <path>` showing `??` or ` M` means it is not in your commit, and the
   fix belongs to whoever is mid-write, not to you.
+- **An acceptance claim on a repository needs a gate that is not the repo's own.** The
+  suite and the flake gate assert what their author thought of, so they cannot see the
+  classes nobody wrote an assertion for — trust boundaries, exposure, a fix that only looks
+  like one. This user asks for the council before a milestone is declared verified, and the
+  order matters: convene it **advisory over the whole tree**, read **the gate's exit code**
+  rather than the prose summary, and treat each blocking finding as a *claim* — reproduce it
+  with the `falsifiable_check` it carries before applying anything. Measured: a workflow
+  guard written to satisfy one round's finding was itself falsified by four of four samples
+  in the next round, because the guard sat inside a file the untrusted input controls — a
+  verdict no run of the repo's own gate could ever produce. A green suite beside a red
+  council gate is a stale proof, not a green one; the two carry different requirements
+  (a score minimum *and* no open blocking finding) and a run can clear one and fail the
+  other.
 - Run focused checks before wider gates. A focused failure is faster to read and
   cheaper to run.
 - Distinguish **pass / fail / unavailable / blocked** exactly. "Could not run" is not
@@ -359,6 +372,10 @@ so look before escalating.
 
 ## Failure modes this prevents
 
+- **A milestone declared verified on the repo's own gate alone** — the tests are the
+  author's model of the system, so they share the author's blind spots; an advisory council
+  round over the whole tree is the independent half, and its *exit code* is what closes the
+  claim.
 - **Scope growth** — turning a verification task into an implementation task.
 - **A suite reported as a working system** — `N passed` offered as proof that the software
   runs, when no command ever executed it. The tests are your model of the software, so they

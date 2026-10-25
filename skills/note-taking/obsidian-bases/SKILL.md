@@ -5,6 +5,7 @@ version: 1.0.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
+category: note-taking
 metadata:
   hermes:
     tags: [obsidian, bases, views, kanban, dashboard, verification, cdp]

@@ -223,6 +223,19 @@ tersely can only reach the smaller half. Measure the composition before spending
 model's attention on wording; change the serialization (indentation, repeated keys)
 first, and verify that change costs no recall before keeping it.
 
+- **The slop list, to cut on sight:** duplicated rules, history living outside its tier,
+  status annotations, hand-restated catalogs, reasoning transcripts, paragraph walls,
+  emphasis inflation. (Postmortems and agent notes are exempt — their history is the
+  artifact.)
+- **When a length budget goes red, the order is relocate -> condense -> raise.** A budget
+  raised to absorb sprawl is the failure the budget exists to catch; a genuinely too-low
+  ceiling is a budget bug, treated as one, with the diff saying why the words need the
+  space. Keep headroom at the ceiling rather than riding it.
+- **A declaration pasted into a document is a registered equivalence block.** Fenced,
+  mapped to its source symbol, and re-extracted by a gate that fails until the paste is
+  updated — and the gate cannot see the type that was never documented, so the owning page
+  changes in the same diff as the type it documents.
+
 **A single-sample A/B is not evidence.** Two runs of the same prompt differ by more
 than a small wording change moves, so a measured 3.9% gap at n=1 per arm sits inside
 that variance and must not be reported as a saving. Use the repo's own ablation or
