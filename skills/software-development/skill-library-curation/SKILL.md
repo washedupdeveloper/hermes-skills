@@ -348,6 +348,9 @@ content** — and say plainly that the missing depth is a real gap worth writing
   against the tree it was handed reports every sibling as unresolved when pointed
   at a single skill directory. Point it at the library root; a lone failure is only
   real when the whole tree agrees.
+- **A duplicate name never merges — the nearest layer wins outright** (project > custom >
+  user > bundled), and identity is exact: a typo resolves to nothing, not to a similar
+  skill. Name the winner per collision instead of assuming a blend.
 - **Grepping `hermes skills list` and concluding a skill is missing.** The table
 truncates long names (`nix-declarative…`), so a grep for the full name returns
 nothing while the skill is present and loading — a false negative that reads as

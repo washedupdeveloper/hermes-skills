@@ -120,6 +120,22 @@ cannot distinguish the transition that matters from the state it left behind.
 **Guard that closes the class:** instrument the boundary itself, so a guard's failure is
 attributable to exactly one transition.
 
+## One symbol, two export homes
+
+**Detection:** after the module loads, assert the *consumed descriptor's* fields are
+non-empty — not that the import resolved. A default export sitting beside a named namespace
+made an unwrap step return the bare function and drop everything the consumer read from it.
+**Guard that closes the class:** one export home per symbol; reject `default` beside a
+namespace, and test through the real load path rather than a hand-built context.
+
+## A lookup that branches on the caller's context
+
+**Detection:** for each early return, name the production caller that takes the shortcut
+*and* the test that runs inside the real context. An ancestor-only walk that throws in
+production never ran, because the test's fixture mounted flat.
+**Guard that closes the class:** run the test in the product's context, or delete the branch;
+a bootstrap entry point that legitimately takes the shortcut is named as such.
+
 ## Using these in the write-up
 
 The class belongs in "why the tests missed it", and the guardrail closes the class rather

@@ -57,7 +57,19 @@ recorded as prose until the seam exists — never as a table that reads like cap
 | five failure classes: an inherited composition pin; a control acting on a layer that does not decide; a boundary fake covering only the happy grammar; channel evidence replayable by its author; a during-run property sampled after the run | `postmortem/references/failure-classes.md` | applied |
 | session record and lifecycle: additive migrations; settle every attempt; pure projections; cancellable phases commit nothing; retry only when the cause changed; revision revocation; normalized seams; dependency direction; one-shot fail-closed approval; event domain by lifetime; vendoring | `agent-harness-design` | applied |
 | the slop list; budget order relocate -> condense -> raise; a pasted declaration is a registered equivalence block | `writing-for-agents` | applied |
+| seven surface/identity rules: additive published names; one read path; outcome normalization; no module-scope await; loader-contract exports; closed key vocabulary; release as one predicate | `defensive-patterns` | applied |
+| two more classes: one symbol with two export homes; a lookup branching on the caller's context | `postmortem/references/failure-classes.md` | applied |
+| the delegation authority triple; a report states intent, not what landed; ambiguity fails closed | `cavecrew` | applied |
+| skill-dispatch mechanics: size and volatility off the every-turn surface; digest-gated catalogue; exact-name fresh loads; corrupt fails loud while a blip is not a deletion | `writing-for-agents/references/tool-surface.md` | applied |
+| exact-name identity; a duplicate name never merges — the nearest layer wins | `skill-library-curation` | applied |
+| record hygiene: alternatives mandatory; scoped supersession check; a rejection lives only while tempting; consolidation only if every unique rationale survives | `domain-modeling` | applied |
 | review practice: weight a reviewer by the blamed old lines; a gating reviewer runs the protected branch's program and never the reviewed revision; the reviewing system lands no artifact; the whitelist request; verify base and head before reading the diff | `review-council` (the deployed council skill is a **generated copy** — ADR-0003 — so editing it here would be silently reverted) | recorded, not applied |
+
+**The full mining batch landed after the first fold of this pass**, so the table above grew
+with its second commit: the seven surface/identity rules, the two extra classes, the
+delegation triple, the dispatch mechanics, the identity rules and the record hygiene rules
+all came from the batch's complete outputs (its transcripts are the delegation record for
+`deleg_2b8bc9b7`).
 
 **The four "pending (blocked)" edits** were staged in one script whose approval prompt went
 unanswered; they were not re-issued under another tool on purpose. To apply them: add the

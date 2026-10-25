@@ -148,6 +148,41 @@ directory, so it never follows into the target. Windows `rmSync(link)` throws
 *Check:* can the removal primitive follow a link into its target? *Boundary:* a path the
 code created itself in a directory it owns.
 
+## Surfaces, identity, read paths
+
+**A published name is additive.** A migration never renames or removes a name clients
+already call; a rename is its own change, confirmed by the owner.
+*Check:* does the diff touch a name already exposed on the call surface? *Boundary:* names
+never published, and internals, are free.
+
+**One read path per derived value.** Consumers read the published value; a second fetch of
+the same fact drifts from it.
+*Check:* does a consumer fetch where a registered read path exists? *Boundary:* reshaping is
+free; local state is not a read path.
+
+**An outcome's representations normalize at the public API.** A consumer can name a
+failure's source from the contract alone instead of guessing which layer raised it.
+*Check:* can a consumer name a failure's source from the public API? *Boundary:* internal
+helpers may throw freely; only the crossed boundary is bound.
+
+**No await at module scope.** Async work lives in an explicit entry that owns its rejection;
+an importer must not wait on, or die with, module evaluation.
+*Check:* `await` / `for await` at module scope? *Boundary:* executables, declared as such.
+
+**A package entry exports only its loader contract.** A test asserting internals does not
+earn them a public name; a test-only export freezes into published API.
+*Check:* do entry exports exceed the contract, or does a test import an internal? *Boundary:*
+internal helpers stay exportable — the entry is the surface.
+
+**A shared key vocabulary stays closed.** One documented meaning per key across the repo; a
+locally invented key is a dialect nobody can read.
+*Check:* a key outside the documented set, or one formalized without its owning document?
+
+**Release is one predicate.** `refs == 0` and nothing in flight; holders are explicit, and no
+enumeration of business states may stand in for it.
+*Check:* is release a conjunction of resource facts rather than a list of states? *Boundary:*
+a single hand-checked trigger is fine; the enumeration is the defect.
+
 ## Change discipline
 
 **Migrations preserve behaviour, item by item.** Error codes, diagnostics, data-flow order

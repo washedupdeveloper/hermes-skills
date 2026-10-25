@@ -115,6 +115,18 @@ decision is not.
 in it is the trap that reversed it. That is the only place the trap is written down, and
 deleting the record invites the same change again.
 
+## Record hygiene
+
+- **Alternatives considered is mandatory.** A decision recorded without what it beat invites
+  re-litigation at the next session.
+- **Every new record triggers a scoped supersession check** — the existing records it could
+  supersede, found by the decision it states rather than by its title.
+- **A rejection survives only while the idea stays tempting.** Proposals are rejected, never
+  archived; when the idea stops tempting, the refusal goes with the record.
+- **Supersession consolidates only if every unique rationale, alternative, consequence and
+  verification survives** the merge. Otherwise the superseded record is frozen as history and
+  never cited as authority.
+
 ## Verification
 
 - [ ] Every term used in the work appears in the glossary with one meaning

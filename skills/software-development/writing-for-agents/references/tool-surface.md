@@ -64,6 +64,16 @@ not in its description.
 - **A support file is not a skill.** Anything under `references/`, `templates/`, `assets/`
   or `scripts/` is read only when a body names it — so a file nobody names is invisible, and
   a name pointing at an absent file is a broken pointer.
+- **Size and volatility stay off the every-turn surface.** Name plus description is the whole
+  catalogue entry, under a stated cap; a fact that changes per turn belongs in a context
+  snapshot rather than a section, and a rare, large fact belongs in a skill loaded on demand.
+- **The catalogue is injected once and replaced only when its rendered text changes**, so
+  identities stay stable and a per-turn rewrite cannot invalidate a cache.
+- **Loading is exact-name, policy-rechecked, and fresh.** A renamed skill resolves to nothing
+  rather than to a neighbour, and the body served is the file on disk now — never a cached
+  definition.
+- **A corrupt definition fails loud; a provider blip is not a deletion.** Last-good state is
+  kept for the transient case, and the surface's report distinguishes the two.
 
 ## Verification
 
