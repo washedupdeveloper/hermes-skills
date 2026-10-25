@@ -1,7 +1,7 @@
 ---
 name: openspec
 description: "Use when a repo has openspec/. Spec before code."
-version: 1.0.0
+version: 1.1.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -45,6 +45,10 @@ method.
   `tasks.md` are what the work is judged against. Write them before the first edit.
 - **A requirement is observable.** Each one carries at least one scenario of `WHEN` / `THEN` /
   `AND`. No implementation nouns, no file paths, no "use X".
+- **A scenario names a path.** Every branch that can return before the guarded call needs its
+  own scenario. Measured on one task: a spec that covered only the request path let `--dry-run`
+  compose and print a refused base, and the implementing agent stopped exactly at the spec's
+  edge, while an agent given the same requirements as prose validated that path too.
 - **The delta only.** A change's `specs/<capability>/spec.md` holds `## ADDED Requirements`,
   `## MODIFIED Requirements` or `## REMOVED Requirements`. `openspec/specs/` is edited by
   `archive`, never by hand during a change.
