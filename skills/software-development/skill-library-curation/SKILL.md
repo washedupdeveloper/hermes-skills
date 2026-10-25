@@ -156,6 +156,22 @@ Checks what breaks loading or discoverability: leading `---`, required frontmatt
 description ≤ 60 chars ending in a period, `name` matching the directory, and every
 `related_skills` entry resolving. Exit 0 = clean.
 
+**A skill's scripts are covered by no metric — compile and run them.** The audit counts
+bytes, descriptions, dead references and orphans; a promoted or freshly written Python file
+under `scripts/` with a syntax error passes all of those and ships dead, while the SKILL.md
+tells the reader to run it. Before calling a skill validated: compile the tree
+(`find <skills-root> -name '*.py' -print0 | xargs -0 -n1 "$PY" -m py_compile`) and run each
+script's `--help`, plus its real mode on a throwaway input. A script nobody can execute is a
+claim like any other — a dead reference the audit cannot see.
+
+**Point the validator at every tree the loader sees, not just one.** `validate-skills.py`
+resolves `related_skills` against the union of the roots it is given, so a repo-only run
+reports every bundled sibling as unresolved and buries the real failures among false ones:
+`validate-skills.py <repo>/skills "$HERMES_HOME/skills"`.
+
+After a promotion, run the repo's own gate before touching any prose a test measures — a repo
+that asserts its counts in tests fails on the addition and tells you the right numbers.
+
 ## Step 7 — Bulk rewrite mechanics
 
 When re-writing many files in one pass:
@@ -170,6 +186,14 @@ When re-writing many files in one pass:
   reliable path; it also keeps the batch uniform and makes backing out trivial.
 - **Diff afterwards and read the removed lines.** That diff is the review: confirm
   every removal is a duplicate, a false instruction, or pure verbosity.
+- **Prefer one `patch` per file over a script that edits many.** Each patch is
+  independently approvable and reviewable and a refusal costs one file; a multi-file
+  `execute_code` batch is one all-or-nothing approval, and its refusal freezes the whole
+  edit set at once.
+- **A refused batch is recorded, not re-routed.** When the approval gate refuses a batch
+  ("silence is not consent"), write the unapplied edits into the decision record — target
+  file, anchor, replacement — and stop. Re-issuing the same outcome through another tool is
+  what the refusal forbids; the next session applies them from the record.
 
 ## Step 8 — Make the repo the source of truth, mounted not copied
 

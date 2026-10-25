@@ -102,6 +102,10 @@ main thread.
   external side effect, require a verifiable handle (URL, id, absolute path) and check it
   yourself.
 - Parallel children only help when the subtasks are independent.
+- **A batch's files in the workspace are drafts; the completion message is the deliverable.**
+  A child that iterates leaves numbered drafts behind (`final.json`, `final3.json`, …), so
+  folding them early reads an intermediate version as the answer. Fold what the batch
+  completion message carries, or diff the artifacts against it before treating them as final.
 
 ## Authority
 

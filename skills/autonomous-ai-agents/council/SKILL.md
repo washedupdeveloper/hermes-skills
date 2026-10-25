@@ -180,6 +180,15 @@ mid-sample with exit `143` (`128+15`); the round it leaves behind has a partial 
 set and no verdict. Launch it so it survives the turn (`persist_on_release`, or a
 detached session) and read the verdict from the run dir.
 
+**A uniform `rc=124` is late, not lost.** When every sample reports `rc=124 / NO FILE` and
+the round ends `ESCALATE: gate could not evaluate the run`, the reviewer processes are
+usually still running: the five `generalist-*.json` files land in `round-1/` minutes after
+the round gave up. Look at the directory before believing the escalation — if the files are
+there, `council.py merge <run-dir>/round-1` (it prints `merged N sample(s) from N file(s)`)
+recovers them, and `council.py gate <run-dir>/round-1 --json --repo <repo>` then scores the
+round normally. Measured twice on a real repository: budget about an hour for a whole-repo
+round and treat the sample files, not the round's own timeout, as the completion signal.
+
 **N samples re-report the same claim.** Five samples on one repository produced 60
 finding entries collapsing to ~6 distinct issues — ~5× repetition, and it does **not**
 dedupe, because each sample cites a slightly different line range. Count distinct
