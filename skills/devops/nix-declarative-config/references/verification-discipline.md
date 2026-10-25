@@ -160,12 +160,13 @@ about what this machine runs rather than about `main`.
 
 ## Count what the gate ran
 
-`nix flake check` prints one line per check. **`running 0 flake checks` followed by `all
-checks passed!` is a vacuous pass, not a green one** — observed on a `git worktree` checkout
-of a repo whose main checkout runs four, with the cause not established. Read the count
-beside the exit code; if it is zero, re-run in the real checkout or a clone of the commit
-before quoting a result. The general rule belongs to `deterministic-quality-gates`: absence
-is not cleanliness.
+`nix flake check` prints one line per check. **A zero count is ambiguous; name its cause.**
+`running 0 flake checks` followed by `all checks passed!` usually means every check
+derivation was already built for this exact source — a cache hit, not a skipped gate.
+`nix eval .#checks.<system> --apply builtins.attrNames` proves the set is not empty, and
+`nix build --no-link --rebuild .#checks.<system>.<name>` re-runs one for real. The vacuous
+case is a selector or filter that matched nothing. Either way the evidence is the count plus
+its reason; `absence is not cleanliness` belongs to `deterministic-quality-gates`.
 
 ## Report what you ran
 

@@ -188,10 +188,13 @@ it is the one that gets skipped because the edit was "only a doc".
   cheaper to run.
 - Distinguish **pass / fail / unavailable / blocked** exactly. "Could not run" is not
   "passed", and an absent tool is not a clean result.
-- **A gate that ran nothing exits 0.** Read the *count* of checks or tests it ran beside its
-  exit code. `running 0 flake checks` followed by `all checks passed!` is the shape, seen on
-  a `git worktree` checkout of a repo whose main checkout runs four. A gate's evidence is the
-  number it ran plus the reason it has that number.
+- **Read the count beside the exit code, then find out why it is zero.** Two causes look
+  identical: an empty check set or a selector that matched nothing (a vacuous pass), and a
+  cache hit where every derivation was already built for this exact source (a real pass —
+  `nix flake check` prints `running 0 flake checks` and then `all checks passed!`). Evaluate
+  the set (`nix eval .#checks.<system> --apply builtins.attrNames`) and force one
+  (`nix build --no-link --rebuild .#checks.<system>.<name>`) before calling it either. The
+  evidence is the number it ran plus the reason it has that number.
 - **An acceptance clause is proven by a command that something runs, and a harness that
   cannot express the clause is a blocker rather than an excuse.** A test can exist, pass,
   and be invoked by nobody: an attribute deliberately kept out of the main gate (a VM test
