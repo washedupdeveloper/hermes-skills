@@ -333,6 +333,16 @@ done | tee /tmp/unique.txt
 - **Confirm an irreversible delete in full sentences, naming which directories are
   recoverable and which are not**, before running it.
 
+## Step 11 — Encode a repeated rule as a check
+
+When you catch yourself writing the same instruction a second time, the instruction is the
+symptom. Encode it once as a lint, a manifest flag, a runtime check, or a script, and delete the
+prose copies. A rule that needs judgement cannot be encoded, and then the fix is to make the one
+statement more prominent and add the failure mode beside it, not to add a third place it is
+stated.
+*Check:* the second statement of a rule either became a check or is a pointer to the owner.
+*Boundary:* a check that cannot fail is worse than prose. Prove it fires before trusting it.
+
 ## Pitfalls
 
 - **Editing a bundled skill.** Hash-tracked and refreshed; the change disappears.

@@ -148,6 +148,33 @@ directory, so it never follows into the target. Windows `rmSync(link)` throws
 *Check:* can the removal primitive follow a link into its target? *Boundary:* a path the
 code created itself in a directory it owns.
 
+## Boundaries and pure logic
+
+**Validate at the boundary, trust inside.** Parse untrusted input once, at the edge (CLI args,
+config, network, files, another program's output), into domain types. Inside the system, pass
+typed data and propagate errors; do not re-validate.
+*Check:* is a value validated twice, on both sides of a typed boundary? *Boundary:* a seam that
+hands back raw bytes, or an untrusted update, is itself a boundary and must parse again.
+
+**Keep the decision pure, the effects at the shell.** A decision function takes plain values,
+returns a value, and touches no clock, network, randomness or mutable state. The thin shell
+reads, calls, and writes.
+*Check:* can the decision be called in a test with literal inputs, no fixture and no server?
+*Boundary:* orchestration code has effects by definition; the rule binds the decision inside it,
+not the orchestration.
+
+**An operation converges under retry.** Every command, lifecycle step and loop is idempotent:
+interrupted and re-run, it reaches the same end state. Create-or-update rather than create; a
+named target rather than an append.
+*Check:* run it twice. The second run changes nothing and exits 0. *Boundary:* append-only logs
+and event streams are not this rule; they declare their own idempotency key.
+
+**Minimize reader load, not line count.** Count the layers between the question and the answer,
+and the state a reader must hold. Collapse wrappers with one caller and adapters with no second
+implementation; prefer returns over mutation, locals over fields, module state over globals.
+*Check:* can a new reader say where a value comes from and what changes it without following
+three hops? *Boundary:* a layer that hides a real decision stays, even if it is a wrapper.
+
 ## Surfaces, identity, read paths
 
 **A published name is additive.** A migration never renames or removes a name clients
@@ -203,6 +230,10 @@ overall" is not evidence, and an improvement elsewhere does not excuse a regress
 **The change face is the review face.** A change carries only the lines its stated behaviour
 change needs. An unrelated fix, a speculative option, or a defensive copy with no consumer
 belongs in its own change, where it can be reviewed and reverted on its own.
+
+**A comment states a non-obvious why.** No phase narration (`// Phase 1: add cards`) and no
+restatement of the code; the assertion or log string documents the step. A comment a reader
+could derive from the line is noise the change should not carry.
 
 ## Using it in review
 

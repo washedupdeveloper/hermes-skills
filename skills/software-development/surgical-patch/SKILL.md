@@ -28,6 +28,12 @@ available evidence. Then patch, prove, stop.
   one-line fix into an unreviewable diff and hides the real change.
 - Add only the regression proof relevant to the task.
 
+## When a fix fails twice
+
+- **Two fixes that share a premise have failed the same gate.** Write the premise down, the
+  assumption both fixes made, and test it directly before writing a third fix that assumes it.
+- The third attempt is then a hypothesis about the premise, not another patch at the same layer.
+
 ## Stop condition
 
 Run the focused proof plus the nearest affected gate. Stop when the failure is fixed

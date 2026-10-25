@@ -115,6 +115,16 @@ main thread.
 - **Ambiguity fails closed.** A malformed or ambiguous report is a failure, not a pass, and a
   total failure never collapses into "nothing found".
 
+## Fresh work, and who owns it
+
+- **A new task goes to a fresh child with consolidated scope.** Give it the original brief,
+  every later directive, and the prior child's report and branch. Resume or message an existing
+  child only when the work needs state that is costly to move: its checkout, its uncommitted
+  changes, a process it still runs. Resuming a chain silently drops directives.
+- **You own the child's work.** Review its diff and write your own summary; never pass its
+  report through as the result. A second opinion is the same brief against a different model:
+  agreement is high-signal, disagreement names the uncertainty.
+
 ## What NOT to do
 
 - Do not send a builder child to a file you have not located. Spawn an investigator
