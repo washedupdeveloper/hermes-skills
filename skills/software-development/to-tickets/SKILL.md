@@ -21,6 +21,11 @@ each declaring what **blocks** it.
 Work from what is already in context. If given a path or issue reference, read it
 first.
 
+**Where the tickets land.** In a repo with `openspec/`, the slices are `tasks.md` entries in
+the change directory, ordered so a blocking slice precedes its dependant, and the format is
+`openspec instructions tasks`. This skill owns the slicing; the `openspec` skill owns the
+container.
+
 ## Slice rules
 
 - Each slice cuts a narrow but **complete** path through every layer (schema, API,

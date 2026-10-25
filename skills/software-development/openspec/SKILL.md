@@ -35,6 +35,10 @@ openspec archive <name> --yes          # merges the delta into openspec/specs/
 `openspec instructions <artifact> --change <name>` prints that artifact's template and rules.
 It is the only template source. Do not restate a template here or in a repo doc.
 
+Extracting the requirements from a conversation is `to-spec`'s job; slicing them into
+vertical, blocking-aware tickets is `to-tickets`'. This skill owns the container, not the
+method.
+
 ## Rules
 
 - **The artifacts are the brief.** The proposal's Why and What Changes, the requirements, and

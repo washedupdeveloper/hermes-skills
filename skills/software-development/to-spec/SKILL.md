@@ -19,6 +19,11 @@ Synthesize the current conversation and codebase understanding into a spec. **Do
 not interview the user** — that is `grill-me`'s job. This skill writes down what is
 already agreed.
 
+**Where the spec lands.** In a repo with `openspec/`, this method fills the artifacts of
+`openspec/changes/<name>/`: the agreed problem becomes `proposal.md`, the requirements become
+`specs/<capability>/spec.md`, and `openspec instructions` owns their format. This skill owns
+the questions; the `openspec` skill owns the container.
+
 ## Process
 
 1. **Explore the repo** if you have not, so the spec reflects the real current
