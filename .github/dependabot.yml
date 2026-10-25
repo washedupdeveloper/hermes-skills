@@ -10,6 +10,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # A bump may not open the moment a release is published: the cooldown is the window in
+    # which a compromised release is normally yanked, and it is the point of asking a human
+    # to read each bump (zizmor `dependabot-cooldown`, 7-day floor).
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
     # One PR for the whole set: four separate "bump checkout" PRs cost more review
     # attention than the risk they describe, and the gate either passes on all of them

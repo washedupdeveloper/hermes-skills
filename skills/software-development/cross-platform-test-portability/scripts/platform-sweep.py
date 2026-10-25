@@ -100,8 +100,7 @@ def main() -> int:
         print()
 
     print(f"total hits: {total}")
-    print("\nEach hit is a question, not a defect: does this construct mean the same thing
-"
+    print("\nEach hit is a question, not a defect: does this construct mean the same thing "
           "on macOS and Windows? The ones that do not are the portability bugs.")
     return 0
 
