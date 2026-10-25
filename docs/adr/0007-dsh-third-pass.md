@@ -50,10 +50,10 @@ recorded as prose until the seam exists — never as a table that reads like cap
 
 | rule cluster | home | state |
 |---|---|---|
-| CI flake diagnosis: freeze the evidence and classify; reproduce at the smallest topology; a diagnosis-only request is read-only | `deterministic-quality-gates/references/flake-diagnosis.md` | **written**; its `SKILL.md` pointer **pending** (blocked, below) |
-| verify the world, not the self-report; only a with-key run proves a model-facing path | `deterministic-quality-gates/references/test-reliability.md` | **pending** (blocked) |
-| an uncovered line is dead code until its author says otherwise | `deterministic-quality-gates/SKILL.md` | **pending** (blocked) |
-| never repeat a passing check for a commit or push; name a non-zero selected-test count | `verify-and-stop` | **pending** (blocked) |
+| CI flake diagnosis: freeze the evidence and classify; reproduce at the smallest topology; a diagnosis-only request is read-only | `deterministic-quality-gates/references/flake-diagnosis.md` | applied |
+| verify the world, not the self-report; only a with-key run proves a model-facing path | `deterministic-quality-gates/references/test-reliability.md` | applied |
+| an uncovered line is dead code until its author says otherwise | `deterministic-quality-gates/SKILL.md` | applied |
+| never repeat a passing check for a commit or push; name a non-zero selected-test count | `verify-and-stop` | applied |
 | five failure classes: an inherited composition pin; a control acting on a layer that does not decide; a boundary fake covering only the happy grammar; channel evidence replayable by its author; a during-run property sampled after the run | `postmortem/references/failure-classes.md` | applied |
 | session record and lifecycle: additive migrations; settle every attempt; pure projections; cancellable phases commit nothing; retry only when the cause changed; revision revocation; normalized seams; dependency direction; one-shot fail-closed approval; event domain by lifetime; vendoring | `agent-harness-design` | applied |
 | the slop list; budget order relocate -> condense -> raise; a pasted declaration is a registered equivalence block | `writing-for-agents` | applied |
@@ -71,12 +71,12 @@ delegation triple, the dispatch mechanics, the identity rules and the record hyg
 all came from the batch's complete outputs (its transcripts are the delegation record for
 `deleg_2b8bc9b7`).
 
-**The four "pending (blocked)" edits** were staged in one script whose approval prompt went
-unanswered; they were not re-issued under another tool on purpose. To apply them: add the
-`flake-diagnosis.md` pointer beside the existing `test-reliability.md` mention in the gates
-skill; insert the uncovered-line rule before `## Procedure`; insert the verify-the-world
-section before `## Evidence to report` in `test-reliability.md`; insert the push-check rule
-after the first bullet of `## Rules` in `verify-and-stop`.
+**The four edits that were once blocked are applied.** They sat staged in one script whose
+approval prompt went unanswered, and were recorded rather than re-routed; the owner then gave
+explicit consent and they landed as one `patch` per file — the gates pointer beside the
+`test-reliability.md` mention, the uncovered-line rule before `## Procedure`, the
+verify-the-world section before `## Evidence to report`, and the push-check rule after the
+first bullet of `## Rules` in `verify-and-stop`.
 
 ## Refused, each for a cost this repo would pay
 
@@ -103,6 +103,6 @@ after the first bullet of `## Rules` in `verify-and-stop`.
 - Every applied rule carries a check that can come out false (the ADR-0006 format rule).
 - The seam table asserts only what a file listing or a grep in the pinned source confirmed;
   the two refusals that rest on a missing seam name the mechanism that would have to exist.
-- Re-measure after the four blocked edits land:
+- Re-measure after these land:
   `$HERMES_PYTHON skills/software-development/skill-library-curation/scripts/skill-audit.py skills`
-  (instrument hash `e5d7979d…`); they are not counted as applied here.
+  (instrument hash `e5d7979d…`). All four rules above are applied and counted.

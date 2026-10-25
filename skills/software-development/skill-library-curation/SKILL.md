@@ -361,6 +361,13 @@ pass over a 34-skill library. Fix by removing the pointer — **do not invent th
 content** — and say plainly that the missing depth is a real gap worth writing.
   Detect with the audit script's `dead_refs`; ignore its false positives from
   command arguments (`<url>`, `link` placeholders) by reading each hit.
+- **Your own prose can create a dead reference.** A backticked path is read as a pointer
+  whether or not you meant one, so an explanatory sentence naming a file *class* —
+  a `scripts/` glob, a `references/` placeholder — trips a repo's dead-reference test. The usual
+  escape is a write verb on the line (`write`, `create`, `add`), and it does not match
+  "written": name the directory (`scripts/`) or lead with the verb. The escape cuts both
+  ways — a genuine dead pointer on a line that happens to say "add" is silently skipped, so
+  neither a pass nor a failure from that test is evidence until you have read the line.
 - **Descriptions over 60 characters.** The window and its cost belong to
   `hermes-agent-skill-authoring` (the index truncates); past it, a trigger never fires.
 - **`related_skills` naming a skill that does not exist** in the scanned tree — a

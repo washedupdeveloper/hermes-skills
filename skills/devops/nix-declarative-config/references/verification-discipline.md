@@ -158,6 +158,15 @@ about what this machine runs rather than about `main`.
   assertion that survives all three is measuring nothing — the `mkForce` pitfall in `SKILL.md`
   records one that had to be deleted for exactly that reason.
 
+## Count what the gate ran
+
+`nix flake check` prints one line per check. **`running 0 flake checks` followed by `all
+checks passed!` is a vacuous pass, not a green one** — observed on a `git worktree` checkout
+of a repo whose main checkout runs four, with the cause not established. Read the count
+beside the exit code; if it is zero, re-run in the real checkout or a clone of the commit
+before quoting a result. The general rule belongs to `deterministic-quality-gates`: absence
+is not cleanliness.
+
 ## Report what you ran
 
 - Name the check and its result. Do not compress several checks into "verified".

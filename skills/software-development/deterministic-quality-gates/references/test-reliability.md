@@ -112,6 +112,17 @@ Retries stay valid for documented transient external-provider tests, at that bou
 sizing a bounded retry to contention actually measured on the runner, names the awaited work
 and returns what the lane granted. Neither invents headroom around an unexamined wait.
 
+## Verify the world, not the self-report
+
+An assertion may never read the subject's own account of itself. An end-to-end check
+re-runs the command or re-reads the artifact externally, and a file the change did not touch
+is compared byte-identical before and after; a test that greps the output text for "done"
+passes for a subject that only narrated success.
+
+**Only a run with real credentials proves a model-facing path; a test without them proves
+plumbing.** Live-provider calls are the top of the evidence ladder rather than a luxury to
+ration, and a case that self-skips without its key is unmeasured, not green.
+
 ## Evidence to report
 
 - global mutation → restoration evidence;

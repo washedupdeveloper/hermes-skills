@@ -28,7 +28,9 @@ kernel's per-argument limit — see `references/silent-failure-patterns.md`.
 
 For a suite that has to be correct under real CI concurrency — shared host ports, global
 state, platform-owned semantics, timeout budgets, quiescent teardown, and the fixes that
-mask a flake instead of closing it — see `references/test-reliability.md`.
+mask a flake instead of closing it — see `references/test-reliability.md`. The CI half —
+freezing the evidence, the classification, the smallest reproducing topology, and what a
+diagnosis-only request authorizes — is `references/flake-diagnosis.md`.
 
 ## When to Use
 
@@ -374,6 +376,12 @@ substituters and signing keys and land arbitrary paths in that store. Fork-safe 
 needs the repository's fork-approval policy set to require approval for ALL external
 contributors first; that is a repository setting no file can assert, so name it as
 the prerequisite rather than claiming the workflow closes it.
+
+- **An uncovered line is dead code until its author says otherwise, not a test to bolt
+  on.** Coverage is necessary and never sufficient — it proves lines ran, not that the
+  feature works as shipped — so the fix for an uncovered line is deleting or explaining
+  the code, and the lane that gates is the coverage run, not the unit run. Per-file 100%
+  stays refused as a bar; this is what survives without it.
 
 ## Procedure
 

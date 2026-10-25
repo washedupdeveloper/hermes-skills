@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
-description: Use when proving acceptance. Smallest proof set.
-version: 1.8.0
+description: Use when proving acceptance or auditing another's work.
+version: 1.9.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -90,6 +90,11 @@ it is the one that gets skipped because the edit was "only a doc".
 
 - Reuse still-current results only when the repository state still matches. A result
   from before the last edit is not proof of the current tree.
+- **Never repeat a passing check for a commit or push, and report only what you ran.**
+  Match the evidence to the surface — the focused test that covers the regression beats a
+  full-suite rehearsal — and never re-run by hand a check a hook already runs. Name the
+  owning test or source scope, the observed result, and a selected-test count that is not
+  zero: a filter that matched nothing reads as a pass.
 - **A verdict is a snapshot; name the commit and the instant, or it is a claim about a
   moment you never stated.** On a tree another process can write — a background curator,
   a second agent, a CI job, a user reviewing alongside you — `HEAD` moves between your
@@ -183,6 +188,10 @@ it is the one that gets skipped because the edit was "only a doc".
   cheaper to run.
 - Distinguish **pass / fail / unavailable / blocked** exactly. "Could not run" is not
   "passed", and an absent tool is not a clean result.
+- **A gate that ran nothing exits 0.** Read the *count* of checks or tests it ran beside its
+  exit code. `running 0 flake checks` followed by `all checks passed!` is the shape, seen on
+  a `git worktree` checkout of a repo whose main checkout runs four. A gate's evidence is the
+  number it ran plus the reason it has that number.
 - **An acceptance clause is proven by a command that something runs, and a harness that
   cannot express the clause is a blocker rather than an excuse.** A test can exist, pass,
   and be invoked by nobody: an attribute deliberately kept out of the main gate (a VM test
@@ -324,7 +333,9 @@ the subject is *claims*, not style. Re-derive each one; a commit message is a hy
    partial and the tree carries both.
 4. **Re-run the gate and suite yourself at the tip.** A commit message that says "all
    checks pass" is the least reliable input in the audit; it is also the cheapest thing to
-   falsify.
+   falsify. A *recorded verdict* — a review round, a scored gate — is re-derivable the same
+   way: re-run the scorer against its stored run directory, because the sample files and the
+   scorer are the inputs and the summary's number is only a claim about them.
 5. **Re-derive every quantitative claim against its source record.** Where a figure appears
    in a doc, a manifest and a run record, read all three: the record is the authority, and
    the copies drift in the direction of the more impressive number. A summary that
@@ -350,6 +361,11 @@ the subject is *claims*, not style. Re-derive each one; a commit message is a hy
    certifies the wrong behaviour. Read each assertion against its docstring and each
    constant against the comment above it before accepting that a passing suite means the
    change does what it claims.
+9. **Prove the absence claims too.** A report that says something was *not* done — "these
+   edits are pending", "nothing was pushed", "this is not wired up" — is as testable as the
+   positive claims, and cheaper: grep the phrase (expect zero hits), count the refs, read
+   `git status`. In prose a report that quietly did the work and one that did not look
+   identical; the difference is a command's output.
 
 **A claim you cannot measure is not validated by reading it.** Docs prose, "the release is
 published", "the image is downloadable" — each is one HTTP request or one grep away. The
