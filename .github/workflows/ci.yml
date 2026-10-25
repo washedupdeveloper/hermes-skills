@@ -240,3 +240,16 @@ jobs:
             done
             exit 1
           fi
+
+  # The specs are a gate input: a change that does not validate cannot land.
+  # Node comes from the runner image, so this job needs no toolchain setup.
+  openspec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - name: install the spec CLI
+        run: npm install -g @fission-ai/openspec@1
+      - name: the specs validate
+        run: openspec validate --all --strict

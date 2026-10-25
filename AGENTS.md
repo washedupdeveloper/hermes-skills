@@ -83,3 +83,10 @@ It checks the mechanical claims in this repo's prose — counts, links, the desc
 ceiling, the setup script's behaviour — and classifies each `PROVEN` / `FALSE` /
 `UNPROVEN`. A claim that cannot be checked from the repo alone must say so rather than
 be asserted.
+
+## Specs (OpenSpec)
+
+A behavior change starts in `openspec/changes/<name>/` (proposal, spec delta, tasks), not in
+code. `openspec list --specs` before proposing; `openspec validate <name> --strict` before
+applying and before archive; `openspec archive <name> --yes` when the work lands.
+Procedure: the `openspec` skill. Pure refactors and dependency bumps set `skip_specs: true`.
