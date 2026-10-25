@@ -390,3 +390,35 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# --- the API base is a boundary ------------------------------------------------
+
+def test_the_api_base_is_a_boundary():
+    """`--api` / GITHUB_API_URL are operator input, so they are untrusted.
+
+    Without validation a `file:` base reads local paths through urlopen, and a plain-http
+    host receives the bearer token in cleartext.
+    """
+    try:
+        pr.request("GET", "file:///etc/hostname", None)
+    except ValueError as exc:
+        assert "file" in str(exc).lower(), exc
+    else:
+        raise AssertionError("a file: URL was not refused")
+
+    try:
+        pr.request("GET", "http://example.com/x", None)
+    except ValueError as exc:
+        assert "https" in str(exc).lower(), exc
+    else:
+        raise AssertionError("cleartext http off loopback was not refused")
+
+    # Loopback http stays allowed: the stub server and a local proxy need it.
+    assert pr.validate_api_url("http://127.0.0.1:9/x") == "http://127.0.0.1:9/x"
+    assert pr.validate_api_url("http://localhost:9/x") == "http://localhost:9/x"
+    assert pr.validate_api_url("https://api.github.com") == "https://api.github.com"
+
+    # And the CLI reports a usage error rather than a traceback.
+    assert pr.main([str(GOLDEN), "--repo", "o/n", "--pr", "1",
+                    "--api", "file:///etc/hostname"]) == 2

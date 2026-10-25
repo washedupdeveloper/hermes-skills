@@ -34,6 +34,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -52,6 +53,22 @@ BODY_LIMIT = 60_000
 EVENTS = ("COMMENT", "REQUEST_CHANGES", "APPROVE", "auto")
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
+
+def validate_api_url(url: str) -> str:
+    """The API base this module will speak to, validated at the network boundary.
+
+    `--api` and `GITHUB_API_URL` are operator input, so they are untrusted. Without this a
+    `file://` base reads local paths through urlopen, and a plain-`http` host receives the
+    bearer token in cleartext. Loopback may use http (the stub server, a local proxy);
+    anything else must be https.
+    """
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError(f"refusing an {parts.scheme or 'relative'} URL: {url!r}")
+    if parts.scheme == "http" and parts.hostname not in ("127.0.0.1", "::1", "localhost"):
+        raise ValueError(f"refusing cleartext http to {parts.hostname!r}: use https")
+    return url
 
 
 def load(name: str, path: Path) -> Any:
@@ -190,6 +207,7 @@ def request(method: str, url: str, token: Optional[str],
     A non-2xx is returned, not raised: the caller reports GitHub's own message, which
     is the only text that explains why a token or a payload was refused.
     """
+    url = validate_api_url(url)
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Accept", "application/vnd.github+json")
@@ -296,6 +314,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
     if args.pr < 1:
         print("pr: --pr must be a positive number", file=sys.stderr)
+        return 2
+    try:
+        validate_api_url(args.api)
+    except ValueError as exc:
+        print(f"pr: {exc}", file=sys.stderr)
         return 2
 
     try:

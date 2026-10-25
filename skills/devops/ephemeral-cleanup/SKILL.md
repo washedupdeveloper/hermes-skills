@@ -1,7 +1,7 @@
 ---
 name: ephemeral-cleanup
 description: "Use when a task left ephemeral files; clean them up."
-version: 1.0.0
+version: 1.1.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -80,6 +80,9 @@ survive reboots (verified). Treat every probe run on the guest as a cleanup debt
   flag it in the report instead of deleting it.
 - Working tool caches (`~/.cache/nix`, `~/.npm`, editor state), the nix store,
   and every repo the user keeps.
+- **Evidence a report cites.** Before/after audit JSONs, a scored run's directory, a
+  subagent's transcript: these exist so a claim can be re-derived later, so keep them
+  and list them as kept. A runner's own output is a record, not debris.
 
 ## Procedure
 

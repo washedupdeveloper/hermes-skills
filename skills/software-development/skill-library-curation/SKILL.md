@@ -1,7 +1,7 @@
 ---
 name: skill-library-curation
 description: "Curate the skill library: sourcing, overlap, conflicts."
-version: 1.1.0
+version: 1.2.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -39,6 +39,9 @@ Three adjacent skills, each with a distinct job:
   reference it or vendor it (Step 9).
 - **"Learn everything from this repository, then delete it"** — mining a foreign tree
   for rules rather than skills, then retiring the source safely (Step 10).
+- **"Review this source's skills and tell me what is worth taking"** — decide by class
+  rather than file (router, micro-skill split, host-specific fields, rules no owner here
+  states), per Step 9's router subsection.
 
 ## Step 1 — Establish provenance before touching anything
 
@@ -116,6 +119,13 @@ around them is a rounding error.
 So never mass-rewrite a library for verbosity. Fix what is unambiguously broken — a
 dead reference, a description past the index window, a rule stated twice — and report
 the **measured** recovery instead of claiming an improvement you did not verify.
+
+**When the owner asks for a library-wide rewrite, the measurement is the answer.** Run the
+audit first and report what it says: filler lands near 0.2% of the corpus and duplicated mass
+between 1.3% and 2.6%, so editing prose has almost nothing to recover and every cut risks a
+fact. Name the one structural candidate you can defend, such as a maximum-compression variant
+of a brevity skill, with its cost (a user-facing command, an index line), and leave the delete
+to the owner.
 `scripts/skill-audit.py` produces the numbers (bytes, body tokens, description
 lengths, filler, cross-skill n-gram redundancy, dead refs, orphaned support files):
 run it before and after, and diff the JSON.
@@ -170,7 +180,10 @@ reports every bundled sibling as unresolved and buries the real failures among f
 `validate-skills.py <repo>/skills "$HERMES_HOME/skills"`.
 
 After a promotion, run the repo's own gate before touching any prose a test measures — a repo
-that asserts its counts in tests fails on the addition and tells you the right numbers.
+that asserts its counts in tests fails on the addition and tells you the right numbers. **Stage
+the new skill first.** A Nix check copies only git-visible paths, so an untracked `SKILL.md`
+reads as absent: the counted total stays old and the README number you just corrected is
+reported FALSE. `git add` the new directory, then gate.
 
 ## Step 7 — Bulk rewrite mechanics
 
@@ -212,6 +225,14 @@ repo the gate is **git**: a stray write shows in `git status` / `git diff` and r
 with `git checkout`, which is full coverage at zero friction — prefer it to
 `skills.write_approval`, and set that only where the tree is untracked. Run
 `git status` before committing anything you did not write yourself.
+
+**Attribute a change you did not make before you carry it.** A dirty file or an unfamiliar
+commit is the background review or a second agent, and the evidence names it: `git status
+--porcelain`, `git reflog -8` for who committed and when, `git log -1 --format='%h %ci %s'
+-- <file>` for the commit that last touched that file, and `stat` for the write time. Read the
+diff whole and gate it on the current tree before carrying it, then commit it as that writer's
+work and name it in the message. A commit that landed between your last check and your report
+is also a claim about the report: say the state changed, rather than restating the older one.
 
 **Precedence: `project > local profile > skills.create_dir > external_dirs`.** A
 name present both locally and in the mount resolves to the LOCAL copy, silently —
@@ -278,6 +299,23 @@ Intake is a different entry point from auditing your own library: the question i
    is registered as a source and installed, so its owner keeps maintaining it. Treat
    "I don't want to maintain this myself" as an instruction to reference, not vendor —
    and when a skill is already vendored that way, say so rather than leaving it.
+
+### A source that is mostly a trigger table is a router
+
+Some sources are an operating system rather than a skill pack: one `SKILL.md` holding a
+trigger table, an autonomy policy and a reply contract, pointing at dozens of micro-skills and
+playbooks. Take the leaves and refuse the frame.
+
+- **Refuse the router.** This library already routes per skill through `description` and
+  `## When to Use`; a second index duplicates every trigger and adds a hop.
+- **Refuse the micro-skill split.** One rule per file reads pure and costs an index line and a
+  load decision each. Adopt the rule, not the packaging.
+- **Refuse host-specific frontmatter** (an invocation switch, `icon`, `color`) and any policy
+  that restates the system prompt: autonomy, sycophancy, pause rules.
+- **Take the leaves the library lacks, into their owners.** Owning-token search first, so a
+  rule that already has an owner gets a pointer at most. A rule with no owner becomes a short
+  section in the skill that owns its subject, not a new skill.
+- **Record the refusals by class**, per item 6 above: router, split, fields, duplication.
 
 ## Step 10 — Mine a repository as a design document, then retire it
 

@@ -183,7 +183,7 @@ detached session) and read the verdict from the run dir.
 **A uniform `rc=124` is late, not lost.** When every sample reports `rc=124 / NO FILE` and
 the round ends `ESCALATE: gate could not evaluate the run`, the reviewer processes are
 usually still running: the five `generalist-*.json` files land in `round-1/` minutes after
-the round gave up. Look at the directory before believing the escalation — if the files are
+the round gave up. Look at the directory before believing the escalation. If the files are
 there, `council.py merge <run-dir>/round-1` (it prints `merged N sample(s) from N file(s)`)
 recovers them, and `council.py gate <run-dir>/round-1 --json --repo <repo>` then scores the
 round normally. Measured twice on a real repository: budget about an hour for a whole-repo
@@ -380,13 +380,6 @@ nix the `council.py` call still works; the built-in probes need no installs.
 A flag with no verb means `review`, so existing flags keep working unchanged.
 `advisory` reviews and reports but never edits; `--max-rounds 1` stops after the one
 review. There is no separate manual path: the loop *is* the council.
-
-**Pick the scope from the tree, not from habit: a clean working tree makes
-`--scope working-tree` (the default) review nothing.** When every change is already
-committed — the normal state after a chunk of work lands — the working-tree diff is empty,
-so the round costs full price and reads no code. Use `--scope whole-repo` for a first look
-or a milestone check, and keep `working-tree` / `diff` for a tree with uncommitted edits.
-Never compare a diff-scoped score against a whole-repo threshold (see `--baseline` below).
 
 Run it with `terminal(background=True, persist_on_release=True, notify=True)` — a full
 round takes minutes, and a plain background job is killed at turn end.
