@@ -90,7 +90,13 @@ the short form is not enough. As a core skill it would put ~4.5 KB into every sa
 |---|---|---|
 | reviewer | `caveman-review` | `claim` is one sentence; `falsifiable_check` is the exact command |
 | reviewer, orchestrator, fixer | `caveman` / `ultracave` | The voice of every message and reply |
-| fixer (`FIX_PROMPT`) | `surgical-patch`, `verify-and-stop` | Narrowest layer, no drive-by cleanup, stop when proof passes |
+| reviewer | `defensive-patterns` | The bug classes a finding has to name, loaded when the diff is code |
+| reviewer, orchestrator | `deterministic-quality-gates` | What a scored gate means: `beta`, `det`, a missing analyzer |
+| fixer (`FIX_PROMPT`, under the orchestrator profile) | `surgical-patch`, `verify-and-stop` | Narrowest layer, no drive-by cleanup, stop when proof passes |
+| orchestrator | `reply` | `next-steps.md` is a reply: labelled claims, impact first |
+
+The on-demand half of each member's list lives in `review-council.toml`
+(`members.<name>.skills`); `council setup bots` reports a name that does not resolve.
 
 `cavecrew` and `caveman-explore` do **not** apply: they are delegation contracts, and
 the council has no `delegation` toolset (see Architecture).
@@ -343,8 +349,10 @@ without asking**. The built-in probes work with zero installs.
 
 ## Driving the council with `/goal` (native Hermes)
 
-The council's autonomous mode is a **`/goal`**, not a bespoke loop. Hermes ships two
-features that do what this framework used to hand-roll:
+The `--mode full` loop is this repository's own: it spawns each reviewer and the fixer,
+and the gate decides. `/goal` is the **native alternative** for a single session, and it
+wraps the same gate rather than replacing the loop. Hermes ships the two features the
+loop imitates:
 
 * a **completion contract** — `outcome`, `verification`, `constraints`, `boundaries`,
   `stop_when` — which tightens both the continuation prompt and the judge;

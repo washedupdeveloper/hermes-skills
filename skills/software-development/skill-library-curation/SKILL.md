@@ -1,7 +1,7 @@
 ---
 name: skill-library-curation
 description: "Curate the skill library: sourcing, overlap, conflicts."
-version: 1.2.0
+version: 1.2.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -386,7 +386,11 @@ stated.
 - **Editing a bundled skill.** Hash-tracked and refreshed; the change disappears.
   Identify the class first (Step 1).
 - **Editing the installed copy of a repo-sourced skill.** Overwritten on the next
-  sync — edit the repo source and re-run the sync.
+  sync, with no error and no backup — edit the repo source and re-run the sync. The
+  copy is also where an *unattended* writer (the background review, another agent)
+  lands a lesson, so a sync you run can delete someone else's fix: diff the copy
+  against the repo before syncing and port anything that exists only in the copy back
+  into the generator first. A lesson that survives only in a copy has no home.
 - **Deleting a copy before confirming the owner still states the rule.** Verify the
 owning skill has it whole *before* removing the duplicate, or the rule is lost.
 - **Deleting content something reads.** Grep tests, scripts and docs for a

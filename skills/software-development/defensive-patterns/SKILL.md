@@ -1,7 +1,7 @@
 ---
 name: defensive-patterns
 description: "Use when reviewing or hardening a change."
-version: 1.0.0
+version: 1.0.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -153,8 +153,11 @@ code created itself in a directory it owns.
 **Validate at the boundary, trust inside.** Parse untrusted input once, at the edge (CLI args,
 config, network, files, another program's output), into domain types. Inside the system, pass
 typed data and propagate errors; do not re-validate.
-*Check:* is a value validated twice, on both sides of a typed boundary? *Boundary:* a seam that
-hands back raw bytes, or an untrusted update, is itself a boundary and must parse again.
+*Check:* is a value validated twice, on both sides of a typed boundary — or only in a wrapper
+the real caller bypasses? *Boundary:* a seam that hands back raw bytes, or an untrusted
+update, is itself a boundary and must parse again. *Where the check sits:* in the function
+that performs the I/O, not only in the argument parser that calls it; a library caller never
+runs the parser, so a scheme, host or path check one frame up guards the wrong surface.
 
 **Keep the decision pure, the effects at the shell.** A decision function takes plain values,
 returns a value, and touches no clock, network, randomness or mutable state. The thin shell

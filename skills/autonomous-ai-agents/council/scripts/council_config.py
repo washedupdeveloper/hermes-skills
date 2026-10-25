@@ -106,7 +106,8 @@ DEFAULTS: Dict[str, Any] = {
             # Optional: loaded by name from the mounted library, never installed.
             # web-app-security only matters when a diff touches a web project, and
             # the voice is already in SOUL.md, so `caveman` here is the long form.
-            "skills": ["web-app-security", "caveman", "caveman-review"],
+            "skills": ["web-app-security", "caveman", "caveman-review",
+                       "defensive-patterns", "deterministic-quality-gates"],
             "model": None,         # None = inherit the profile's model
             "provider": None,      # None = inherit; never ship a private one
         },
@@ -117,7 +118,10 @@ DEFAULTS: Dict[str, Any] = {
             "toolsets": list(ORCHESTRATOR_TOOLSETS),
             "core_skills": list(CORE_SKILLS["orchestrator"]),
             # The voice is in this member's SOUL.md; `caveman` is its long form.
-            "skills": ["caveman"],
+            # The fixer runs under THIS profile (run_hermes defaults to the
+            # orchestrator), so these are the fixer's rules too.
+            "skills": ["caveman", "surgical-patch", "verify-and-stop",
+                       "deterministic-quality-gates", "reply"],
             "model": None,
             "provider": None,
         },
