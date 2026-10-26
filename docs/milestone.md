@@ -25,12 +25,14 @@ From a clean clone of `origin/main`:
 
 ## Status
 
-**Reached on the tree, 2026-10-26.** Every row above except CI passes locally, on `c168851` plus
-the change archived as `2026-10-26-spec-paths-are-checked`.
+**Reached, 2026-10-26.** Every row above passes on the tree, and CI closed the last one: pushed as
+`a54abdd` and `68b7a81`, and all nine check runs on `68b7a81` concluded success — `nix flake check`,
+the three-OS test matrix, `claim audit`, `openspec validate --all --strict`, `setup.sh` e2e on two
+systems, and `live hermes`.
 
-**CI is the one row this machine cannot settle.** `origin/main` carried no `openspec` job when this
+The CI row needed the push rather than a sentence: `origin/main` carried no `openspec` job when this
 was written, and 27 commits were unpushed, so the spec gate had never run anywhere but a
-workstation. That row closes with the push and a green run; it is not claimed until then.
+workstation. A milestone whose enforcement exists only on one machine is a local convention.
 
 ## The gaps that stood in the way
 
