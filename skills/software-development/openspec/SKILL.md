@@ -55,7 +55,8 @@ method.
 - **A task is a commit.** `tasks.md` checkboxes are the plan. Tick one when its code and test
   land, and let the commit body name the tasks it closes.
 - **The repo is the gate.** `openspec validate <name> --strict` runs in the repo's CI, not only
-  by hand. A repo whose CI lacks it gets that step before its first change.
+  by hand. A repo whose CI lacks it gets that step before its first change; the job block to
+  append is `templates/ci-job.yml`, with the repository's own checkout pin.
 
 ## Verify
 

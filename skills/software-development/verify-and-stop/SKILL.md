@@ -18,6 +18,16 @@ metadata:
 Translate the acceptance conditions into the **smallest sufficient proof set**, run it,
 report, stop.
 
+## When to Use
+
+- The user asks whether something works, is done, or is ready to ship.
+- You are auditing an agent's, a session's or a collaborator's completion claim.
+- A fix, a guard or a gate needs evidence that it changes the behaviour it names.
+- A scored run, a review round or a CI result is about to be quoted as proof.
+
+Not for implementing the fix (`surgical-patch`), or building the gate itself
+(`deterministic-quality-gates`).
+
 ## Run the thing. A passing test is not the proof.
 
 **This is a standing rule, not a suggestion for some tasks.** Testing establishes that the
@@ -374,6 +384,33 @@ the subject is *claims*, not style. Re-derive each one; a commit message is a hy
 published", "the image is downloadable" — each is one HTTP request or one grep away. The
 cheap checks are the ones that get skipped, and they are exactly where a fabricated or
 stale claim survives.
+
+## Auditing an agent's report
+
+A subagent's "all requirements satisfied" is a claim, and its tests are the agent's own
+reading of the requirements — the same blind spot as your own suite, one layer out. The work is
+a probe you write from the requirement text and run against their tree.
+
+- **Write the probe before you read their tests.** One executable assertion per requirement,
+  phrased from the requirement rather than from their implementation, in your own file. A probe
+  assembled by reading their tests agrees with them by construction.
+- **Let their suite pass on its own terms.** A disagreement between your probe and their tests
+  is the finding; a probe that mirrors their assertions has no way to produce one.
+- **Exercise the branch the requirement does not name.** Measured: two agents implemented the
+  same five requirements, both suites green (17 and 12 tests), and one had left a CLI
+  `--dry-run` branch printing a refused URL with exit 0 — the guard sat in the function the
+  requirement named, and that branch returned before it. Neither suite covered the branch; one
+  probe line did, and the review round scored it two high findings.
+- **Run the probe from inside the tree under test.** `python /elsewhere/probe.py` puts the
+  probe's own directory first on `sys.path`, so `import pkg` resolves beside the probe and the
+  run silently measures another copy. Both arms of a comparison failed identically for exactly
+  that reason before it was found. Use `cd <tree> && python -c "$(cat probe.py)"`, or copy the
+  probe in and delete it after.
+- **Report per requirement, with the path each was observed on.** "5 of 5" survives scrutiny;
+  "all good" is the sentence that hid the gap.
+
+The design of a with/without comparison, and how to read a delta smaller than the noise:
+`references/controlled-comparison.md`.
 
 ## Stop condition
 

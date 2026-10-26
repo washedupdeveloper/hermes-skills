@@ -1,0 +1,17 @@
+# Append under `jobs:` in the repository's CI workflow.
+#
+# Replace `<checkout-pin>` with the `actions/checkout` pin this repository already uses.
+# A repository that pins actions by SHA must not gain an unpinned one.
+# Node ships on the GitHub-hosted runner image, so no toolchain setup is needed; the CLI is
+# pinned to its major version rather than `latest` so a schema change cannot land unannounced.
+
+  openspec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: <checkout-pin>
+        with:
+          persist-credentials: false
+      - name: install the spec CLI
+        run: npm install -g @fission-ai/openspec@1
+      - name: the specs validate
+        run: openspec validate --all --strict

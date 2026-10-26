@@ -44,6 +44,9 @@ requirements: one briefed in prose (278 tokens), one given a validated change (8
 - Council, advisory, two samples, whole-repo: prose 52.96, spec 50.07. The two high findings in
   the spec arm named exactly that branch.
 - The spec arm was faster (123s against 176s) and wrote fewer tests (12 against 17).
+- Archive, tested without a model: a delta written before another change merged was **refused**,
+  with the dropped scenario named ("current spec contains scenario(s) not present in the
+  modified block: ..."); refreshed, it merged and all three scenarios survived.
 
 The pilot is small: one task, one model, two samples, and both aggregates sit below the
 calibrated threshold because the review target is a scratch repository. The delta is the signal,
@@ -60,8 +63,9 @@ not the absolute score.
   branch; several commits tick tasks in the same change.
 - The CLI is an external toolchain (Node 20.19+, npm). The local install is user-scoped; CI
   installs it per run.
-- `archive` merges by requirement-level replacement. Concurrent changes against one capability
-  need a manual merge; OpenSpec's own history carries a repair for exactly that.
+- `archive` replaces a MODIFIED requirement as a whole block, so a delta written before another
+  change merged is refused, with the dropped scenario named. Verified against 1.15.0. Treat the
+  refusal as a required refresh, not an error to bypass; one change at a time per requirement.
 
 ## Rejected
 

@@ -424,6 +424,15 @@ required.
   not. The stop decision is the same either way; only the reason differs.
 - Hitting a cap is not a failure if the requirement was already met. Report the
   outcome against the requirement, not against the mechanism that ended the run.
+- **A report-only mode's non-zero exit is the mode, not a failure.** A run that applies no fix
+  cannot satisfy the gate, so an advisory mode escalates by design and exits non-zero. Read its
+  outcome and its score, and name the mode your numbers came from — calling that exit code a
+  broken run hides the only measurement the run produced.
+- **Compare a delta, not an absolute score, when the arms are different trees.** A threshold
+  calibrated on real projects scores a scratch repository in the 50s, so 52.96 against 50.07 is
+  evidence about the two arms and nothing about either tree's quality. Report the delta beside
+  the shared threshold and population; where no common calibration exists, say the absolute
+  numbers are not comparable rather than ranking them.
 - **Write a handover plan on every termination**, satisfied or not: what is
   required, then what is desirable ranked by how much score each item can move,
   then the exact command to resume. When a run stops early, that plan is the
