@@ -90,3 +90,11 @@ A behavior change starts in `openspec/changes/<name>/` (proposal, spec delta, ta
 code. `openspec list --specs` before proposing; `openspec validate <name> --strict` before
 applying and before archive; `openspec archive <name> --yes` when the work lands.
 Procedure: the `openspec` skill. Pure refactors and dependency bumps set `skip_specs: true`.
+
+The CLI is not installed on this machine, and CI installs it per run. The invocation that works
+here, pinned the way a workflow would pin it:
+
+```bash
+nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1 <verb>   # e.g. validate --all --strict
+```
+

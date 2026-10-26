@@ -120,6 +120,84 @@ def test_upstream_ledger_matches_reality():
     assert not bad, bad
 
 
+# ── the layout the README declares ───────────────────────────────────────────
+# The `skill-library` spec's "known category" clause needs a referent, and the README
+# layout tree is where a reader looks for it. Parsing that tree keeps one owner for the
+# fact: a list written here would be a second copy of what the README already states,
+# and this repo has already paid for that shape once.
+# re.M is load-bearing: without it findall matches only at offset 0, so a
+# seven-row tree parses as one and the comparison passes on a single category.
+LAYOUT_ROW = re.compile(r"^[\u251c\u2514]\u2500\u2500 ([a-z0-9][a-z0-9-]*)/", re.M)
+
+
+def _declared_categories():
+    text = (REPO / "README.md").read_text(encoding="utf-8")
+    block = re.search(r"^```\nskills/\n(.*?)^```", text, re.S | re.M)
+    assert block, "README has no `skills/` layout block"
+    return set(LAYOUT_ROW.findall(block.group(1)))
+
+
+def test_the_declared_layout_matches_the_filesystem():
+    """Undeclared on disk, or declared and absent, are both failures.
+
+    The empty-parse guard is load-bearing: a reformatted tree must fail rather than
+    pass by comparing an empty set with an empty set.
+    """
+    declared = _declared_categories()
+    assert declared, "no category rows parsed out of the README layout tree"
+    on_disk = {p.name for p in SKILLS.iterdir() if p.is_dir()}
+    assert declared == on_disk, (
+        f"undeclared on disk: {sorted(on_disk - declared)}; "
+        f"declared but absent: {sorted(declared - on_disk)}")
+
+
+# ── a spec names only paths that exist ───────────────────────────────────────
+SPECS = REPO / "openspec" / "specs"
+SPEC_PATH = re.compile(
+    r"`((?:skills|soul|docs|tests|scripts|nix|openspec)/[A-Za-z0-9_./-]+)`")
+
+
+def test_every_repo_path_named_in_a_spec_exists():
+    """A spec is a promise about this tree, so a path it names has to be there.
+
+    `openspec validate --strict` checks shape, not truth — which is how a scenario
+    naming a script that never existed survived every gate. `openspec/changes/` is
+    excluded on purpose: a delta names the files it is about to create.
+    """
+    if not SPECS.is_dir():
+        return
+    bad = []
+    for spec in sorted(SPECS.rglob("*.md")):
+        for m in SPEC_PATH.finditer(spec.read_text(encoding="utf-8")):
+            rel = m.group(1).rstrip(".")
+            if not (REPO / rel).exists():
+                bad.append(f"{spec.relative_to(REPO)}: {rel}")
+    assert not bad, bad
+
+
+# ── the ADR ledger ───────────────────────────────────────────────────────────
+ADR_ROW = re.compile(r"^\|\s*\[(\d{4})\]\(docs/adr/([^)]+)\.md\)\s*\|", re.M)
+
+
+def test_every_adr_in_the_directory_is_in_the_readme_table():
+    """`docs/adr/` records hard-to-reverse choices, and README's table is its index.
+
+    A decision filed but not listed is one a reader will not find; a row pointing at
+    nothing is a dead link. Both fail here, and the empty-parse guard keeps a
+    reformatted table from passing as complete.
+    """
+    adr_dir = REPO / "docs" / "adr"
+    rows = ADR_ROW.findall((REPO / "README.md").read_text(encoding="utf-8"))
+    assert rows, "no ADR rows parsed out of the README table"
+    # The row's link carries the whole stem (0003-the-council-skill-is-a-generated-copy),
+    # so prefixing the number again builds a name that matches no file.
+    listed = {slug for _num, slug in rows}
+    filed = {p.stem for p in adr_dir.glob("*.md")}
+    assert listed == filed, (
+        f"filed but not listed: {sorted(filed - listed)}; "
+        f"listed but absent: {sorted(listed - filed)}")
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

@@ -97,6 +97,7 @@ skills/
 ├── devops/                 ephemeral-cleanup
 │                           hermes-s6-container-supervision
 │                           nix-declarative-config
+├── note-taking/            obsidian-bases
 ├── productivity/           wait-what
 ├── security/               oss-forensics  web-app-security
 └── software-development/   agent-harness-design  defensive-patterns
@@ -264,9 +265,17 @@ paragraph, not a document.
 | [0004](docs/adr/0004-adopt-dsh-harness-rules.md) | Adopt four harness rules from DeepSeek Harness, reject its framework |
 | [0005](docs/adr/0005-pin-workflow-actions-to-commits.md) | Pin workflow actions and installs to commits |
 | [0006](docs/adr/0006-dsh-second-pass.md) | The second pass: bug classes, incident classes, request logging |
+| [0007](docs/adr/0007-dsh-third-pass.md) | The third pass over DeepSeek Harness: the codebase, the record, and what stayed prose |
+| [0008](docs/adr/0008-openspec-as-the-spec-container.md) | OpenSpec as the spec container, per repository |
 
 Everything else — the ownership classes, the setup contract, the layout — is a rule
 or a fact, and lives in `AGENTS.md` or here.
+
+## Where this is going
+
+[docs/milestone.md](docs/milestone.md) is the target: the claims this repository makes
+about itself, and the command that settles each one. A claim that cannot be settled is
+labelled, not asserted.
 
 ## Why there is no `sync.sh`
 
