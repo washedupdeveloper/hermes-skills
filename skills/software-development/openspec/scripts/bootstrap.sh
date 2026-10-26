@@ -19,7 +19,12 @@ fi
 # OpenSpec sends anonymous command-name telemetry by default. Off for this machine.
 openspec config set telemetry.enabled false >/dev/null 2>&1 || true
 
-if [ -f AGENTS.md ] && ! grep -q '^## Specs (OpenSpec)' AGENTS.md; then
+if [ ! -f AGENTS.md ]; then
+  printf '# AGENTS.md\n\nRules for an agent working in this repository.\n' > AGENTS.md
+  echo "AGENTS.md: created"
+fi
+
+if ! grep -q '^## Specs (OpenSpec)' AGENTS.md; then
   cat >> AGENTS.md <<'EOF'
 
 ## Specs (OpenSpec)
@@ -32,4 +37,4 @@ EOF
   echo "AGENTS.md: rule appended"
 fi
 
-echo "openspec: $(openspec list --specs 2>/dev/null | grep -c 'spec\|→' || true) spec line(s)"
+echo "openspec: $(find openspec/specs -name spec.md 2>/dev/null | wc -l) spec file(s)"
