@@ -164,10 +164,12 @@ def test_every_repo_path_named_in_a_spec_exists():
     naming a script that never existed survived every gate. `openspec/changes/` is
     excluded on purpose: a delta names the files it is about to create.
     """
-    if not SPECS.is_dir():
-        return
+    specs = sorted(SPECS.rglob("*.md")) if SPECS.is_dir() else []
+    # A vacuous pass is not a pass: an emptied or renamed specs/ would otherwise
+    # iterate nothing and report success.
+    assert specs, f"no specs found under {SPECS.relative_to(REPO)}"
     bad = []
-    for spec in sorted(SPECS.rglob("*.md")):
+    for spec in specs:
         for m in SPEC_PATH.finditer(spec.read_text(encoding="utf-8")):
             rel = m.group(1).rstrip(".")
             if not (REPO / rel).exists():

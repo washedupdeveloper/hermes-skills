@@ -61,7 +61,9 @@ before it was trusted:
   `openspec/specs/skill-library/spec.md: scripts/validate_skills.py`;
 - the layout check failed on a README tree missing `note-taking/` (and on its first form, which
   parsed one category of seven because `re.M` was missing from the pattern);
-- the ADR check fails if a row is dropped from the table or a file is added to `docs/adr/`.
+- the ADR check fails if a row is dropped from the table or a file is added to `docs/adr/`;
+- the spec-path check fails on an emptied `openspec/specs/` rather than passing over
+  nothing, which is the only way that check could have been vacuous.
 
 ## Deferred on purpose
 
