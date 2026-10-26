@@ -115,6 +115,54 @@ let
   isLocal = ref: lib.hasPrefix "./" ref;
   isPinned = ref: builtins.match (".*@" + hex40) ref != null;
   isRevPinned = ref: builtins.match ("github:[^/]+/[^/]+/" + hex40 + "(#.*)?") ref != null;
+
+  # --- floating references -------------------------------------------------
+  # `ubuntu-latest` is the runner analogue of a moved tag, and `@1` is an npm range that
+  # resolves to whatever 1.x is current: both run code nobody reviewed, with no commit here.
+  # A council review found each of them in this repository, which is why the rule is asserted
+  # rather than stated in prose. The shipped template is scanned too: it is the workflow this
+  # skill tells other repositories to adopt.
+  templateCiJob = src + "/skills/software-development/openspec/templates/ci-job.yml";
+
+  pinnedTextFiles =
+    map (n: {
+      name = n;
+      path = workflowDir + "/${n}";
+    }) workflowFiles
+    ++ lib.optional (builtins.pathExists templateCiJob) {
+      name = "openspec/templates/ci-job.yml";
+      path = templateCiJob;
+    };
+
+  scanPinned =
+    pattern:
+    lib.concatMap (
+      f:
+      let
+        lines = lib.splitString "\n" (builtins.readFile f.path);
+        numbered = lib.imap1 (i: line: { inherit i line; }) lines;
+        isComment = x: lib.hasPrefix "#" (lib.trim x.line);
+        pick =
+          x:
+          let
+            m = builtins.match pattern x.line;
+          in
+          if m == null then
+            null
+          else
+            {
+              name = "${f.name}:${toString x.i}";
+              value = builtins.head m;
+            };
+      in
+      lib.filter (x: x != null) (map pick (builtins.filter (x: !isComment x) numbered))
+    ) pinnedTextFiles;
+
+  floatingRunners = scanPinned ".*runs-on:[[:space:]]*([a-z0-9._-]+-latest).*";
+  npmMajorPins = scanPinned ".*npm install -g[[:space:]]+[^[:space:]]+@([0-9]+)[[:space:]]*$";
+
+  isFloatingRunner = runner: builtins.match ".+-latest" runner != null;
+  isMajorOnlyPin = v: builtins.match "[0-9]+" v != null;
   # --- plugins ------------------------------------------------------------
   # A plugin directory is discovered by its `plugin.yaml`, and the registry key is the
   # `name:` field: a mismatch installs one plugin under another's key.
@@ -300,6 +348,42 @@ in
       expr = [
         (isLocal "./.github/actions/build")
         (isLocal "actions/checkout@v7")
+      ];
+      expected = [
+        true
+        false
+      ];
+    };
+
+    # ADR 0005's rule, extended to the two references it does not scan: the runner label and
+    # the npm install. Both were unpinned until a council review of this repository named them.
+    test_no_workflow_runs_on_a_floating_runner = {
+      expr = map (x: "${x.name}: ${x.value}") floatingRunners;
+      expected = [ ];
+    };
+
+    test_every_spec_cli_install_pins_an_exact_version = {
+      expr = map (x: "${x.name}: @${x.value}") npmMajorPins;
+      expected = [ ];
+    };
+
+    # Negative controls. A predicate that accepts everything passes both checks above on any
+    # workflow at all, and the pass is indistinguishable from a real one.
+    test_the_runner_gate_rejects_a_latest_label = {
+      expr = [
+        (isFloatingRunner "ubuntu-latest")
+        (isFloatingRunner "ubuntu-24.04")
+      ];
+      expected = [
+        true
+        false
+      ];
+    };
+
+    test_the_npm_gate_rejects_a_major_range = {
+      expr = [
+        (isMajorOnlyPin "1")
+        (isMajorOnlyPin "1.15.0")
       ];
       expected = [
         true

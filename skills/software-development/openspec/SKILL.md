@@ -1,7 +1,7 @@
 ---
 name: openspec
 description: "Use when a repo has openspec/. Spec before code."
-version: 1.1.0
+version: 1.1.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]

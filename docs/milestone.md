@@ -74,7 +74,7 @@ before it was trusted:
 - **Scanning `openspec/changes/` for paths.** A delta names the files it is about to create, so the
   check would fail on the work it exists to allow. The live spec is the contract.
 - **A devshell pinning the OpenSpec CLI.** The documented `nix shell nixpkgs#nodejs_22 -c npx -y
-  @fission-ai/openspec@1` invocation is enough for one repository; a devshell is worth adding when a
-  second consumer needs the same pin.
+  @fission-ai/openspec@1.15.0` invocation is enough for one repository; a devshell is worth adding
+  when a second consumer needs the same pin. The version is exact because a range resolves per run.
 - **A `scripts/validate_skills.py`.** Writing it would give frontmatter a second owner beside
   `nix/tests.nix`. The requirement names the gate instead.

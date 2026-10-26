@@ -242,14 +242,17 @@ jobs:
           fi
 
   # The specs are a gate input: a change that does not validate cannot land.
-  # Node comes from the runner image, so this job needs no toolchain setup.
+  # Node comes from the runner image, so this job needs no toolchain setup. The runner is an
+  # image, not a floating label, and the CLI is an exact version: `ubuntu-latest` and `@1` are
+  # both mutable references, which is what ADR 0005 exists to keep out (a council review found
+  # both here).
   openspec:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
       - name: install the spec CLI
-        run: npm install -g @fission-ai/openspec@1
+        run: npm install -g @fission-ai/openspec@1.15.0
       - name: the specs validate
         run: openspec validate --all --strict

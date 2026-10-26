@@ -91,10 +91,15 @@ code. `openspec list --specs` before proposing; `openspec validate <name> --stri
 applying and before archive; `openspec archive <name> --yes` when the work lands.
 Procedure: the `openspec` skill. Pure refactors and dependency bumps set `skip_specs: true`.
 
-The CLI is not installed on this machine, and CI installs it per run. The invocation that works
-here, pinned the way a workflow would pin it:
+The CLI is not installed on this machine, and CI installs it per run. Both pin the same exact
+version — 1.15.0, the one ADR 0008 was verified against — because `@1` is a range that resolves to
+whatever 1.x is current, which is the mutable reference ADR 0005 rejects:
 
 ```bash
-nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1 <verb>   # e.g. validate --all --strict
+nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 <verb>   # e.g. validate --all --strict
 ```
+
+Bumping it is a one-line change in three places: this file, the CI job, and the `openspec` skill's
+`templates/ci-job.yml`. `nix flake check` fails if any of them names a range instead of a version,
+or pins a workflow to a `-latest` runner.
 

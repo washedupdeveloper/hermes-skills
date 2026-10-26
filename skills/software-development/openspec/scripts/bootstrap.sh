@@ -7,7 +7,7 @@ repo="${1:-.}"
 cd "$repo"
 
 command -v openspec >/dev/null 2>&1 || {
-  echo "openspec: not on PATH; install with: npm install -g --prefix ~/.local/npm @fission-ai/openspec" >&2
+  echo "openspec: not on PATH; install with: npm install -g --prefix ~/.local/npm @fission-ai/openspec@1.15.0" >&2
   exit 1
 }
 
