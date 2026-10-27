@@ -253,6 +253,39 @@ jobs:
             exit 1
           fi
 
+  # The gate's RULES, not the tree. An eval-tier assertion decides its outcome while the check
+  # is being evaluated, and its derivation carries no inputs, so `nix flake check` cannot tell a
+  # right tree from a wrong one. This job puts each forbidden state into the checkout and
+  # requires the gate to fail; a rule that cannot fire is a rule that measures nothing.
+  mutants:
+    name: gate mutants
+    runs-on: ubuntu-24.04
+    # the only scope any job here needs: read the tree, nothing else
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+      - name: every rule fails on the state it forbids
+        run: |
+          # Annotated on failure for the same reason as the other jobs: the log needs admin
+          # rights to read, and the annotations do not.
+          out=$(mktemp)
+          if python3 tests/e2e/test_gate_mutants.py >"$out" 2>&1; then
+            tail -n 3 "$out"
+          else
+            tail -n 30 "$out" | while IFS= read -r line; do
+              echo "::error title=gate mutants::$line"
+            done
+            exit 1
+          fi
+
   # The specs are a gate input: a change that does not validate cannot land.
   # Node comes from the runner image, so this job needs no toolchain setup. The runner is an
   # image, not a floating label, and the CLI is an exact version: `ubuntu-latest` and `@1` are

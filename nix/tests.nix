@@ -319,19 +319,21 @@ let
   ) installSpecs;
 
   # A fifth site cannot appear silently: every file naming the package must be an adoption
-  # site or prose. Prose legitimately quotes the forbidden forms as examples.
-  prosePrefixes = [
+  # site, or be somewhere the name is data rather than a command. Prose quotes the forbidden
+  # forms as examples; the gate and its tests construct them as fixtures. That is the opposite
+  # of adopting one, and exempting it is what keeps this rule from firing on its own harness.
+  exemptPrefixes = [
     "docs/"
     "openspec/"
-    # The gate quotes every forbidden spelling as test data; that is the opposite of adopting one.
     "nix/"
+    "tests/"
   ];
 
   adoptedRelPaths = map (a: a.relPath) adoptedSpecs;
 
   unadoptedMentions = map rel (
     builtins.filter (
-      p: !(lib.elem (rel p) adoptedRelPaths) && !(lib.any (pre: lib.hasPrefix pre (rel p)) prosePrefixes)
+      p: !(lib.elem (rel p) adoptedRelPaths) && !(lib.any (pre: lib.hasPrefix pre (rel p)) exemptPrefixes)
     ) (builtins.filter (p: mentions "@fission-ai/openspec" (builtins.readFile p)) textFilePaths)
   );
   # --- plugins ------------------------------------------------------------
