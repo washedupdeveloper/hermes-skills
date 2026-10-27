@@ -63,7 +63,19 @@ jobs:
       # pointed at — see the note in `tests` for why a tag is not enough.
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
       - name: nix flake check
-        run: nix flake check --keep-going
+        # A red X with no message is not a diagnosis. Run logs need a token to read; check
+        # annotations do not, so the failing tail is emitted as one. Without this, a gate
+        # failure on a runner is visible only to someone who can log in and read it.
+        run: |
+          set -o pipefail
+          if nix flake check --keep-going 2>&1 | tee /tmp/gate.log; then
+            exit 0
+          fi
+          msg=$(tail -c 1800 /tmp/gate.log \
+                | sed -e 's/%/%25/g' -e 's/\r//g' \
+                | awk 'BEGIN{ORS=""} NR>1{printf "%%0A"} {print}')
+          echo "::error title=nix gate failed::${msg}"
+          exit 1
 
   # The real product, loading the real tree. This is the only job that answers
   # "does Hermes actually load these skills?" rather than "is the tree shaped
