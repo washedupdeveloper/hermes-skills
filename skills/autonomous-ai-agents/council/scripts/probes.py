@@ -1078,6 +1078,15 @@ paths = [
   '''(^|/)result(/|$)''',
   '''(^|/)\\.review-council(/|$)''',
 ]
+
+
+[[allowlists]]
+description = "not secrets: the fake credential in the secret-probe tests, and the placeholder SHA in the sanitiser's usage example. Allowlisted by VALUE so a real secret added to either file still fires."
+regexTarget = "match"
+regexes = [
+  '''inf_9f4c2b7e1a8d6350b2c4e6f8a0d1c3e5''',
+  '''9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b''',
+]
 """
 
 

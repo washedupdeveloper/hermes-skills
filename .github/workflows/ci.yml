@@ -265,6 +265,6 @@ jobs:
         with:
           persist-credentials: false
       - name: install the spec CLI
-        run: npm install -g @fission-ai/openspec@1.15.0
+        run: npm install -g --ignore-scripts @fission-ai/openspec@1.15.0
       - name: the specs validate
         run: openspec validate --all --strict

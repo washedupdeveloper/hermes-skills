@@ -12,6 +12,10 @@
 let
   L = import ./lib.nix { inherit lib; };
 
+  # The one machine-readable home for a version the repository adopts in more than one place.
+  # Every adopted copy is checked against it, so bumping is this file plus the four sites.
+  pins = import ./pins.nix;
+
   # The index truncates at 57 chars + "...", so the trigger must be self-contained there:
   # past that, the only part loaded before a skill opens is cut mid-word.
   descMax = 57;
@@ -34,6 +38,9 @@ let
     ".yaml"
     ".yml"
     ".json"
+    ".nix"
+    ".toml"
+    ".txt"
   ];
 
   rel = p: lib.removePrefix (toString src + "/") (toString p);
@@ -77,38 +84,74 @@ let
 
   workflowFiles =
     if builtins.pathExists workflowDir then
-      lib.filter
-        (n: lib.hasSuffix ".yml" n || lib.hasSuffix ".yaml" n)
-        (builtins.attrNames (builtins.readDir workflowDir))
+      lib.filter (n: lib.hasSuffix ".yml" n || lib.hasSuffix ".yaml" n) (
+        builtins.attrNames (builtins.readDir workflowDir)
+      )
     else
       [ ];
 
-  # Every match of *pattern* in every workflow, as `file:line:value`. Comment lines are
-  # skipped: a comment may name a ref without being one, and scanning prose turns a
-  # documentation line into a false failure.
-  scan =
-    pattern:
+  # --- one scanner, one comment rule --------------------------------------
+  # `scanLines` is the only place a file is split into numbered, non-comment lines, so the
+  # comment-skip rule and the `file:line` format have one owner. There used to be two
+  # scanners; the second drifted, because it skipped comments but over a narrower file set.
+  isComment = line: lib.hasPrefix "#" (lib.trim line);
+
+  numberedLines =
+    f:
+    lib.imap1 (i: line: {
+      name = "${f.name}:${toString i}";
+      inherit line;
+    }) (lib.splitString "\n" (builtins.readFile f.path));
+
+  scanLines =
+    f: pattern:
     let
-      one =
-        file:
+      pick =
+        x:
         let
-          lines = lib.splitString "\n" (builtins.readFile (workflowDir + "/${file}"));
-          numbered = lib.imap1 (i: line: { inherit i line; }) lines;
-          isComment = x: lib.hasPrefix "#" (lib.trim x.line);
-          pick =
-            x:
-            let
-              m = builtins.match pattern x.line;
-            in
-            if m == null then null else { name = "${file}:${toString x.i}"; value = builtins.head m; };
+          m = builtins.match pattern x.line;
         in
-        lib.filter (x: x != null) (map pick (builtins.filter (x: !isComment x) numbered));
+        if m == null then
+          null
+        else
+          {
+            inherit (x) name line;
+            value = builtins.head m;
+          };
     in
-    lib.concatMap one workflowFiles;
+    lib.filter (x: x != null) (map pick (lib.filter (x: !(isComment x.line)) (numberedLines f)));
 
-  usesRefs = scan ".*uses:[[:space:]]*([^[:space:]]+).*";
-  githubRefs = scan ".*(github:[^[:space:]]+).*";
+  # A trailing comment is not part of a command, and shell punctuation can sit beside one:
+  # `bootstrap.sh` ends a message with `>&2`, which would otherwise become the last token.
+  shellNoise = [
+    "\""
+    "'"
+    ">"
+    "&"
+    ";"
+    "("
+    ")"
+  ];
 
+  # A `#` inside a token is not a comment: `nixpkgs#nodejs_22` is half of every command in
+  # AGENTS.md, and splitting on it truncated the line before the package was reached.
+  stripComment = line: lib.trim (builtins.head (lib.splitString " #" line));
+
+  cleanLine =
+    line: lib.foldl' (acc: c: builtins.replaceStrings [ c ] [ " " ] acc) (stripComment line) shellNoise;
+
+  tokens = line: lib.filter (t: t != "") (lib.splitString " " (cleanLine line));
+
+  # Containment without a regex. `lib.hasInfix` is `builtins.match ".*x.*"`, whose engine
+  # recurses per character: on a 100 KB file it exhausts the evaluator stack and reports
+  # "possible infinite recursion" instead of an answer. `replaceStrings` is a C++ loop with
+  # constant stack.
+  mentions =
+    needle: text:
+    builtins.stringLength text
+    != builtins.stringLength (builtins.replaceStrings [ needle ] [ "" ] text);
+
+  # --- reference pins (ADR 0005) ------------------------------------------
   hex40 = lib.concatStrings (lib.genList (_: "[0-9a-f]") 40);
 
   # A local action is a directory in this repository: it moves with the commit.
@@ -116,53 +159,181 @@ let
   isPinned = ref: builtins.match (".*@" + hex40) ref != null;
   isRevPinned = ref: builtins.match ("github:[^/]+/[^/]+/" + hex40 + "(#.*)?") ref != null;
 
-  # --- floating references -------------------------------------------------
-  # `ubuntu-latest` is the runner analogue of a moved tag, and `@1` is an npm range that
-  # resolves to whatever 1.x is current: both run code nobody reviewed, with no commit here.
-  # A council review found each of them in this repository, which is why the rule is asserted
-  # rather than stated in prose. The shipped template is scanned too: it is the workflow this
-  # skill tells other repositories to adopt.
-  templateCiJob = src + "/skills/software-development/openspec/templates/ci-job.yml";
+  # The same line scanner, over the workflow files only: the action pins do not apply to
+  # AGENTS.md, which is prose that quotes refs.
+  scanWorkflows = pattern: lib.concatMap (f: scanLines f pattern) workflowSpecs;
+  usesRefs = scanWorkflows ".*uses:[[:space:]]*([^[:space:]]+).*";
+  githubRefs = scanWorkflows ".*(github:[^[:space:]]+).*";
 
-  pinnedTextFiles =
-    map (n: {
-      name = n;
-      path = workflowDir + "/${n}";
-    }) workflowFiles
-    ++ lib.optional (builtins.pathExists templateCiJob) {
-      name = "openspec/templates/ci-job.yml";
-      path = templateCiJob;
-    };
+  # --- what a pin can live in ----------------------------------------------
+  # An adoption site EXECUTES the CLI or instructs an agent to. Prose is not one, and docs are
+  # excluded by directory rather than by guesswork.
+  workflowSpecs = map (n: {
+    name = n;
+    relPath = ".github/workflows/${n}";
+    path = workflowDir + "/${n}";
+  }) workflowFiles;
 
-  scanPinned =
-    pattern:
+  agentsSpec = {
+    name = "AGENTS.md";
+    relPath = "AGENTS.md";
+    path = src + "/AGENTS.md";
+  };
+
+  templateSpec = {
+    name = "openspec/templates/ci-job.yml";
+    relPath = "skills/software-development/openspec/templates/ci-job.yml";
+    path = src + "/skills/software-development/openspec/templates/ci-job.yml";
+  };
+
+  bootstrapSpec = {
+    name = "openspec/scripts/bootstrap.sh";
+    relPath = "skills/software-development/openspec/scripts/bootstrap.sh";
+    path = src + "/skills/software-development/openspec/scripts/bootstrap.sh";
+  };
+
+  adoptedSpecs = workflowSpecs ++ [
+    agentsSpec
+    templateSpec
+    bootstrapSpec
+  ];
+
+  # Fail closed. `builtins.pathExists` used to guard the template, so renaming it left the scan
+  # empty and the gate green. Presence is an ASSERTION now, and every read below uses the set
+  # that passed it.
+  adoptedMissing = map (f: f.relPath) (
+    builtins.filter (f: !(builtins.pathExists f.path)) adoptedSpecs
+  );
+  adoptedPresent = builtins.filter (f: builtins.pathExists f.path) adoptedSpecs;
+
+  # Every text file in the tree, by extension, walked once and reused by the CRLF assertion.
+  textFilePaths = lib.filter (p: lib.any (e: lib.hasSuffix e (toString p)) textExts) (
+    lib.filesystem.listFilesRecursive src
+  );
+
+  # --- 1.1 the runner label ------------------------------------------------
+  # The label is the defect wherever it sits: `runs-on: ubuntu-latest`, a quoted value, a
+  # bracketed list, a block list under `runs-on:`, and `os: [ubuntu-latest]` behind
+  # `runs-on: ${{ matrix.os }}` all carry the same token on some line. Matching the token is
+  # deliberately wider than parsing the YAML: a parser would only narrow the surface.
+  runnerFloats = line: mentions "-latest" (stripComment line);
+
+  # A runner is declared in a workflow or in the template workflows are made from. AGENTS.md
+  # mentions `-latest` in prose ABOUT this rule, and a shell script's install message is not a
+  # runner either — scanning those turns documentation into a false failure.
+  runnerSpecs = builtins.filter (f: builtins.pathExists f.path) (workflowSpecs ++ [ templateSpec ]);
+
+  floatingRunners = lib.concatMap (
+    f:
+    map (x: "${x.name}: ${stripComment x.line}") (
+      lib.filter (x: runnerFloats x.line) (lib.filter (x: !(isComment x.line)) (numberedLines f))
+    )
+  ) runnerSpecs;
+
+  # --- 1.2 the installed package -------------------------------------------
+  # An exact version is three dot-separated numbers and nothing else. `@1`, `@1.15`, `@latest`,
+  # `@^1.15.0`, `@~1.15.0` and a missing version all fail this, which is the point: a range
+  # resolves to code nobody reviewed.
+  isExactSpec =
+    spec: spec != null && builtins.match "(@?[^@[:space:]]+)@([0-9]+\\.[0-9]+\\.[0-9]+)" spec != null;
+
+  # Flags whose VALUE is not the package. Without this `--prefix ~/.local/npm` reads as a
+  # package named `~/.local/npm`.
+  valueFlags = [
+    "--prefix"
+    "-p"
+    "--registry"
+    "--cache"
+    "--userconfig"
+  ];
+
+  dropFlagsAndValues =
+    ts:
+    if ts == [ ] then
+      [ ]
+    else if lib.hasPrefix "-" (builtins.head ts) then
+      (
+        if lib.elem (builtins.head ts) valueFlags && builtins.length ts > 1 then
+          dropFlagsAndValues (builtins.tail (builtins.tail ts))
+        else
+          dropFlagsAndValues (builtins.tail ts)
+      )
+    else
+      ts;
+
+  afterWord =
+    w: ts:
+    if ts == [ ] then
+      [ ]
+    else if builtins.head ts == w then
+      builtins.tail ts
+    else
+      afterWord w (builtins.tail ts);
+
+  npmSubcommands = [
+    "install"
+    "i"
+    "add"
+  ];
+
+  # `npx [-y] <spec>`: the first non-flag after `npx`.
+  # `npm install|i|add -g|--global <spec>`: the first non-flag after the subcommand, with
+  # value-taking flags and their values skipped.
+  installSpecsIn =
+    line:
+    let
+      ts = tokens line;
+      npxRest = afterWord "npx" ts;
+      npxCandidate = dropFlagsAndValues npxRest;
+      npmRest = afterWord "npm" ts;
+      npmAfterSub =
+        if npmRest == [ ] || !(lib.elem (builtins.head npmRest) npmSubcommands) then
+          npmRest
+        else
+          builtins.tail npmRest;
+      npmCandidate = dropFlagsAndValues npmAfterSub;
+      npmGlobal =
+        npmRest != [ ]
+        && lib.elem (builtins.head npmRest) npmSubcommands
+        && (lib.elem "-g" ts || lib.elem "--global" ts);
+    in
+    lib.optional (npxRest != [ ]) (if npxCandidate == [ ] then null else builtins.head npxCandidate)
+    ++ lib.optional npmGlobal (if npmCandidate == [ ] then null else builtins.head npmCandidate);
+
+  installSpecs = lib.concatMap (
+    f:
     lib.concatMap (
-      f:
-      let
-        lines = lib.splitString "\n" (builtins.readFile f.path);
-        numbered = lib.imap1 (i: line: { inherit i line; }) lines;
-        isComment = x: lib.hasPrefix "#" (lib.trim x.line);
-        pick =
-          x:
-          let
-            m = builtins.match pattern x.line;
-          in
-          if m == null then
-            null
-          else
-            {
-              name = "${f.name}:${toString x.i}";
-              value = builtins.head m;
-            };
-      in
-      lib.filter (x: x != null) (map pick (builtins.filter (x: !isComment x) numbered))
-    ) pinnedTextFiles;
+      x:
+      map (spec: {
+        inherit (x) name;
+        inherit spec;
+      }) (installSpecsIn x.line)
+    ) (lib.filter (x: !(isComment x.line)) (numberedLines f))
+  ) adoptedPresent;
 
-  floatingRunners = scanPinned ".*runs-on:[[:space:]]*([a-z0-9._-]+-latest).*";
-  npmMajorPins = scanPinned ".*npm install -g[[:space:]]+[^[:space:]]+@([0-9]+)[[:space:]]*$";
+  # --- 3.1 one version, checked at every site ------------------------------
+  pinnedCli = pins.openspecCli;
 
-  isFloatingRunner = runner: builtins.match ".+-latest" runner != null;
-  isMajorOnlyPin = v: builtins.match "[0-9]+" v != null;
+  notPinnedVersion = builtins.filter (
+    x: x.spec != null && !(lib.hasSuffix "@${pinnedCli}" x.spec)
+  ) installSpecs;
+
+  # A fifth site cannot appear silently: every file naming the package must be an adoption
+  # site or prose. Prose legitimately quotes the forbidden forms as examples.
+  prosePrefixes = [
+    "docs/"
+    "openspec/"
+    # The gate quotes every forbidden spelling as test data; that is the opposite of adopting one.
+    "nix/"
+  ];
+
+  adoptedRelPaths = map (a: a.relPath) adoptedSpecs;
+
+  unadoptedMentions = map rel (
+    builtins.filter (
+      p: !(lib.elem (rel p) adoptedRelPaths) && !(lib.any (pre: lib.hasPrefix pre (rel p)) prosePrefixes)
+    ) (builtins.filter (p: mentions "@fission-ai/openspec" (builtins.readFile p)) textFilePaths)
+  );
   # --- plugins ------------------------------------------------------------
   # A plugin directory is discovered by its `plugin.yaml`, and the registry key is the
   # `name:` field: a mismatch installs one plugin under another's key.
@@ -170,9 +341,9 @@ let
 
   pluginNames =
     if builtins.pathExists pluginDir then
-      lib.filter
-        (n: builtins.readFileType (pluginDir + "/${n}") == "directory")
-        (builtins.attrNames (builtins.readDir pluginDir))
+      lib.filter (n: builtins.readFileType (pluginDir + "/${n}") == "directory") (
+        builtins.attrNames (builtins.readDir pluginDir)
+      )
     else
       [ ];
 
@@ -197,7 +368,9 @@ let
       hasInit = builtins.pathExists (pluginDir + "/${name}/__init__.py");
     in
     (if declared == null then [ "${name}: no plugin.yaml, or it declares no name" ] else [ ])
-    ++ (if declared != null && declared != name then [ "${name}: plugin.yaml name is ${declared}" ] else [ ])
+    ++ (
+      if declared != null && declared != name then [ "${name}: plugin.yaml name is ${declared}" ] else [ ]
+    )
     ++ (if hasInit then [ ] else [ "${name}: no __init__.py" ])
   ) pluginNames;
 
@@ -219,18 +392,21 @@ let
         declaresGroup = lib.hasInfix "hermes_agent.plugins" text;
         declaresKey = entrypointDeclares name text;
       in
-      (if declaresGroup then [ ] else [ "${name}: pyproject.toml has no hermes_agent.plugins entry point" ])
-      ++ (if declaresKey then [ ] else [ "${name}: pyproject.toml declares no entry point named ${name}" ])
+      (
+        if declaresGroup then [ ] else [ "${name}: pyproject.toml has no hermes_agent.plugins entry point" ]
+      )
+      ++ (
+        if declaresKey then [ ] else [ "${name}: pyproject.toml declares no entry point named ${name}" ]
+      )
   ) pluginNames;
 
   # Line-based, because `builtins.match` anchors `^` to the start of the whole string:
   # `.*^name` can never match — which made the first version report a correct pyproject
   # as broken.
-  entrypointDeclares = name: text:
+  entrypointDeclares =
+    name: text:
     lib.hasInfix "hermes_agent.plugins" text
-    && lib.any
-      (line: lib.hasPrefix "${name} =" (lib.trim line))
-      (lib.splitString "\n" text);
+    && lib.any (line: lib.hasPrefix "${name} =" (lib.trim line)) (lib.splitString "\n" text);
 
   # --- build output -------------------------------------------------------
   # `nix build` leaves a `result` symlink at the repo root. Committing it is a path into
@@ -312,9 +488,7 @@ in
     };
 
     test_every_github_install_is_pinned_to_a_rev = {
-      expr = map (x: "${x.name}: ${x.value}") (
-        builtins.filter (x: !(isRevPinned x.value)) githubRefs
-      );
+      expr = map (x: "${x.name}: ${x.value}") (builtins.filter (x: !(isRevPinned x.value)) githubRefs);
       expected = [ ];
     };
 
@@ -356,38 +530,96 @@ in
     };
 
     # ADR 0005's rule, extended to the two references it does not scan: the runner label and
-    # the npm install. Both were unpinned until a council review of this repository named them.
-    test_no_workflow_runs_on_a_floating_runner = {
-      expr = map (x: "${x.name}: ${x.value}") floatingRunners;
+    # the package install. Both were unpinned until a council review named them, and the first
+    # repair was evadable: `os: [ubuntu-latest]`, `@1  # comment`, `@^1.15.0` and a template
+    # hidden behind `builtins.pathExists` all survived it.
+    test_no_adopted_file_pins_a_floating_runner = {
+      expr = floatingRunners;
       expected = [ ];
     };
 
-    test_every_spec_cli_install_pins_an_exact_version = {
-      expr = map (x: "${x.name}: @${x.value}") npmMajorPins;
+    test_every_install_pins_an_exact_version = {
+      expr = map (x: "${x.name}: ${if x.spec == null then "(no version at all)" else x.spec}") (
+        builtins.filter (x: !(isExactSpec x.spec)) installSpecs
+      );
       expected = [ ];
     };
 
-    # Negative controls. A predicate that accepts everything passes both checks above on any
-    # workflow at all, and the pass is indistinguishable from a real one.
-    test_the_runner_gate_rejects_a_latest_label = {
-      expr = [
-        (isFloatingRunner "ubuntu-latest")
-        (isFloatingRunner "ubuntu-24.04")
+    test_every_install_carries_the_version_in_pins_nix = {
+      expr = map (x: "${x.name}: ${x.spec} (pins.nix: ${pinnedCli})") notPinnedVersion;
+      expected = [ ];
+    };
+
+    test_every_adopted_file_is_present = {
+      # Fail closed: a renamed template or bootstrap script fails here, naming the path.
+      expr = adoptedMissing;
+      expected = [ ];
+    };
+
+    test_the_scanned_set_is_not_empty = {
+      # A scan over nothing passes every assertion above and looks exactly like a real pass.
+      expr = builtins.length adoptedPresent >= 4 && builtins.length installSpecs >= 4;
+      expected = true;
+    };
+
+    test_no_file_outside_the_adopted_set_names_the_cli = {
+      expr = unadoptedMentions;
+      expected = [ ];
+    };
+
+    # --- negative controls, one per rule, on the rule's own input -----------
+    # Each case is a literal line, so the assertion exercises the predicate the check calls
+    # rather than a copy of it. A predicate that accepted everything would pass the positive
+    # checks above on any tree at all.
+    test_the_runner_rule_rejects_every_form = {
+      expr = map runnerFloats [
+        "    runs-on: ubuntu-latest"
+        "    runs-on: \"ubuntu-latest\""
+        "    runs-on: [ubuntu-latest]"
+        "    runs-on:"
+        "      - ubuntu-latest"
+        "        os: [ubuntu-latest]"
+        "          - ubuntu-latest"
+        "    runs-on: ubuntu-24.04"
+        "    # runs-on: ubuntu-latest"
       ];
       expected = [
         true
+        true
+        true
+        false
+        true
+        true
+        true
+        false
         false
       ];
     };
 
-    test_the_npm_gate_rejects_a_major_range = {
-      expr = [
-        (isMajorOnlyPin "1")
-        (isMajorOnlyPin "1.15.0")
+    test_the_install_rule_rejects_every_non_exact_form = {
+      expr = map (line: map isExactSpec (installSpecsIn line)) [
+        "npx -y @fission-ai/openspec@latest"
+        "npx -y @fission-ai/openspec@^1.15.0"
+        "npx -y @fission-ai/openspec@~1.15.0"
+        "npx -y @fission-ai/openspec@1.15"
+        "npx -y @fission-ai/openspec"
+        "npx -y @fission-ai/openspec@1   # a comment after the version"
+        "npm i -g @fission-ai/openspec@1"
+        "npm install --global @fission-ai/openspec@1"
+        "npm install -g --prefix ~/.local/npm @fission-ai/openspec@1.15.0"
+        "nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 <verb>"
       ];
       expected = [
-        true
-        false
+        [ false ]
+        [ false ]
+        [ false ]
+        [ false ]
+        [ false ]
+        [ false ]
+        [ false ]
+        [ false ]
+        [ true ]
+        [ true ]
       ];
     };
   };
@@ -452,9 +684,7 @@ in
     };
 
     test_no_description_is_empty = {
-      expr = map (x: rel x.path) (
-        builtins.filter (x: (x.fields.description or "") == "") catalog
-      );
+      expr = map (x: rel x.path) (builtins.filter (x: (x.fields.description or "") == "") catalog);
       expected = [ ];
     };
 
@@ -470,22 +700,14 @@ in
 
     # --- layout -------------------------------------------------------------
     test_every_skill_directory_holds_a_skill_md = {
-      expr = builtins.filter (
-        d: !(builtins.pathExists (src + "/skills/${d}/SKILL.md"))
-      ) skillDirs;
+      expr = builtins.filter (d: !(builtins.pathExists (src + "/skills/${d}/SKILL.md"))) skillDirs;
       expected = [ ];
     };
 
     # --- encoding -----------------------------------------------------------
     # A CRLF shebang fails on Linux, and a CRLF/LF pair reports drift that is not there.
     test_no_text_file_carries_crlf = {
-      expr = map rel (
-        builtins.filter (
-          p:
-          lib.any (e: lib.hasSuffix e (toString p)) textExts
-          && L.hasCrlf (builtins.readFile p)
-        ) (lib.filesystem.listFilesRecursive src)
-      );
+      expr = map rel (builtins.filter (p: L.hasCrlf (builtins.readFile p)) textFilePaths);
       expected = [ ];
     };
 
@@ -498,14 +720,17 @@ in
     # message named "possible infinite recursion" rather than the file. Pinned so a
     # future hasCrlf cannot quietly become stack-bound again.
     test_the_crlf_check_answers_on_the_largest_text_file = {
-      expr = L.hasCrlf (builtins.readFile (
-        src + "/skills/autonomous-ai-agents/council/scripts/council_loop.py"
-      ));
+      expr = L.hasCrlf (
+        builtins.readFile (src + "/skills/autonomous-ai-agents/council/scripts/council_loop.py")
+      );
       expected = false;
     };
 
     test_the_frontmatter_gate_rejects_a_missing_fence = {
-      expr = [ (L.parseText "name: x\n---\n").startsWithFence (L.parseText "---\nname: x\n---\n").startsWithFence ];
+      expr = [
+        (L.parseText "name: x\n---\n").startsWithFence
+        (L.parseText "---\nname: x\n---\n").startsWithFence
+      ];
       expected = [
         false
         true
@@ -513,7 +738,10 @@ in
     };
 
     test_the_frontmatter_gate_rejects_an_unclosed_fence = {
-      expr = [ (L.parseText "---\nname: x\n").closed (L.parseText "---\nname: x\n---\n").closed ];
+      expr = [
+        (L.parseText "---\nname: x\n").closed
+        (L.parseText "---\nname: x\n---\n").closed
+      ];
       expected = [
         false
         true
@@ -553,8 +781,15 @@ in
 
     test_the_uniqueness_gate_rejects_a_duplicate = {
       expr = [
-        (L.duplicates [ "a" "a" "b" ])
-        (L.duplicates [ "a" "b" ])
+        (L.duplicates [
+          "a"
+          "a"
+          "b"
+        ])
+        (L.duplicates [
+          "a"
+          "b"
+        ])
       ];
       expected = [
         [ "a" ]

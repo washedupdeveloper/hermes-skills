@@ -99,7 +99,10 @@ whatever 1.x is current, which is the mutable reference ADR 0005 rejects:
 nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 <verb>   # e.g. validate --all --strict
 ```
 
-Bumping it is a one-line change in three places: this file, the CI job, and the `openspec` skill's
-`templates/ci-job.yml`. `nix flake check` fails if any of them names a range instead of a version,
-or pins a workflow to a `-latest` runner.
+Bumping it is a one-line change in four places: this file, the CI job, the `openspec` skill's
+`templates/ci-job.yml`, and `skills/software-development/openspec/scripts/bootstrap.sh`, whose install message names the
+same command. `nix/pins.nix` is the one source all four are checked against: `nix flake check`
+fails, naming the path and line, if any of them carries a range, a bare major, or no version at
+all — and it fails if a fifth file starts naming the package without being added to the checked
+set. It also fails if a workflow or the shipped template pins a `-latest` runner.
 
