@@ -494,6 +494,16 @@ in
     # through the same code the check calls: a predicate that accepts everything passes
     # every positive test above and fails exactly here. Each pair also carries the valid
     # case, so a predicate stuck on `false` fails too.
+    # The regex form of this check overflowed the evaluator on THIS file in CI, and the
+    # message named "possible infinite recursion" rather than the file. Pinned so a
+    # future hasCrlf cannot quietly become stack-bound again.
+    test_the_crlf_check_answers_on_the_largest_text_file = {
+      expr = L.hasCrlf (builtins.readFile (
+        src + "/skills/autonomous-ai-agents/council/scripts/council_loop.py"
+      ));
+      expected = false;
+    };
+
     test_the_frontmatter_gate_rejects_a_missing_fence = {
       expr = [ (L.parseText "name: x\n---\n").startsWithFence (L.parseText "---\nname: x\n---\n").startsWithFence ];
       expected = [

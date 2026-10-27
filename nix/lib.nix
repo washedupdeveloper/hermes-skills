@@ -104,5 +104,12 @@ rec {
   duplicates = xs: lib.unique (lib.filter (x: lib.count (y: y == x) xs > 1) xs);
 
   # A CRLF shebang fails on Linux, and a CRLF/LF pair reports drift that is not there.
-  hasCrlf = text: lib.hasInfix "\r" text;
+  # `lib.hasInfix` is `builtins.match ".*\\r.*"`, and Nix's regex engine recurses per
+  # character: on a file over ~90 KB it overflows the evaluator stack and reports
+  # "possible infinite recursion", which reads as a bug in the assertion rather than an
+  # answer about the file. This one counts the removals — a C++ loop, constant stack.
+  hasCrlf =
+    text:
+    builtins.stringLength text
+    != builtins.stringLength (builtins.replaceStrings [ "\r" ] [ "" ] text);
 }
