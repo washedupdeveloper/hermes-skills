@@ -149,6 +149,24 @@ def _findings_block(result: Dict[str, Any], limit: int = 20) -> Tuple[List[str],
     return lines, max(0, len(blocking) - limit)
 
 
+def _change_line(run_dir: Path) -> str:
+    """The council's handover is an OpenSpec change; name it rather than re-render it.
+
+    Read from `outcome.json`, which the loop writes, so this module needs no second parser for
+    proposal/requirements/tasks. A PR comment points at the change; it does not compete with it.
+    """
+    try:
+        outcome = json.loads((run_dir.parent / "outcome.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    handover = outcome.get("handover") or {}
+    if not handover.get("found"):
+        return ""
+    state = "validates" if handover.get("valid") else "does NOT validate"
+    return (f"An OpenSpec change was written to `{handover.get('path')}` and {state}. "
+            f"Its requirements and tasks are the plan; this comment is the evidence for it.")
+
+
 def body_for(result: Dict[str, Any], run_dir: Path, pr: int) -> str:
     """The review body: the verdict, then the evidence, then the marker."""
     satisfied = result.get("status") == "satisfied"
@@ -170,6 +188,10 @@ def body_for(result: Dict[str, Any], run_dir: Path, pr: int) -> str:
             lines += [f"_{omitted} further blocking finding(s) omitted._", ""]
     elif satisfied:
         lines += ["No open high or critical findings.", ""]
+
+    change = _change_line(run_dir)
+    if change:
+        lines += ["### The change", "", change, ""]
 
     stacks = ", ".join(result.get("stacks") or []) or "none detected"
     lines += [

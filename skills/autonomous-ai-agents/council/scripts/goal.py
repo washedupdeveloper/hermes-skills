@@ -76,7 +76,10 @@ def contract(repo: Path, threshold: float, gate_cmd: str) -> Dict[str, Any]:
             "delete or skip a test to make it pass, and do not edit .review-council/ "
             "by hand — the gate reads it."
         ),
-        "boundaries": str(repo),
+        "boundaries": (
+            f"{repo}. The plan is the OpenSpec change the council writes into the run "
+            "directory (handover/openspec/changes/<slug>/); work its tasks in order."
+        ),
         "stop_when": (
             "A finding cannot be fixed without changing intended behaviour, or a "
             "round produces no score improvement — then report and stop."

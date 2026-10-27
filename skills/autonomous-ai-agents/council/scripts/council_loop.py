@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -146,7 +147,12 @@ scored, and a finding with no valid dimension cannot be scored at all.
 Review ONLY the changed set ({scope}).
 {carry_block}
 Deterministic probe results for this repository. This is the same data every
-reviewer is given, so use it as evidence rather than re-deriving it:
+reviewer is given, so use it as evidence rather than re-deriving it. It is SUMMARISED:
+findings are ranked by severity and capped per rule, and every entry states
+`findings_total` and `omitted_by_rule`, which is how you say "hundreds more of this
+kind" without inventing detail. Treat this digest as the probe evidence you were
+given: `probes.json` holds the same data unsummarised, so reading it wholesale adds
+nothing — open it only to check one finding.
 
 {probe_json}
 
@@ -268,11 +274,54 @@ was not met, say what the next round should target. Where a reviewer produced no
 file, that dimension's goal is UNVERIFIED — say so rather than calling it met.
 
 The gate has already decided acceptance. You explain the result; you do not decide
-it. Then reply with the control message your rubric specifies.
+it.
 
-Reply tersely: per goal, the verdict, the evidence as an id or `path:line`, and what
-remains. Do not restate the gate output — the reader has it. The `caveman` skill is
-the voice.
+## The handover: an OpenSpec change, written to disk
+
+Your top-level output to the reader is not prose — it is an OpenSpec change, written under the
+run directory (a review is a read: write here, never into the target repository):
+
+  {run_dir}/../handover/openspec/changes/<kebab-slug>/
+    proposal.md
+    specs/<capability>/spec.md
+    tasks.md
+
+Follow the `openspec` skill. `openspec instructions proposal|specs|tasks` is the only template
+source; the format is not restated here. Concretely:
+
+- **proposal.md** — `## Why` (the verdict, and why the open findings matter), `## What Changes`,
+  `## Capabilities` (name the capability you modify or introduce), `## Impact`.
+- **specs/<capability>/spec.md** — one `### Requirement:` per CLASS of open finding, not per
+  finding and not per file; each carries at least one `#### Scenario:` with `**WHEN**` and
+  `**THEN**`. A requirement states observable behaviour plus how it is verified, never "fix
+  GEN-0002". If the target repository already has `openspec/specs/`, reuse its capability path
+  and write the delta as ADDED or MODIFIED against the requirement text you can read there.
+- **tasks.md** — `- [ ] <n>.<m> ...` checkboxes, one commit each, ordered so the blocking
+  findings come first, and a final verification task naming the command that settles it.
+
+How to use the templates, exactly:
+
+1. `openspec new change <slug>` in the handover root creates the change directory. If the skill is
+   not available, create `proposal.md`, `specs/<capability>/spec.md` and `tasks.md` yourself.
+2. Run `openspec instructions <artifact> --change <slug>` and USE the output to fill that artifact.
+   Do NOT save the instructions to a file — a `.instructions.txt` in the handover is not a
+   handover, and a change directory holding only `.openspec.yaml` is an empty change.
+3. Write, in this order: `proposal.md`, then `specs/<capability>/spec.md`, then `tasks.md`.
+4. `openspec instructions tasks` warns that `specs` and `design` are missing. That warning is
+   expected here: THIS prompt replaces the specs step, and `design.md` is optional — do not write
+   one unless the change is cross-cutting. Proceed to write `tasks.md` anyway.
+5. The change is not done until all three paths above exist and hold real content. Stop after
+   writing them.
+
+Derive the requirements from the gate output above and the reviewer files; do not invent
+findings. If the round produced no findings, write the change with one requirement per goal that
+was PARTIAL or NOT MET.
+
+Then reply with the control message your rubric specifies.
+
+Reply tersely: per goal, the verdict and the evidence as an id or `path:line`, then one line
+naming the change directory you wrote. Do not restate the gate output — the reader has it. The
+`caveman` skill is the voice.
 """
 
 FIX_PROMPT = """Continue toward the standing goal: make this repository clear its
@@ -726,6 +775,107 @@ def review_goals(binary: str, repo: Path, round_dir: Path, round_no: int,
     return rc
 
 
+# ── the handover, as an OpenSpec change ──────────────────────────────────────
+# The runtime image has no Node, so `openspec validate` cannot run inside a review. The shape is
+# therefore checked here, encoding the rules `openspec instructions` states: a proposal with its
+# Why and What Changes, at least one requirement per capability with at least one scenario, and
+# scenarios that carry WHEN and THEN. The check is deliberately structural — `validate --strict`
+# checks shape, not truth, and so does this.
+def validate_handover(changes_root: Path) -> Dict[str, Any]:
+    """Validate the OpenSpec change the orchestrator wrote. Never raises."""
+    result: Dict[str, Any] = {
+        "found": False, "path": None, "changes": [], "valid": False, "problems": [],
+    }
+    if not changes_root.is_dir():
+        return result
+    # `archive/` is OpenSpec's own bookkeeping, not a change: scaffolding a handover
+    # creates it, and treating it as a malformed change fails a correct run.
+    changes = sorted(p for p in changes_root.iterdir()
+                     if p.is_dir() and p.name != "archive")
+    if not changes:
+        return result
+
+    result["found"] = True
+    result["path"] = str(changes_root)
+
+    for change in changes:
+        problems: List[str] = []
+        proposal = change / "proposal.md"
+        specs = sorted((change / "specs").rglob("spec.md")) if (change / "specs").is_dir() else []
+        tasks = change / "tasks.md"
+
+        if not proposal.is_file():
+            problems.append("proposal.md missing")
+        else:
+            text = proposal.read_text(encoding="utf-8", errors="replace")
+            for heading in ("## Why", "## What Changes"):
+                if heading not in text:
+                    problems.append(f"proposal.md: no `{heading}` section")
+
+        if not specs:
+            problems.append("no specs/<capability>/spec.md")
+        for spec in specs:
+            rel = spec.relative_to(change).as_posix()
+            text = spec.read_text(encoding="utf-8", errors="replace")
+            if not re.search(r"^### Requirement: \S", text, re.M):
+                problems.append(f"{rel}: no `### Requirement:` block")
+            for block in re.split(r"^### Requirement: ", text, flags=re.M)[1:]:
+                name = block.splitlines()[0].strip() or "(unnamed)"
+                scenarios = re.split(r"^#### Scenario: ", block, flags=re.M)[1:]
+                if not scenarios:
+                    problems.append(f"{rel}: requirement '{name}' has no scenario")
+                for scenario in scenarios:
+                    title = scenario.splitlines()[0].strip() or "(unnamed)"
+                    if "**WHEN**" not in scenario or "**THEN**" not in scenario:
+                        problems.append(
+                            f"{rel}: scenario '{title}' needs both **WHEN** and **THEN**")
+
+        if not tasks.is_file():
+            problems.append("tasks.md missing")
+        elif not re.search(r"^\s*- \[[ xX]\] \S", tasks.read_text(encoding="utf-8",
+                                                          errors="replace"), re.M):
+            # Checked or not: a handover that has landed has every task ticked, so
+            # requiring an open box would reject archived work as malformed.
+            problems.append("tasks.md: no checkbox task")
+
+        result["changes"].append({"name": change.name, "problems": problems})
+        result["problems"].extend(f"{change.name}: {p}" for p in problems)
+
+    result["valid"] = all(not c["problems"] for c in result["changes"])
+    return result
+
+
+def read_handover_plan(changes_root: Path) -> Dict[str, Any]:
+    """The change as a reader needs it: its name, its requirements, its tasks.
+
+    Shape only — `validate_handover` owns whether the change is well formed, and this only
+    renders it. Tasks come back verbatim, because the checkbox list is the plan.
+    """
+    plan: Dict[str, Any] = {"change": None, "requirements": [], "tasks": []}
+    if not changes_root.is_dir():
+        return plan
+    changes = sorted(p for p in changes_root.iterdir()
+                     if p.is_dir() and p.name != "archive")
+    if not changes:
+        return plan
+    change = changes[0]
+    plan["change"] = change.name
+
+    specs = sorted((change / "specs").rglob("spec.md")) if (change / "specs").is_dir() else []
+    for spec in specs:
+        text = spec.read_text(encoding="utf-8", errors="replace")
+        for name in re.findall(r"^### Requirement: (.+)$", text, re.M):
+            plan["requirements"].append({"capability": spec.parent.name, "name": name.strip()})
+
+    tasks = change / "tasks.md"
+    if tasks.is_file():
+        plan["tasks"] = [
+            line.rstrip() for line in tasks.read_text(encoding="utf-8", errors="replace").splitlines()
+            if re.match(r"^\s*- \[[ xX]\] ", line)
+        ]
+    return plan
+
+
 def _finding_key(finding: Dict[str, Any]) -> str:
     """Identity for dedupe across samples: location plus normalised claim."""
     loc = finding.get("location") or {}
@@ -1017,6 +1167,119 @@ def carry_block(ctx: Optional[Dict[str, Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ── the reviewer's view of the probes ────────────────────────────────────────
+# The prompt gets a BOUNDED digest; `probes.json` keeps every finding. The two consumers have
+# different budgets: the gate and the next incremental run read the file, and only the prompt
+# has to fit a model's context window. Measured on a Python repository, the full probe JSON was
+# 515,487 of a 518,550-byte prompt — 1,013 ruff findings over 60 files, 975 of them `low`, 603
+# of one rule — and the configured endpoint answered that request with a 504 at both a 240 s and
+# a 900 s timeout, while the same profile answered a small prompt in 20 s.
+PROMPT_PROBE_BUDGET_BYTES = 24_000
+PROMPT_FINDINGS_PER_PROBE = 25
+PROMPT_FINDINGS_PER_RULE = 3
+PROMPT_CLAIM_CHARS = 180
+PROMPT_CHECK_CHARS = 120
+
+_SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+_SEVERITY_UNKNOWN = 9
+
+
+def _rule_code(finding: Dict[str, Any]) -> str:
+    """The rule a finding came from: `ruff UP006: ...` -> `UP006`, else the claim's head."""
+    claim = str(finding.get("claim") or "")
+    m = re.match(r"^\S+\s+([A-Za-z]+[0-9]+)\b", claim)
+    if m:
+        return m.group(1).upper()
+    return claim[:24] or "(unlabelled)"
+
+
+def _trim_finding(finding: Dict[str, Any], repo: Path) -> Dict[str, Any]:
+    """One finding with the fat removed: a repo-relative path and short strings.
+
+    Measured on the 1,013-finding probe, `location` was 41.5% of the bytes because every path
+    was absolute and `falsifiable_check` another 34.9% because it repeated that path inside a
+    command. Neither gets more useful by being shown in full.
+    """
+    out = dict(finding)
+    loc = dict(out.get("location") or {})
+    path = str(loc.get("path") or "")
+    if path:
+        try:
+            # as_posix(), not str(): on Windows `str(relative_to(...))` yields `scripts\\x.py`,
+            # and the reviewer is told to cite `path:line`. The digest must read the same
+            # whichever host ran the council — CI caught this on windows-latest.
+            loc["path"] = Path(path).relative_to(repo).as_posix()
+        except ValueError:
+            pass  # outside the repo: leave it alone rather than mangle it
+    out["location"] = loc
+    for key, limit in (("claim", PROMPT_CLAIM_CHARS),
+                       ("falsifiable_check", PROMPT_CHECK_CHARS)):
+        value = out.get(key)
+        if isinstance(value, str) and len(value) > limit:
+            out[key] = value[:limit].rstrip() + "\u2026"
+    return out
+
+
+def probe_digest(probes: List[Dict[str, Any]], repo: Path,
+                 budget_bytes: int = PROMPT_PROBE_BUDGET_BYTES) -> str:
+    """Render the probe results for the reviewer prompt, bounded, without mutating *probes*.
+
+    Findings are ranked by severity, then capped per rule code and per probe, because the volume
+    is repetition rather than observation: 603 `UP006` and 138 `UP045` are two facts, not 741.
+    Each entry reports `findings_total`, `findings_omitted` and `omitted_by_rule`, so the reviewer
+    can say "600 more of this kind" instead of inferring silence.
+
+    The list passed in is the record — this function reads it and returns a string. It is never
+    the place a finding is dropped from disk: `probes.json` is written from the original list, and
+    the incremental diff compares against that.
+    """
+    digest: List[Dict[str, Any]] = []
+    for probe in probes:
+        findings = list(probe.get("findings") or [])
+        ranked = sorted(
+            findings,
+            key=lambda f: _SEVERITY_ORDER.get(
+                str(f.get("severity") or "").lower(), _SEVERITY_UNKNOWN),
+        )
+        kept: List[Dict[str, Any]] = []
+        per_rule: Dict[str, int] = {}
+        omitted: Dict[str, int] = {}
+        for finding in ranked:
+            rule = _rule_code(finding)
+            too_many = per_rule.get(rule, 0) >= PROMPT_FINDINGS_PER_RULE
+            if len(kept) >= PROMPT_FINDINGS_PER_PROBE or too_many:
+                omitted[rule] = omitted.get(rule, 0) + 1
+                continue
+            per_rule[rule] = per_rule.get(rule, 0) + 1
+            kept.append(_trim_finding(finding, repo))
+
+        entry: Dict[str, Any] = {k: v for k, v in probe.items() if k != "findings"}
+        entry["findings"] = kept
+        entry["findings_total"] = len(findings)
+        entry["findings_omitted"] = len(findings) - len(kept)
+        if omitted:
+            entry["omitted_by_rule"] = dict(
+                sorted(omitted.items(), key=lambda kv: (-kv[1], kv[0])))
+        digest.append(entry)
+
+    rendered = json.dumps(digest, indent=2, ensure_ascii=False)
+    if len(rendered) <= budget_bytes:
+        return rendered
+
+    # Still over: keep the counts, drop the bodies. A prompt past the model's window produces no
+    # review at all, which is strictly worse than a thin one that still names what it omitted.
+    # The counts have to agree with what is actually shown: a body-less entry claiming three
+    # findings were kept is a lie of the same kind the budget exists to avoid.
+    bare = []
+    for entry in digest:
+        slim = {k: v for k, v in entry.items() if k != "findings"}
+        slim["findings"] = []
+        slim["findings_omitted"] = slim.get("findings_total", 0)
+        slim["findings_dropped_for_budget"] = True
+        bare.append(slim)
+    return json.dumps(bare, indent=2, ensure_ascii=False)
+
+
 def generalist_prompt(repo: Path, scope: str, round_no: int, sha: str,
                       stacks: List[str], probes: List[Dict[str, Any]],
                       goals: Dict[str, Any], out_path: Path,
@@ -1044,7 +1307,7 @@ def generalist_prompt(repo: Path, scope: str, round_no: int, sha: str,
         goal_acceptance=(goal.get("acceptance")
                          or DEFAULT_GOALS[DIMENSIONS[0]]["acceptance"]),
         goal_focus=", ".join(goal.get("focus") or []) or "(wherever the rubrics point)",
-        probe_json=json.dumps(probes, indent=2),
+        probe_json=probe_digest(probes, Path(repo)),
         carry_block=carry_block(carry_ctx),
         out_path=out_path, profile=GENERALIST_PROFILE, prefix="GEN",
     )
@@ -1414,7 +1677,8 @@ def decide_stop(*, round_no: int, max_rounds: int, min_rounds: int,
 def render_next_steps(*, result: Dict[str, Any], history: List[Dict[str, Any]],
                       outcome: str, reason: str, threshold: float, repo: Path,
                       mode: str, rounds_used: int,
-                      budget_seconds: float = 0.0) -> str:
+                      budget_seconds: float = 0.0,
+                      handover: Optional[Dict[str, Any]] = None) -> str:
     """The handover plan: what to do next, required first, then by priority.
 
     Produced on EVERY termination, satisfied or not. When the loop stops early —
@@ -1471,6 +1735,44 @@ def render_next_steps(*, result: Dict[str, Any], history: List[Dict[str, Any]],
                 lines.append(f"Net movement across the run: **{last - first:+.2f}** "
                              f"aggregate points.")
                 lines.append("")
+
+    # A validated change IS the plan. The A/B digest below is the fallback for a run that
+    # produced none, because two plans that can disagree is the defect this replaces.
+    if handover and handover.get("valid"):
+        plan = read_handover_plan(Path(handover["path"]))
+        lines.append("## The change")
+        lines.append("")
+        lines.append(f"`{plan['change']}` — an OpenSpec change the council wrote at "
+                     f"`{handover['path']}`. Requirements first, then its tasks; work them in "
+                     "order and archive it when they are done.")
+        lines.append("")
+        if plan["requirements"]:
+            lines.append("### Requirements")
+            lines.append("")
+            for req in plan["requirements"][:12]:
+                lines.append(f"- `{req['capability']}` — {req['name']}")
+            if len(plan["requirements"]) > 12:
+                lines.append(f"- _{len(plan['requirements']) - 12} more in the change_")
+            lines.append("")
+        if plan["tasks"]:
+            lines.append("### Tasks")
+            lines.append("")
+            lines.extend(plan["tasks"])
+            lines.append("")
+        lines.append("### How to resume")
+        lines.append("")
+        resume = f'python scripts/council_loop.py "{repo}" --mode {mode}'
+        if budget_seconds:
+            resume += f" --budget-seconds {int(budget_seconds)}"
+        lines.append("```bash")
+        lines.append(resume)
+        lines.append("```")
+        lines.append("")
+        return "\n".join(lines)
+
+    lines.append("_No validated change was written this round; the plan below is derived from "
+                 "the gate, not from a change._")
+    lines.append("")
 
     required = [o for o in opportunities if o.get("required")]
     desirable = [o for o in opportunities if not o.get("required")]
@@ -1542,7 +1844,8 @@ def render_next_steps(*, result: Dict[str, Any], history: List[Dict[str, Any]],
 def write_outcome(run_root: Path, outcome: str, reason: str, scores: List[float],
                   args: argparse.Namespace, repo: Path, *,
                   plan_path: Optional[Path] = None,
-                  met_minimum: bool = False) -> None:
+                  met_minimum: bool = False,
+                  handover: Optional[Dict[str, Any]] = None) -> None:
     (run_root / "outcome.json").write_text(
         json.dumps({"outcome": outcome, "reason": reason, "scores": scores,
                     "threshold": args.threshold, "mode": args.mode,
@@ -1551,7 +1854,8 @@ def write_outcome(run_root: Path, outcome: str, reason: str, scores: List[float]
                     "min_rounds": args.min_rounds,
                     "max_rounds": args.max_rounds,
                     "budget_seconds": args.budget_seconds,
-                    "next_steps": str(plan_path) if plan_path else None},
+                    "next_steps": str(plan_path) if plan_path else None,
+                    "handover": handover if handover else None},
                    indent=2), encoding="utf-8")
 
     print("\n" + "=" * 60)
@@ -1560,8 +1864,27 @@ def write_outcome(run_root: Path, outcome: str, reason: str, scores: List[float]
     print(f"scores:  {scores}")
     if plan_path:
         print(f"next:    {plan_path}")
+    if handover and handover.get("found"):
+        state = "valid" if handover.get("valid") else "INVALID"
+        print(f"change:  {handover.get('path')} ({state})")
     print(f"run dir: {run_root}")
     print("=" * 60)
+
+
+def fix_plan(handover: Optional[Dict[str, Any]], verdict: Dict[str, Any],
+             threshold: float) -> str:
+    """The plan the fixer works: the change's tasks when there is one, else the gate digest.
+
+    One plan for the reader and another for the fixer is the same defect as two plans in the
+    reader's own file — the turn that edits the tree must be working what the change says.
+    """
+    if handover and handover.get("valid") and handover.get("path"):
+        plan = read_handover_plan(Path(handover["path"]))
+        if plan.get("tasks"):
+            head = (f"Work the OpenSpec change `{plan['change']}` at `{handover['path']}`. "
+                    "Its tasks, in order:")
+            return head + "\n" + "\n".join(plan["tasks"])
+    return priority_digest(verdict, threshold)
 
 
 def priority_digest(verdict: Dict[str, Any], threshold: float,
@@ -1653,6 +1976,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     outcome = "escalate"
     reason = "round cap reached"
     verdict: Dict[str, Any] = {}
+    handover: Dict[str, Any] = {}
     rounds_used = 0
 
     # Facts the harness owns, resolved once: the revision under review, the
@@ -1775,6 +2099,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("  orchestrator timed out during the goal review "
                   "(the gate verdict stands)")
 
+        # The handover the orchestrator was asked to write, checked rather than trusted.
+        handover = validate_handover(run_root / "handover" / "openspec" / "changes")
+        if handover["found"]:
+            state = "valid" if handover["valid"] else "INVALID"
+            print(f"  handover: openspec change, {state}")
+            for problem in handover["problems"]:
+                print(f"    - {problem}")
+        else:
+            print("  handover: no openspec change written this round")
+
         stop = decide_stop(
             round_no=round_no, max_rounds=args.max_rounds,
             min_rounds=args.min_rounds, met_minimum=met_minimum,
@@ -1793,7 +2127,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             binary, repo,
             FIX_PROMPT.format(
                 repo=repo, gate_output=gate_out, mode=args.mode,
-                next_steps=priority_digest(verdict, args.threshold),
+                next_steps=fix_plan(handover, verdict, args.threshold),
             ),
             args.timeout, log,
         )
@@ -1808,12 +2142,26 @@ def main(argv: Optional[List[str]] = None) -> int:
                 result=verdict, history=history, outcome=outcome, reason=reason,
                 threshold=args.threshold, repo=repo, mode=args.mode,
                 rounds_used=rounds_used, budget_seconds=args.budget_seconds,
+                handover=handover or None,
             ),
             encoding="utf-8",
         )
+        if handover.get("found"):
+            with plan_path.open("a", encoding="utf-8") as fh:
+                fh.write("\n## The change\n\n")
+                fh.write(f"The handover is an OpenSpec change at `{handover['path']}`.\n\n")
+                if handover["valid"]:
+                    fh.write("It validates against the container's shape: a proposal with Why "
+                             "and What Changes, requirements with WHEN/THEN scenarios, and "
+                             "tasks as checkboxes.\n")
+                else:
+                    fh.write("**It does not validate.** Structural problems:\n\n")
+                    for problem in handover["problems"]:
+                        fh.write(f"- {problem}\n")
 
     write_outcome(run_root, outcome, reason, scores, args, repo,
-                  plan_path=plan_path, met_minimum=(outcome == "satisfied"))
+                  plan_path=plan_path, met_minimum=(outcome == "satisfied"),
+                  handover=handover or None)
     return 0 if outcome == "satisfied" else 1
 
 
