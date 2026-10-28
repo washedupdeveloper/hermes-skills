@@ -125,6 +125,9 @@ def mutants(pin: str) -> list[dict]:
         {"id": "3.1d", "what": "bootstrap.sh off-version", "file": BOOTSTRAP, "old": exact,
          "new": other, "expect": "bootstrap.sh"},
         # 3.2 — a fifth adoption site
+        {"id": "3.1e", "what": "site dropped from pins.nix", "file": PINS,
+         "old": '"skills/software-development/openspec/scripts/bootstrap.sh"',
+         "new": '"README.md"', "expect": "bootstrap.sh"},
         {"id": "3.2a", "what": "fifth site", "file": FIFTH, "kind": "create",
          "add": f"#!/usr/bin/env bash\nnpx -y {exact} validate\n",
          "expect": "scripts/install-openspec.sh"},

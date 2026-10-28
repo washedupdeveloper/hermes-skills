@@ -13,7 +13,7 @@ let
   L = import ./lib.nix { inherit lib; };
 
   # The one machine-readable home for a version the repository adopts in more than one place.
-  # Every adopted copy is checked against it, so bumping is this file plus the four sites.
+  # Every adopted copy is checked against it, so bumping is this file plus the sites it lists.
   pins = import ./pins.nix;
 
   # The index truncates at 57 chars + "...", so the trigger must be self-contained there:
@@ -174,29 +174,16 @@ let
     path = workflowDir + "/${n}";
   }) workflowFiles;
 
-  agentsSpec = {
-    name = "AGENTS.md";
-    relPath = "AGENTS.md";
-    path = src + "/AGENTS.md";
-  };
+  # The named sites come from `nix/pins.nix`, so the list exists once instead of being restated as
+  # three singletons here. Workflows stay discovered: a new workflow that installs the CLI should be
+  # checked without anyone remembering to list it.
+  literalSiteSpecs = map (p: {
+    name = p;
+    relPath = p;
+    path = src + "/${p}";
+  }) pins.openspecCliSites;
 
-  templateSpec = {
-    name = "openspec/templates/ci-job.yml";
-    relPath = "skills/software-development/openspec/templates/ci-job.yml";
-    path = src + "/skills/software-development/openspec/templates/ci-job.yml";
-  };
-
-  bootstrapSpec = {
-    name = "openspec/scripts/bootstrap.sh";
-    relPath = "skills/software-development/openspec/scripts/bootstrap.sh";
-    path = src + "/skills/software-development/openspec/scripts/bootstrap.sh";
-  };
-
-  adoptedSpecs = workflowSpecs ++ [
-    agentsSpec
-    templateSpec
-    bootstrapSpec
-  ];
+  adoptedSpecs = workflowSpecs ++ literalSiteSpecs;
 
   # Fail closed. `builtins.pathExists` used to guard the template, so renaming it left the scan
   # empty and the gate green. Presence is an ASSERTION now, and every read below uses the set
@@ -221,7 +208,12 @@ let
   # A runner is declared in a workflow or in the template workflows are made from. AGENTS.md
   # mentions `-latest` in prose ABOUT this rule, and a shell script's install message is not a
   # runner either — scanning those turns documentation into a false failure.
-  runnerSpecs = builtins.filter (f: builtins.pathExists f.path) (workflowSpecs ++ [ templateSpec ]);
+  # Every listed site that is a workflow-shaped file pins a runner as well — the CI job and the
+  # shipped template. Derived from the list rather than naming the template here, so the template
+  # has one home; AGENTS.md and bootstrap.sh are prose and a shell script, and neither pins a runner.
+  ymlSiteSpecs = builtins.filter (f: lib.hasSuffix ".yml" f.relPath) literalSiteSpecs;
+
+  runnerSpecs = builtins.filter (f: builtins.pathExists f.path) (workflowSpecs ++ ymlSiteSpecs);
 
   floatingRunners = lib.concatMap (
     f:
@@ -660,6 +652,11 @@ in
     test_every_install_carries_the_version_in_pins_nix = {
       expr = map (x: "${x.name}: ${x.spec} (pins.nix: ${pinnedCli})") notPinnedVersion;
       expected = [ ];
+    };
+
+    test_the_site_list_is_not_empty = {
+      expr = builtins.length pins.openspecCliSites > 0;
+      expected = true;
     };
 
     test_every_adopted_file_is_present = {
