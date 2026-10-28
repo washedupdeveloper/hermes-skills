@@ -245,14 +245,17 @@ let
   runnerExpressionLines = lib.concatMap (
     f:
     map (x: "${x.name}: ${stripComment x.line}") (
-      lib.filter (x: mentions "runs-on:" (stripComment x.line) && mentions "\${{" (stripComment x.line))
-        (lib.filter (x: !(isComment x.line)) (numberedLines f))
+      lib.filter (x: mentions "runs-on:" (stripComment x.line) && mentions "\${{" (stripComment x.line)) (
+        lib.filter (x: !(isComment x.line)) (numberedLines f)
+      )
     )
   ) runnerSpecs;
 
   runnerExpressionIsOpaque = line: !(mentions "matrix." line);
 
-  runnerUsesInclude = lib.any (f: mentions "include:" (lib.concatStringsSep "\n" (map (x: x.line) (numberedLines f)))) runnerSpecs;
+  runnerUsesInclude = lib.any (
+    f: mentions "include:" (lib.concatStringsSep "\n" (map (x: x.line) (numberedLines f)))
+  ) runnerSpecs;
 
   # --- 1.2 the installed package -------------------------------------------
   # An exact version is three dot-separated numbers and nothing else. `@1`, `@1.15`, `@latest`,
