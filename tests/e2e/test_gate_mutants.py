@@ -114,6 +114,8 @@ def mutants(pin: str) -> list[dict]:
          "old": f"npm install -g --ignore-scripts {exact}",
          "new": f"npm install --global {PKG}@1", "expect": "templates/ci-job.yml"},
         # 3.1 — an exact version that is not the pinned one
+        {"id": "1.2i", "what": "installer outside the set", "file": TEMPLATE,
+         "old": "npm install -g --ignore-scripts", "new": "pnpm add -g", "expect": "ci-job.yml"},
         {"id": "3.1a", "what": "AGENTS.md off-version", "file": AGENTS, "old": exact,
          "new": other, "expect": "AGENTS.md"},
         {"id": "3.1b", "what": "ci.yml off-version", "file": CI, "old": exact,

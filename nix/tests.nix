@@ -338,6 +338,31 @@ let
     ) (lib.filter (x: !(isComment x.line)) (numberedLines f))
   ) adoptedPresent;
 
+  # The installers are a closed set. The parser below understands `npm` and `npx` — it looks for
+  # those words and reads the package that follows. Any other installer therefore yields no install
+  # spec at all, and the exactness rule passes because it had nothing to parse:
+  #
+  #   pnpm add -g @fission-ai/openspec@latest     # invisible
+  #
+  # That is the worst failure mode a gate has: silence reads exactly like agreement. So the absence
+  # of an adopted installer is itself a finding.
+  adoptedInstallerTokens = [
+    "npm"
+    "npx"
+    "nix"
+  ];
+
+  installerOutsideTheSet = lib.concatMap (
+    f:
+    map (x: "${x.name}: ${stripComment x.line}") (
+      lib.filter (
+        x:
+        mentions "@fission-ai/openspec" (stripComment x.line)
+        && !(lib.any (w: mentions " ${w} " (" ${stripComment x.line} ")) adoptedInstallerTokens)
+      ) (lib.filter (x: !(isComment x.line)) (numberedLines f))
+    )
+  ) adoptedPresent;
+
   # --- 3.1 one version, checked at every site ------------------------------
   pinnedCli = pins.openspecCli;
 
@@ -590,6 +615,39 @@ in
     test_no_matrix_is_assembled_from_include = {
       expr = runnerUsesInclude;
       expected = false;
+    };
+
+    test_every_installer_is_one_the_gate_understands = {
+      expr = installerOutsideTheSet;
+      expected = [ ];
+    };
+
+    test_the_installer_rule_rejects_a_foreign_tool = {
+      expr =
+        map
+          (
+            line:
+            mentions "@fission-ai/openspec" line
+            && !(lib.any (w: mentions " ${w} " (" ${line} ")) [
+              "npm"
+              "npx"
+              "nix"
+            ])
+          )
+          [
+            "npm install -g @fission-ai/openspec@1.15.0"
+            "nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0"
+            "pnpm add -g @fission-ai/openspec@1.15.0"
+            "bun add -g @fission-ai/openspec@1.15.0"
+            "curl -fsSL https://example.invalid/@fission-ai/openspec/-/openspec.tgz | sh"
+          ];
+      expected = [
+        false
+        false
+        true
+        true
+        true
+      ];
     };
 
     test_every_install_pins_an_exact_version = {
