@@ -85,8 +85,6 @@ claim(f"the catalog scan excludes {'/'.join(SUPPORT_DIRS)}",
       "PROVEN" if not stray else "FALSE",
       f"stray SKILL.md in a support dir: "
       f"{[str(s.relative_to(R)) for s in stray] or 'none'}")
-claim("README: that set is the one Hermes documents",
-      "UNPROVEN", "Hermes' own docs are outside this repo")
 
 # ── links that resolve ───────────────────────────────────────────────────────
 bad_links = []
@@ -162,12 +160,17 @@ else:
           "PROVEN" if not (drift or absent) else "FALSE",
           f"differ: {drift or 'none'}; no source: {absent or 'none'}")
 
-# ── unprovable from here, and honestly labelled ──────────────────────────────
-claim("README: '23 here, 4 there, zero overlap' (the old sync.sh damage)",
-      "UNPROVEN", "historical, about machines that no longer exist — keep as narrative, "
-                  "not as evidence")
-claim("README: 'bundled (~59)'",
-      "UNPROVEN", "machine-specific; verify with wc -l .bundled_manifest")
+# ── unprovable from here ────────────────────────────────────────────────────
+# Empty on purpose, and worth explaining rather than leaving bare. Three claims lived here:
+#
+#   * "that set is the one Hermes documents" quoted a README sentence that no longer exists
+#     (`grep documents README.md` has no match) — a ghost claim, deleted;
+#   * "23 here, 4 there, zero overlap" counted skills on two machines that no longer exist;
+#   * "bundled (~59)" counted an installed Hermes' bundled set, which this clone cannot see.
+#
+# The first was stale. The other two were removed from the README rather than left as numbers
+# no clone can settle: a claim that cannot be measured should not be stated as a figure. The
+# `UNPROVEN` verdict stays in the vocabulary for the next honest limitation.
 
 # ── report ───────────────────────────────────────────────────────────────────
 order = {"FALSE": 0, "UNPROVEN": 1, "PROVEN": 2}

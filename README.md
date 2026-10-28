@@ -10,7 +10,7 @@ mount it. Nothing here is generated and no script overwrites it.
 
 | class | owner | updated by | in this repo? |
 |---|---|---|---|
-| bundled (~59) | Hermes | `hermes update` | **no** |
+| bundled | Hermes | `hermes update` | **no** |
 | hub / registry | the upstream | `hermes skills update` | **no** |
 | ours | us | `git pull` | **yes** |
 
@@ -288,6 +288,6 @@ script was the most dangerous file in the repo:
 - it was a replace, not a merge, so any skill absent from the live machine was
   **deleted** from the repo.
 
-In practice the two machines' local skill sets were disjoint (23 here, 4 there, zero
-overlap), so running it from either side destroyed the other's skills. Nothing needs
+In practice the two machines' local skill sets were disjoint — different sizes, no overlap in
+the case that prompted this — so running it from either side destroyed the other's skills. Nothing needs
 to copy skills between machines now: `external_dirs` mounts them.

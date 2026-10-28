@@ -21,14 +21,26 @@ From a clean clone of `origin/main`:
 | every path a spec names exists | `python3 -m pytest tests/unit/test_docs.py` |
 | the layout the README declares is the layout on disk | the same suite |
 | the initializer applies the declared state | `./setup.sh --check` — exit 0 |
-| CI enforces the above on every push | the six jobs in `.github/workflows/ci.yml` green on the pushed SHA |
+| CI enforces the above on every push | the seven jobs in `.github/workflows/ci.yml` — ten check runs with the two matrices — green on the pushed SHA |
 
 ## Status
 
-**Reached, 2026-10-26.** Every row above passes on the tree, and CI closed the last one: pushed as
-`a54abdd` and `68b7a81`, and all nine check runs on `68b7a81` concluded success — `nix flake check`,
-the three-OS test matrix, `claim audit`, `openspec validate --all --strict`, `setup.sh` e2e on two
-systems, and `live hermes`.
+**Reached, 2026-10-26; re-measured 2026-10-27 on `88896ec`.** Every row above passes, and CI closed
+the last one: ten check runs on `88896ec` concluded success — `nix gate`, the three-OS test matrix,
+`live hermes`, `claim audit`, `setup.sh` e2e on two systems, `openspec validate --all --strict`, and
+`gate mutants`.
+
+**Reached was not the end of it.** Three changes landed after this document was written, all of them
+against the same goal — that a promise fails loudly when it breaks:
+
+| change | what it fixed |
+|---|---|
+| `gate-assertions-are-measured` | the pin assertions passed for the spellings they were written around and missed every other: a matrix `os:`, a trailing comment after `@1`, a range, a template hidden behind `pathExists`. Six requirements, `gate-integrity` |
+| `rules-are-measured-by-mutants` | those rules are now exercised by 22 mutants in CI, because an eval-tier check's derivation cannot tell a right tree from a wrong one |
+| (this one) | the prose stopped stating three numbers no clone can settle |
+
+The contract is now **11 requirements across two capabilities** — `gate-integrity` (7) and
+`skill-library` (4) — and `openspec validate --all --strict` is what holds both.
 
 The CI row needed the push rather than a sentence: `origin/main` carried no `openspec` job when this
 was written, and 27 commits were unpushed, so the spec gate had never run anywhere but a
@@ -53,6 +65,13 @@ Ordered as they were closed, each one a defect rather than a task:
    the workflow on `origin/main` had no `openspec` job at all. Closed by pushing.
 6. **The CLI was not on PATH**, so the `validate --strict` that `AGENTS.md` requires could only run
    in CI. Closed by documenting the pinned invocation in `AGENTS.md`.
+7. **The gate measured the spellings it was written around.** `runs-on: ubuntu-latest` was caught,
+   `os: [ubuntu-latest]` was not; `@1` was caught only at the end of a line; a renamed template left
+   the scan empty and the gate green. Closed by `gate-assertions-are-measured`, and then by making
+   the rules themselves measurable — 22 mutants, one per forbidden state.
+8. **Three prose claims could not be settled by any clone.** Two were counts (of machines that no
+   longer exist, of an installed Hermes' bundled set) and one quoted a sentence that had been
+   rewritten out of the README. Closed by retiring the numbers, not by dropping the check.
 
 ## Reached means the check would fail
 
