@@ -291,6 +291,31 @@ jobs:
   # image, not a floating label, and the CLI is an exact version: `ubuntu-latest` and `@1` are
   # both mutable references, which is what ADR 0005 exists to keep out (a council review found
   # both here).
+  # What each job cost, in the run where it happened. Two macOS jobs were once cancelled at
+  # 15m01s and the only evidence was a gap between two timestamps in an API listing; this job
+  # exists so the next time it is a row in the summary. It reports: it never decides anything,
+  # and it runs even when every job before it failed, because that is when the numbers matter.
+  cost:
+    name: cost
+    needs: [gate, live, tests, audit, setup, mutants, openspec]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - name: per-job cost
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.run_id }}
+        run: |
+          gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" > /tmp/jobs.json
+          python3 scripts/ci-cost.py /tmp/jobs.json >> "$GITHUB_STEP_SUMMARY"
+
   openspec:
     runs-on: ubuntu-24.04
     steps:
