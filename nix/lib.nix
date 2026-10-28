@@ -110,6 +110,5 @@ rec {
   # answer about the file. This one counts the removals — a C++ loop, constant stack.
   hasCrlf =
     text:
-    builtins.stringLength text
-    != builtins.stringLength (builtins.replaceStrings [ "\r" ] [ "" ] text);
+    builtins.stringLength text != builtins.stringLength (builtins.replaceStrings [ "\r" ] [ "" ] text);
 }

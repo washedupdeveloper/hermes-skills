@@ -85,24 +85,6 @@ an install step SHALL be closed or recorded as accepted together with its bounda
 - **THEN** the accepted-risk record names what the version pin does not close and the permission
   boundary that bounds it, or the step is changed to close it
 
-### Requirement: A touched Nix file is formatter-clean
-
-A change SHALL leave every Nix file it modifies clean under the repository's formatter check.
-Formatting debt in files the change does not touch SHALL be recorded per path and line, not
-summarised as a count.
-
-#### Scenario: The changed file is checked
-
-- **WHEN** the formatter check runs over a Nix file the change modifies
-- **THEN** it exits successfully
-- **AND** a file that already failed before the change does not make that claim true
-
-#### Scenario: Debt elsewhere is reported
-
-- **WHEN** a formatter or linter reports findings in files outside the change
-- **THEN** the report names each path and line with a disposition
-- **AND** the repository-wide check is not described as clean
-
 ### Requirement: Gate cost is measured
 
 The gate's eval-time cost SHALL be compared with a pinned baseline and SHALL add no work to a
@@ -147,3 +129,30 @@ and mode — after each mutant.
 - **WHEN** a mutant has been run
 - **THEN** the file it changed is byte-identical and keeps its mode, so the next mutant measures
   the same tree the first one did
+
+### Requirement: Every Nix file is formatter-clean
+
+Every tracked Nix file SHALL be clean under the repository's formatter check, except a file whose
+bytes are a fixture another check compares. Each exemption SHALL be named inside the check, and the
+check SHALL fail if an exempt file is missing.
+
+#### Scenario: The tree is formatted
+
+- **WHEN** the formatter check runs over the tracked Nix files
+- **THEN** it exits successfully
+
+#### Scenario: A file drifts
+
+- **WHEN** any tracked Nix file is not formatter-clean
+- **THEN** the check fails and names the file
+
+#### Scenario: An exempt fixture
+
+- **WHEN** a file is exempt because its bytes are a fixture
+- **THEN** the exemption is named in the check
+- **AND** the check fails if that file is missing, rather than silently checking one file fewer
+
+#### Scenario: The scan finds nothing
+
+- **WHEN** the file list comes back shorter than the tree can plausibly be
+- **THEN** the check fails, because a scan over nothing passes every rule it contains

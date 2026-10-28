@@ -22,7 +22,13 @@
 #          [ "${config.home.homeDirectory}/.local/share/agent-skills/current" ];
 #      or, unmanaged:
 #        hermes config set skills.external_dirs '["/abs/path/current"]'
-{ config, lib, pkgs, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
 
 let
   cfg = config.my.skillsRefresh;
@@ -37,7 +43,13 @@ let
 
   refresh = pkgs.writeShellScript "skills-refresh" ''
     set -euo pipefail
-    export PATH=${lib.makeBinPath [ pkgs.nix pkgs.coreutils pkgs.diffutils ]}:$PATH
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.nix
+        pkgs.coreutils
+        pkgs.diffutils
+      ]
+    }:$PATH
 
     mkdir -p "${stateDir}"
     prev="${stateDir}/manifest.prev"
@@ -104,8 +116,8 @@ in
       Unit.Description = "Scheduled refresh of provisioned agent skills";
       Timer = {
         OnCalendar = cfg.schedule;
-        Persistent = true;          # catch up after the machine was off
-        RandomizedDelaySec = "2h";  # do not hammer the forge on the hour
+        Persistent = true; # catch up after the machine was off
+        RandomizedDelaySec = "2h"; # do not hammer the forge on the hour
       };
       Install.WantedBy = [ "timers.target" ];
     };

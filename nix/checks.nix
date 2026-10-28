@@ -5,7 +5,11 @@
 # See docs/adr/0001-reference-not-symlink.md.
 # End-to-end is `scripts/verify-live.py` — it needs the real binary, so it cannot be a flake
 # check; `.github/workflows/ci.yml` runs it in its own job.
-{ lib, pkgs, src }:
+{
+  lib,
+  pkgs,
+  src,
+}:
 let
   # One check per group, so `--keep-going` reports every failing group, not just the first.
   evalGroups = import ./tests.nix { inherit lib src; };
@@ -74,6 +78,39 @@ in
       ''
         cd ${srcWritable}
         python scripts/claim-audit.py
+        touch $out
+      '';
+
+  # The formatter, enforced rather than requested. Four files had drifted by the time this was
+  # added — which is what an unenforced style rule does — and the drift was only visible because a
+  # council reviewer ran the tool by hand. One file is exempt and its presence is asserted: the
+  # golden target's bytes ARE the fixture a golden diff compares, so reformatting it would change
+  # what that test measures.
+  formatting =
+    pkgs.runCommand "check-formatting"
+      {
+        nativeBuildInputs = [
+          pkgs.nixfmt
+          pkgs.findutils
+        ];
+      }
+      ''
+        cd ${src}
+        exempt='./skills/autonomous-ai-agents/council/tests/golden/target/modules/base.nix'
+        if [ ! -f "$exempt" ]; then
+          echo "the exempt golden fixture is missing: $exempt" >&2
+          exit 1
+        fi
+        mapfile -t files < <(find . -name '*.nix' -not -path "$exempt" | sort)
+        # Fail closed: a scan over nothing passes, and would look identical to a clean tree.
+        if [ "''${#files[@]}" -lt 10 ]; then
+          echo "only ''${#files[@]} Nix files found; the scan is not reading the tree" >&2
+          exit 1
+        fi
+        if ! nixfmt --check "''${files[@]}"; then
+          echo "the files above are not formatter-clean; run: nixfmt <path>" >&2
+          exit 1
+        fi
         touch $out
       '';
 
