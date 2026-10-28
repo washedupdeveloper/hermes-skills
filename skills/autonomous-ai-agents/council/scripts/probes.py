@@ -493,28 +493,51 @@ def probe_nixfmt(root: Path) -> Dict[str, Any]:
 
 
 def probe_flake_check(root: Path) -> Dict[str, Any]:
-    """`nix flake check --no-build --keep-going` — the hard correctness gate (§2).
+    """`nix flake check --keep-going`, evaluated and then BUILT — the hard gate (§2).
 
-    Binary: exit 0 passes, anything else fails. `--keep-going` collects every
-    error rather than stopping at the first."""
+    `--no-build` used to be the whole probe. That made it a false green on any flake whose
+    checks are derivations: evaluation succeeds when the build would fail, so a red run tier
+    came back as `rc 0` and scored 100.0 — "flake check passed" for work no machine did.
+
+    The eval pass is kept as a cheap fast-fail, because it is seconds against minutes. The
+    verdict comes from a build. A build that does not finish in the probe timeout is reported
+    with no signal rather than a pass: unmeasured is not the same as correct, and a probe that
+    cannot tell them apart is worse than one that never ran.
+    """
     if not (root / "flake.nix").exists():
         return result("flake-check", False, None, [],
                       "no flake.nix — nix flake check does not apply", parsed=False)
+
     rc, out = _bridge(root, ["nix", "flake", "check", "--no-build", "--keep-going"],
-                      timeout=900)
+                      timeout=300)
+    if rc == 127:
+        return result("flake-check", False, None, [], out[:200], parsed=False)
+    if rc != 0:
+        return _flake_failure(out, built=False)
+
+    rc, out = _bridge(root, ["nix", "flake", "check", "--keep-going"], timeout=1800)
     if rc == 127:
         return result("flake-check", False, None, [], out[:200], parsed=False)
     if rc == 0:
-        return result("flake-check", True, 100.0, [], "flake check passed")
+        return result("flake-check", True, 100.0, [], "flake check passed (every check built)")
+    if rc == 124 or "timed out" in out.lower() or "timeout" in out.lower()[:400]:
+        return result("flake-check", True, None, [],
+                      "flake check did not finish inside the probe timeout — "
+                      "not counted as a pass", parsed=True)
+    return _flake_failure(out, built=True)
+
+
+def _flake_failure(out: str, built: bool) -> Dict[str, Any]:
     errors = [line.strip() for line in out.splitlines()
               if "error:" in line.lower()][:20]
     findings = [{
         "severity": "critical", "status": "open",
         "location": {"path": "flake.nix", "line_range": ""},
         "claim": msg[:200],
-        "falsifiable_check": "nix flake check --no-build --keep-going",
+        "falsifiable_check": "nix flake check --keep-going",
     } for msg in (errors or ["nix flake check failed"])]
-    return result("flake-check", True, 0.0, findings, "flake check FAILED")
+    where = "build" if built else "evaluation"
+    return result("flake-check", True, 0.0, findings, f"flake check FAILED ({where})")
 
 
 def probe_nix_eval(root: Path) -> Dict[str, Any]:

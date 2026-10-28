@@ -21,12 +21,13 @@ From a clean clone of `origin/main`:
 | every path a spec names exists | `python3 -m pytest tests/unit/test_docs.py` |
 | the layout the README declares is the layout on disk | the same suite |
 | the initializer applies the declared state | `./setup.sh --check` — exit 0 |
-| CI enforces the above on every push | the seven jobs in `.github/workflows/ci.yml` — ten check runs with the two matrices — green on the pushed SHA |
+| CI enforces the above on every push | every job in `.github/workflows/ci.yml` — eleven check runs with the matrices — green on the head of `main` |
 
 ## Status
 
-**Reached, 2026-10-26; re-measured 2026-10-27 on `88896ec`.** Every row above passes, and CI closed
-the last one: ten check runs on `88896ec` concluded success — `nix gate`, the three-OS test matrix,
+**Reached, 2026-10-26; re-measured 2026-10-28.** Every row above passes. The measurement is the
+check-runs API against the head of `main`, not this sentence: eleven runs, all successful — `nix gate`,
+the three-OS test matrix,
 `live hermes`, `claim audit`, `setup.sh` e2e on two systems, `openspec validate --all --strict`, and
 `gate mutants`.
 

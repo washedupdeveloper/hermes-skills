@@ -812,17 +812,39 @@ def validate_handover(changes_root: Path) -> Dict[str, Any]:
                 if heading not in text:
                     problems.append(f"proposal.md: no `{heading}` section")
 
-        if not specs:
+        # A change can legitimately carry no delta. `skip_specs: true` is how the pinned CLI is
+        # told a change is prose, tooling or docs; demanding a delta there rejected
+        # `retire-unsettleable-claims`, which that CLI had just archived as valid.
+        meta = change / ".openspec.yaml"
+        skip_specs = meta.is_file() and bool(
+            re.search(r"^\s*skip_specs:\s*true\s*$",
+                      meta.read_text(encoding="utf-8", errors="replace"), re.M))
+        if not specs and not skip_specs:
             problems.append("no specs/<capability>/spec.md")
         for spec in specs:
             rel = spec.relative_to(change).as_posix()
             text = spec.read_text(encoding="utf-8", errors="replace")
             if not re.search(r"^### Requirement: \S", text, re.M):
                 problems.append(f"{rel}: no `### Requirement:` block")
-            for block in re.split(r"^### Requirement: ", text, flags=re.M)[1:]:
-                name = block.splitlines()[0].strip() or "(unnamed)"
+            # Which delta section each requirement sits in. A REMOVED requirement records what is
+            # gone and why — there is no behaviour left to scenario, and demanding one rejected
+            # `formatter-is-enforced`, whose removal block is a reason and a migration note.
+            sections = [(m.start(), m.group(1))
+                        for m in re.finditer(r"^## (\w+) Requirements\s*$", text, re.M)]
+            cuts = [m.start() for m in re.finditer(r"^### Requirement: ", text, re.M)]
+            for idx, pos in enumerate(cuts):
+                end = cuts[idx + 1] if idx + 1 < len(cuts) else len(text)
+                block = text[pos:end]
+                name = (block.splitlines()[0].replace("### Requirement: ", "").strip()
+                        or "(unnamed)")
+                section = ""
+                for start, label in sections:
+                    if start < pos:
+                        section = label
+                    else:
+                        break
                 scenarios = re.split(r"^#### Scenario: ", block, flags=re.M)[1:]
-                if not scenarios:
+                if not scenarios and section.upper() != "REMOVED":
                     problems.append(f"{rel}: requirement '{name}' has no scenario")
                 for scenario in scenarios:
                     title = scenario.splitlines()[0].strip() or "(unnamed)"
