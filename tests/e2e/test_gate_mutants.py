@@ -92,6 +92,8 @@ def mutants(pin: str) -> list[dict]:
         {"id": "1.1d", "what": "block-list runner", "file": CI,
          "old": "runs-on: ubuntu-24.04", "new": "runs-on:\n      - ubuntu-latest",
          "expect": "ci.yml"},
+        {"id": "1.1e", "what": "runner from inputs", "file": CI,
+         "old": "runs-on: ubuntu-24.04", "new": "runs-on: \${{ inputs.os }}", "expect": "ci.yml"},
         # 1.2 — every non-exact install form
         {"id": "1.2a", "what": "@latest", "file": AGENTS, "old": exact,
          "new": f"{PKG}@latest", "expect": "AGENTS.md"},

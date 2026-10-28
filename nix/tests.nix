@@ -230,6 +230,30 @@ let
     )
   ) runnerSpecs;
 
+  # A `runs-on:` expression is allowed only where the label it resolves to is visible in the same
+  # file. Two conditions, both blunt:
+  #
+  #   * the expression names a matrix key — `${{ matrix.os }}`, not `${{ inputs.os }}`,
+  #     `${{ env.RUNNER }}`, `${{ fromJSON(...) }}`. The matrix values sit in the file the token
+  #     scan already reads, so a pinned label there is a pinned label here.
+  #   * `include:` appears nowhere, because it can add matrix values the list does not show — which
+  #     is the one way an expression can name a label no reader can see.
+  #
+  # The alternative — refusing expressions outright — would mean converting both matrix jobs into
+  # explicit per-OS jobs. That is a CI restructure, not a gate rule, and this closes the class
+  # without it.
+  runnerExpressionLines = lib.concatMap (
+    f:
+    map (x: "${x.name}: ${stripComment x.line}") (
+      lib.filter (x: mentions "runs-on:" (stripComment x.line) && mentions "\${{" (stripComment x.line))
+        (lib.filter (x: !(isComment x.line)) (numberedLines f))
+    )
+  ) runnerSpecs;
+
+  runnerExpressionIsOpaque = line: !(mentions "matrix." line);
+
+  runnerUsesInclude = lib.any (f: mentions "include:" (lib.concatStringsSep "\n" (map (x: x.line) (numberedLines f)))) runnerSpecs;
+
   # --- 1.2 the installed package -------------------------------------------
   # An exact version is three dot-separated numbers and nothing else. `@1`, `@1.15`, `@latest`,
   # `@^1.15.0`, `@~1.15.0` and a missing version all fail this, which is the point: a range
@@ -538,6 +562,31 @@ in
     test_no_adopted_file_pins_a_floating_runner = {
       expr = floatingRunners;
       expected = [ ];
+    };
+
+    test_a_runner_expression_names_a_matrix_key = {
+      expr = lib.filter runnerExpressionIsOpaque runnerExpressionLines;
+      expected = [ ];
+    };
+
+    test_the_expression_rule_rejects_an_opaque_label = {
+      expr = map runnerExpressionIsOpaque [
+        "    runs-on: \${{ matrix.os }}"
+        "    runs-on: \${{ inputs.runner }}"
+        "    runs-on: \${{ fromJSON(needs.setup.outputs.runner) }}"
+        "    runs-on: ubuntu-24.04"
+      ];
+      expected = [
+        false
+        true
+        true
+        true
+      ];
+    };
+
+    test_no_matrix_is_assembled_from_include = {
+      expr = runnerUsesInclude;
+      expected = false;
     };
 
     test_every_install_pins_an_exact_version = {
