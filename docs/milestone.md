@@ -26,22 +26,25 @@ From a clean clone of `origin/main`:
 ## Status
 
 **Reached, 2026-10-26; re-measured 2026-10-28.** Every row above passes. The measurement is the
-check-runs API against the head of `main`, not this sentence: eleven runs, all successful — `nix gate`,
-the three-OS test matrix,
-`live hermes`, `claim audit`, `setup.sh` e2e on two systems, `openspec validate --all --strict`, and
-`gate mutants`.
+check-runs API against the head of `main`, not this sentence: every check run successful — `nix gate`,
+the three-OS test matrix, `live hermes`, `claim audit`, `setup.sh` e2e on two systems,
+`openspec validate --all --strict`, `gate mutants`, and `cost`.
 
-**Reached was not the end of it.** Three changes landed after this document was written, all of them
-against the same goal — that a promise fails loudly when it breaks:
+**Reached was not the end of it.** Changes have landed since this document was written, and the list
+of them is `openspec/changes/archive/` — a directory, which cannot go stale the way a count does. All
+of them serve the same goal: that a promise fails loudly when it breaks. Some did work this document
+had implied was already done:
 
 | change | what it fixed |
 |---|---|
 | `gate-assertions-are-measured` | the pin assertions passed for the spellings they were written around and missed every other: a matrix `os:`, a trailing comment after `@1`, a range, a template hidden behind `pathExists`. Six requirements, `gate-integrity` |
-| `rules-are-measured-by-mutants` | those rules are now exercised by 22 mutants in CI, because an eval-tier check's derivation cannot tell a right tree from a wrong one |
-| (this one) | the prose stopped stating three numbers no clone can settle |
+| `rules-are-measured-by-mutants` | every eval-tier rule is exercised by a named mutant in CI, because an eval-tier check's derivation cannot tell a right tree from a wrong one |
+| `retire-unsettleable-claims` | the prose stopped stating three numbers no clone can settle |
 
-The contract is now **11 requirements across two capabilities** — `gate-integrity` (7) and
-`skill-library` (4) — and `openspec validate --all --strict` is what holds both.
+The contract is **16 requirements across two capabilities** — `gate-integrity` (11) and
+`skill-library` (5) — measured by **25 mutants**. `openspec validate --all --strict` holds the specs;
+`tests/unit/test_milestone_doc.py` holds these two figures, deriving both from the tree so that this
+paragraph fails the gate the moment it drifts, instead of waiting for someone to subtract by hand.
 
 The CI row needed the push rather than a sentence: `origin/main` carried no `openspec` job when this
 was written, and 27 commits were unpushed, so the spec gate had never run anywhere but a
