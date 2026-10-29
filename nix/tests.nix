@@ -1,13 +1,10 @@
 # The eval tier: what the tree SAYS, read without building anything. The run tier is
-# `nix/checks.nix`, and there is no build tier (see its header).
+# `nix/checks.nix`; there is no build tier.
 #
-# The rule encoded here: an assertion belongs in the cheapest tier that can make it.
-# Nothing here shells out — a frontmatter field, a length, a name and a path are all values.
-#
-# Four of these properties used to live in `tests/unit/test_repo_skills.py`; they are here
-# because they are pure functions of the tree, and here they fail with the skill's name and
-# both values rather than a Python traceback. What stayed in Python needs a real regex
-# engine or a subprocess; that file says which of its tests moved.
+# An assertion belongs in the cheapest tier that can make it, so nothing here shells out: a
+# frontmatter field, a length, a name and a path are all values. Four of these properties moved
+# here from `tests/unit/test_repo_skills.py`, where a failure was a traceback instead of the
+# skill's name and both values.
 { lib, src }:
 let
   L = import ./lib.nix { inherit lib; };
@@ -205,12 +202,10 @@ let
   # deliberately wider than parsing the YAML: a parser would only narrow the surface.
   runnerFloats = line: mentions "-latest" (stripComment line);
 
-  # A runner is declared in a workflow or in the template workflows are made from. AGENTS.md
-  # mentions `-latest` in prose ABOUT this rule, and a shell script's install message is not a
-  # runner either — scanning those turns documentation into a false failure.
-  # Every listed site that is a workflow-shaped file pins a runner as well — the CI job and the
-  # shipped template. Derived from the list rather than naming the template here, so the template
-  # has one home; AGENTS.md and bootstrap.sh are prose and a shell script, and neither pins a runner.
+  # A runner is declared in a workflow or in the template workflows are made from. AGENTS.md names
+  # `-latest` in prose ABOUT this rule and bootstrap.sh's install message is not a runner, so both
+  # are excluded — scanning them turns documentation into a false failure. The set comes from
+  # `pins.nix` by extension, so the template has one home.
   ymlSiteSpecs = builtins.filter (f: lib.hasSuffix ".yml" f.relPath) literalSiteSpecs;
 
   runnerSpecs = builtins.filter (f: builtins.pathExists f.path) (workflowSpecs ++ ymlSiteSpecs);
@@ -231,9 +226,8 @@ let
   #   * `include:` appears nowhere, because it can add matrix values the list does not show — which
   #     is the one way an expression can name a label no reader can see.
   #
-  # The alternative — refusing expressions outright — would mean converting both matrix jobs into
-  # explicit per-OS jobs. That is a CI restructure, not a gate rule, and this closes the class
-  # without it.
+  # Refusing every expression was the first attempt. It means converting both matrix jobs into
+  # explicit per-OS jobs — a CI restructure rather than a gate rule.
   runnerExpressionLines = lib.concatMap (
     f:
     map (x: "${x.name}: ${stripComment x.line}") (
@@ -330,14 +324,12 @@ let
     ) (lib.filter (x: !(isComment x.line)) (numberedLines f))
   ) adoptedPresent;
 
-  # The installers are a closed set. The parser below understands `npm` and `npx` — it looks for
-  # those words and reads the package that follows. Any other installer therefore yields no install
-  # spec at all, and the exactness rule passes because it had nothing to parse:
+  # The installers are a closed set. The parser below understands `npm` and `npx`; any other
+  # installer yields no spec at all, and the exactness rule passes because it had nothing to read —
   #
   #   pnpm add -g @fission-ai/openspec@latest     # invisible
   #
-  # That is the worst failure mode a gate has: silence reads exactly like agreement. So the absence
-  # of an adopted installer is itself a finding.
+  # and silence reads exactly like agreement. So a missing adopted installer is itself a finding.
   adoptedInstallerTokens = [
     "npm"
     "npx"
