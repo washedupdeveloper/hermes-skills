@@ -292,7 +292,7 @@ When the sandbox genuinely has no Nix and none can be installed the flake cannot
 
 ## Testing what you publish, from outside
 
-Every check in a repo builds from a **local path**, so the published artifact — the only thing a consumer gets — is the one thing nothing exercises. A throwaway flake whose only input is `github:owner/repo`, learning output names from `nix flake show --json` instead of memory (and why `packages.default` may not be the product), the `packages.<system>` nesting trap, and the `lib.evalModules` harness that imports a home-manager module without home-manager: `references/consumer-testing-a-flake.md`. Shipping `templates` so the first step is one command, and the check that keeps a template from rotting in someone else's repository, are in the same file.
+Every check in a repo builds from a **local path**, so the published artifact — the only thing a consumer gets — is the one thing nothing exercises. A throwaway flake whose only input is `github:owner/repo`, learning output names from `nix flake show --json` instead of memory (and why `packages.default` may not be the product), the `packages.<system>` nesting trap, and the `lib.evalModules` harness that imports a home-manager module without home-manager: `references/consumer-testing-a-flake.md`. Shipping `templates` (`hermes-skills.nix` for the fixed-scope module, `skills-refresh-timer.nix` for the refreshing one) so the first step is one command, and the check that keeps a template from rotting in someone else's repository, are in the same file.
 
 ## Checking what an upstream actually does
 

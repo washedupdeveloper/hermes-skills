@@ -90,11 +90,11 @@ install script), and that each profile archive lists `SOUL.md`, `profile.yaml`, 
 
 ```bash
 git clone repo.bundle <dir> && cd <dir>
-bash scripts/install-bots.sh                    # or: hermes profile import profiles/<name>.tar.gz
+python3 scripts/install_bots.py                 # or: hermes profile import profiles/<name>.tar.gz
 hermes profile list                             # expect the bots
 hermes -p <bot> tools list                      # capability set intact
 ```
 
 **Credentials do not travel.** Either `hermes -p <bot> setup`, or copy `.env` by hand; then point the
 provider/model at something reachable from the new host. Prefer the repo-driven install
-(`install-bots.sh`) as the source of truth, with archive import for exact local settings.
+(`install_bots.py`) as the source of truth, with archive import for exact local settings.

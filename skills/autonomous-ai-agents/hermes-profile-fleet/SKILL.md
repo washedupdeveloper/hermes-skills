@@ -83,7 +83,7 @@ A printed `SMOKE_OK` proves the profile's credentials and model resolve.
 2. **Sync into the skill's `assets/`** with a script that resolves its destination
    from the Hermes home, so the repo (source of truth) and the skill (distribution)
    cannot drift.
-3. **Write the installer** (`scripts/install-bots.sh`): idempotent — create the
+3. **Write the installer** (`install_bots.py` in the `council` skill is the worked example): idempotent — create the
    profile only if missing, then always refresh persona, rubric, toolsets, and any
    extra config from the version-controlled definitions. Read either layout.
 4. **Install**, then smoke-test each profile.

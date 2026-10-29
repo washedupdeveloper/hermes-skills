@@ -80,6 +80,10 @@ pointer's own line. Material with no pointer at all rides entirely on the human.
    skill becomes the on-demand long form. Do not duplicate the long form into the
    identity slot to make it "stick"; put the short version there and point at the rest.
 
+   **Do not style-edit that file.** Its text *is* the artifact: injected every turn, so a
+   "tighter" rewrite is a behaviour change dressed as a copy-edit. A documentation pass trims
+   the on-demand long form and leaves the prompt fragment alone.
+
    The slot is **per-instance**, not per-repo: it is read from the instance's own home
    directory, never the working directory. A sub-agent or profile that runs with its own
    home therefore does **not** inherit the global file and needs its own copy — the
@@ -266,6 +270,20 @@ Three rules that each cost a wrong document:
 - **Prefer a claim you can re-run over a claim you have to remember.** If a figure has a
   generating command, cite the command beside it so the next reader can re-derive rather
   than trust.
+- **A count of things the repo can enumerate is not a claim to label — it is a claim to
+  derive.** How many requirements, mutants, skills or adoption sites exist is a fact about the
+  tree: replace the numeral with a test that recomputes it, or with a pointer to the list it
+  came from (`changes/archive/`, the spec directory, the workflow). Labelling a derivable count
+  UNPROVEN is the worst of both — it still rots, and the label teaches readers to distrust a
+  figure that could have been exact. Reserve UNPROVEN for values whose source is outside the
+  repo.
+- **Before rewriting a sentence, find out whether a gate parses it.** A doc set whose claims are
+  audited has scripts matching exact phrases: a count regex, a quoted sentence, a backticked
+  path. Grep `scripts/` and `tests/` for the words you are about to touch. Keep every parsed
+  phrase byte-identical — reflowing "`N SKILL.md` across `N` skills" or dropping a sentence an
+  audit greps for turns a live check into a silent no-op, because the expectation is hardcoded
+  on the other side and the check keeps passing. Re-run the doc checks after the edit; they are
+  the only record of which phrases matter.
 - **A false claim about *protection, permission or safety* is worse than a false
   number.** A number misleads one reader; a wrong statement that something is read-only,
   sandboxed, or already gated becomes the **enabling assumption** for the next mistake —

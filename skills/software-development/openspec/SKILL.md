@@ -5,6 +5,7 @@ version: 1.1.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
+category: software-development
 ---
 
 # OpenSpec
