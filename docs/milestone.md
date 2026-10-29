@@ -1,12 +1,11 @@
-# hermes-skills — Milestone Plan
+# hermes-skills — Milestone
 
-**Goal.** This repository is the source of truth for the skills we author, and every promise it
-makes about itself is a check that fails when the promise breaks — on any clone, not only on the
-machine that wrote it.
+**Goal.** This repository is the source of truth for the skills we author, and every promise it makes
+about itself is a check that fails when the promise breaks — on any clone, not only the machine that
+wrote it.
 
-**How to read this.** The claims below are the milestone. Each is settled by running something, so
-"reached" is a measurement rather than an opinion. Anything this machine cannot settle is named as
-such rather than assumed.
+Each claim below is settled by running something, so "reached" is a measurement rather than an
+opinion.
 
 ## Definition of reached
 
@@ -15,89 +14,50 @@ From a clean clone of `origin/main`:
 | Claim | Settled by |
 |---|---|
 | the tree has the shape the specs describe | `nix flake check` (eval tier, `nix/tests.nix`) |
-| every catalog skill loads in the real Hermes | `python3 scripts/verify-live.py` — 44 catalog skills, 43 expected on a host, 1 correctly hidden by `environments:` |
+| every catalog skill loads in the real Hermes | `python3 scripts/verify-live.py` — 44 catalog skills, 43 on a host, 1 correctly hidden by `environments:` |
 | every mechanical claim in the prose is true | `python3 scripts/claim-audit.py` — exit 0, 0 FALSE |
 | the specs validate | `openspec validate --all --strict` |
 | every path a spec names exists | `python3 -m pytest tests/unit/test_docs.py` |
 | the layout the README declares is the layout on disk | the same suite |
 | the initializer applies the declared state | `./setup.sh --check` — exit 0 |
-| CI enforces the above on every push | every job in `.github/workflows/ci.yml` — eleven check runs with the matrices — green on the head of `main` |
+| CI enforces the above on every push | every check run green on the head of `main` |
 
 ## Status
 
-**Reached, 2026-10-26; re-measured 2026-10-28.** Every row above passes. The measurement is the
-check-runs API against the head of `main`, not this sentence: every check run successful — `nix gate`,
-the three-OS test matrix, `live hermes`, `claim audit`, `setup.sh` e2e on two systems,
-`openspec validate --all --strict`, `gate mutants`, and `cost`.
+**Reached, 2026-10-26; re-measured 2026-10-28.** Every row passes. The measurement is the check-runs
+API against the head of `main`, not this sentence: `nix gate`, the three-OS test matrix, `live hermes`,
+`claim audit`, `setup.sh` e2e on two systems, `openspec validate --all --strict`, `gate mutants` and
+`cost`, all successful.
 
-**Reached was not the end of it.** Changes have landed since this document was written, and the list
-of them is `openspec/changes/archive/` — a directory, which cannot go stale the way a count does. All
-of them serve the same goal: that a promise fails loudly when it breaks. Some did work this document
-had implied was already done:
-
-| change | what it fixed |
-|---|---|
-| `gate-assertions-are-measured` | the pin assertions passed for the spellings they were written around and missed every other: a matrix `os:`, a trailing comment after `@1`, a range, a template hidden behind `pathExists`. Six requirements, `gate-integrity` |
-| `rules-are-measured-by-mutants` | every eval-tier rule is exercised by a named mutant in CI, because an eval-tier check's derivation cannot tell a right tree from a wrong one |
-| `retire-unsettleable-claims` | the prose stopped stating three numbers no clone can settle |
+Reaching it was not the end. Changes have landed since, and the list of them is
+`openspec/changes/archive/` — a directory, which cannot go stale the way a count does. Each one closed
+a real defect: assertions that caught only the spellings they were written around, rules whose
+derivations could not tell a right tree from a wrong one, prose stating figures no clone could settle.
 
 The contract is **16 requirements across two capabilities** — `gate-integrity` (11) and
 `skill-library` (5) — measured by **25 mutants**. `openspec validate --all --strict` holds the specs;
-`tests/unit/test_milestone_doc.py` holds these two figures, deriving both from the tree so that this
-paragraph fails the gate the moment it drifts, instead of waiting for someone to subtract by hand.
-
-The CI row needed the push rather than a sentence: `origin/main` carried no `openspec` job when this
-was written, and 27 commits were unpushed, so the spec gate had never run anywhere but a
-workstation. A milestone whose enforcement exists only on one machine is a local convention.
-
-## The gaps that stood in the way
-
-Ordered as they were closed, each one a defect rather than a task:
-
-1. **No target existed.** The question "what is missing to reach the milestone?" has no referent
-   without this document, and `grep -rni milestone` found nothing in the tree.
-2. **A spec named a file that never existed.** `openspec/specs/skill-library/spec.md` had a
-   scenario running `scripts/validate_skills.py`; frontmatter is gated by `nix/tests.nix` and that
-   script was never written. `validate --strict` passes on shape, so nothing caught it. Closed by
-   naming the gate, and by a new requirement that a spec's paths exist.
-3. **"A known category" had no referent.** Nothing declared the category set, and the README layout
-   tree — which readers take as that declaration — omitted `note-taking/`. Closed by parsing the
-   tree in the suite and comparing it with the filesystem both ways.
-4. **The README's ADR ledger was two entries behind** (`docs/adr/` held eight, the table six).
-   Closed by listing every ADR and asserting the table against the directory.
-5. **The spec gate was not on the remote.** ADR 0008 says enforcement is the repository's CI job;
-   the workflow on `origin/main` had no `openspec` job at all. Closed by pushing.
-6. **The CLI was not on PATH**, so the `validate --strict` that `AGENTS.md` requires could only run
-   in CI. Closed by documenting the pinned invocation in `AGENTS.md`.
-7. **The gate measured the spellings it was written around.** `runs-on: ubuntu-latest` was caught,
-   `os: [ubuntu-latest]` was not; `@1` was caught only at the end of a line; a renamed template left
-   the scan empty and the gate green. Closed by `gate-assertions-are-measured`, and then by making
-   the rules themselves measurable — 22 mutants, one per forbidden state.
-8. **Three prose claims could not be settled by any clone.** Two were counts (of machines that no
-   longer exist, of an installed Hermes' bundled set) and one quoted a sentence that had been
-   rewritten out of the README. Closed by retiring the numbers, not by dropping the check.
+`tests/unit/test_milestone_doc.py` holds these two figures, deriving both from the tree so this
+paragraph fails the gate the moment it drifts.
 
 ## Reached means the check would fail
 
-A gate nobody has seen fail is decoration. Each new assertion was exercised against the broken case
-before it was trusted:
+A gate nobody has seen fail is decoration. Each assertion was exercised against the broken case before
+it was trusted:
 
 - the spec-path check failed on the real defect, naming
   `openspec/specs/skill-library/spec.md: scripts/validate_skills.py`;
-- the layout check failed on a README tree missing `note-taking/` (and on its first form, which
-  parsed one category of seven because `re.M` was missing from the pattern);
-- the ADR check fails if a row is dropped from the table or a file is added to `docs/adr/`;
-- the spec-path check fails on an emptied `openspec/specs/` rather than passing over
-  nothing, which is the only way that check could have been vacuous.
+- the layout check failed on a README tree missing `note-taking/`, and on its first form, which parsed
+  one category of seven because `re.M` was missing;
+- the ADR check fails if a row leaves the table or a file joins `docs/adr/`;
+- the spec-path check fails on an emptied `openspec/specs/` rather than passing over nothing.
 
 ## Deferred on purpose
 
-- **`verify-live.py` in the flake gate.** It needs the real Hermes binary, so it is a CI job and
-  cannot be a `nix flake check`. Stated in `nix/checks.nix`, not worked around.
-- **Scanning `openspec/changes/` for paths.** A delta names the files it is about to create, so the
-  check would fail on the work it exists to allow. The live spec is the contract.
-- **A devshell pinning the OpenSpec CLI.** The documented `nix shell nixpkgs#nodejs_22 -c npx -y
-  @fission-ai/openspec@1.15.0` invocation is enough for one repository; a devshell is worth adding
-  when a second consumer needs the same pin. The version is exact because a range resolves per run.
-- **A `scripts/validate_skills.py`.** Writing it would give frontmatter a second owner beside
-  `nix/tests.nix`. The requirement names the gate instead.
+- **`verify-live.py` in the flake gate.** It needs the real Hermes binary, so it is a CI job; stated
+  in `nix/checks.nix` rather than worked around.
+- **Scanning `openspec/changes/` for paths.** A delta names files it is about to create, so the check
+  would fail on the work it exists to allow. The live spec is the contract.
+- **A devshell pinning the OpenSpec CLI.** The documented `nix shell` invocation is enough for one
+  repository; a devshell earns its place when a second consumer needs the same pin.
+- **A `scripts/validate_skills.py`.** It would give frontmatter a second owner beside `nix/tests.nix`;
+  the requirement names the gate instead.

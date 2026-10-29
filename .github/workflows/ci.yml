@@ -1,27 +1,11 @@
 name: ci
 
-# This repository had NO CI. 174 files, 11 tests and a 13-claim auditor ran nowhere,
-# so a push could break any of them and nothing said so — including the docs gate,
-# which exists because the README had already drifted from reality twice.
-#
-# Five things are checked, and each is one the repo's own rules depend on:
-#
-#   gate    — `nix flake check`: the tree, the shipped artifact, and the two gates
-#             below under one pinned toolchain. It is the authoritative one; see
-#             nix/tests.nix for which tier each assertion belongs to.
-#   tests   — the retained Python suite, on all three OSes. It is stdlib-only, so the
-#             matrix needs nothing but pytest and is the portability claim, executed.
-#   audit   — scripts/claim-audit.py, which exits 1 when any mechanical claim in the
-#             prose is FALSE. That is the rule "a claim that can be measured MUST be
-#             measured", enforced rather than stated.
-#   setup   — tests/e2e/test_setup.sh against a STUBBED `hermes`, so the initializer's
-#             merge path is exercised without touching a real config. It is a bash
-#             script, so it runs where bash is the shell the script was written for.
-#
-# The `gate` job is the one that needs Nix. The other three deliberately do not:
-# they run on a machine with nothing but Python and bash, which is the no-Nix path
-# this repository promises its contributors. The properties that are pure functions
-# of the tree live in the gate and nowhere else, so there is one owner per property.
+# The gates. `gate` is authoritative: `nix flake check` evaluates the assertions and builds the
+# run-tier checks under one pinned toolchain, so every property has one owner and the other jobs
+# stay the no-Nix path rather than a second implementation. `tests` is the portability claim
+# executed on three OSes; `audit` fails on a FALSE claim in the prose; `setup` exercises the
+# initializer against a stub; `live` asks the real Hermes to load the tree; `mutants` proves each
+# gate rule fires; `cost` reports what each job took.
 
 on:
   push:
@@ -30,11 +14,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Deny every permission at the workflow level and grant the one each job needs. The
-# default is broader than this repository uses: `contents: read` here means a compromised
-# action cannot push, open a PR, publish a package, or touch issues — it can read the
-# tree and nothing else. Per-job grants are the part that keeps a future job from
-# inheriting a scope nobody thought about.
+# Deny everything at the workflow level, then grant per job: `contents: read` is all any of them
+# needs, so a compromised action can read the tree and nothing else.
 permissions: {}
 
 # A superseded push has no verdict worth waiting for. Cancelling it also bounds how many
@@ -44,14 +25,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The tree's own gate, under one pinned toolchain. `nix flake check` builds every
-  # check in nix/checks.nix: the eval tier (milliseconds), the shipped artifact, and
-  # the two Python/bash gates below run again here — so a property has one owner and
-  # the other jobs remain the no-Nix path rather than a second implementation.
+  # The whole tree under one pinned toolchain: `nix flake check` evaluates the assertions and
+  # builds the run-tier checks, so a red gate names the same properties the jobs below enforce.
   gate:
     name: nix gate
     runs-on: ubuntu-24.04
-    # the only scope any job here needs: read the tree, nothing else
     permissions:
       contents: read
     steps:
@@ -88,7 +66,6 @@ jobs:
   live:
     name: live hermes
     runs-on: ubuntu-24.04
-    # the only scope any job here needs: read the tree, nothing else
     permissions:
       contents: read
     steps:
@@ -116,7 +93,6 @@ jobs:
   tests:
     name: tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # the only scope any job here needs: read the tree, nothing else
     permissions:
       contents: read
     strategy:
@@ -146,11 +122,9 @@ jobs:
       # it is an unhashed download of the thing that does the verifying.
       - name: install pytest
         run: python -m pip install --require-hashes -r requirements-test.txt
-      # Job logs need admin rights to download, but a step can emit GitHub
-      # annotations and the checks API serves those unauthenticated for a public
-      # repository. So the suite writes junit.xml and the next step turns each
-      # failure into an annotation: an OS-specific failure is then readable without
-      # a token. The annotation step is the enforcing one, so the job still fails.
+      # The suite writes junit.xml and the next step turns each failure into an annotation: job
+      # logs need admin rights, annotations on a public repository do not. The annotation step is
+      # the enforcing one, so the job still fails.
       - name: run the suite
         run: python -m pytest tests/ -q --junitxml=junit.xml
         continue-on-error: true
@@ -184,7 +158,6 @@ jobs:
   audit:
     name: claim audit
     runs-on: ubuntu-24.04
-    # the only scope any job here needs: read the tree, nothing else
     permissions:
       contents: read
     steps:
@@ -209,16 +182,10 @@ jobs:
             exit 1
           fi
 
-  # Deliberately NOT adopted, both rejected on cost rather than risk appetite:
-  #
-  #   step-security/harden-runner — an egress allowlist would have to name
-  #     cache.nixos.org, channels.nixos.org, github.com, codeload.github.com and PyPI,
-  #     and every Nix cache or flake input added later breaks the job with a failure
-  #     that looks like a network fault. It is also another third-party action with
-  #     `security-events: write`, which is the scope it exists to reduce.
-  #   actions/cache on /nix/store — a poisoned cache is arbitrary code in every later
-  #     run, and a Nix store cache is the highest-value thing in this workflow. The
-  #     minutes it would save are not worth that.
+  # Not adopted, both on cost: harden-runner, whose egress allowlist every new Nix cache or flake
+  # input breaks with a failure that reads as a network fault, and which needs
+  # `security-events: write`; and actions/cache over /nix/store, where a poisoned cache is
+  # arbitrary code in every later run.
 
   # The initializer, against a stub. ubuntu and macOS only: the test builds an
   # extensionless `hermes` stub and executes it through bash, and on a Windows
@@ -228,7 +195,6 @@ jobs:
   setup:
     name: setup.sh e2e (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # the only scope any job here needs: read the tree, nothing else
     permissions:
       contents: read
     strategy:
@@ -241,8 +207,7 @@ jobs:
           persist-credentials: false
       - name: exercise setup.sh against a stubbed hermes
         run: |
-          # Annotated on failure for the same reason as the audit: the log is not
-          # readable without admin rights, the annotations are.
+          # Annotated on failure: the log needs admin rights, the annotations do not.
           out=$(mktemp)
           if bash tests/e2e/test_setup.sh >"$out" 2>&1; then
             tail -n 3 "$out"
@@ -260,7 +225,6 @@ jobs:
   mutants:
     name: gate mutants
     runs-on: ubuntu-24.04
-    # the only scope any job here needs: read the tree, nothing else
     permissions:
       contents: read
     timeout-minutes: 20
@@ -274,8 +238,7 @@ jobs:
           python-version: "3.12"
       - name: every rule fails on the state it forbids
         run: |
-          # Annotated on failure for the same reason as the other jobs: the log needs admin
-          # rights to read, and the annotations do not.
+          # Annotated on failure: the log needs admin rights, the annotations do not.
           out=$(mktemp)
           if python3 tests/e2e/test_gate_mutants.py >"$out" 2>&1; then
             tail -n 3 "$out"
@@ -286,15 +249,9 @@ jobs:
             exit 1
           fi
 
-  # The specs are a gate input: a change that does not validate cannot land.
-  # Node comes from the runner image, so this job needs no toolchain setup. The runner is an
-  # image, not a floating label, and the CLI is an exact version: `ubuntu-latest` and `@1` are
-  # both mutable references, which is what ADR 0005 exists to keep out (a council review found
-  # both here).
-  # What each job cost, in the run where it happened. Two macOS jobs were once cancelled at
-  # 15m01s and the only evidence was a gap between two timestamps in an API listing; this job
-  # exists so the next time it is a row in the summary. It reports: it never decides anything,
-  # and it runs even when every job before it failed, because that is when the numbers matter.
+  # What each job cost. Two macOS jobs were once cancelled at 15m01s, with nothing but a gap
+  # between two timestamps to show for them; this makes the next one a row in the summary. It
+  # reports, it never decides a verdict, and it runs even when everything before it failed.
   cost:
     name: cost
     needs: [gate, live, tests, audit, setup, mutants, openspec]
@@ -316,8 +273,13 @@ jobs:
           gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" > /tmp/jobs.json
           python3 scripts/ci-cost.py /tmp/jobs.json >> "$GITHUB_STEP_SUMMARY"
 
+  # The specs are a gate input: a change that does not validate cannot land. The runner is an
+  # image and the CLI an exact version — `ubuntu-latest` and `@1` are the mutable references
+  # ADR 0005 keeps out.
   openspec:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
