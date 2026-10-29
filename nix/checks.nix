@@ -1,10 +1,7 @@
 # Run tier: what needs an interpreter. The eval tier is `nix/tests.nix`.
 #
-# NO BUILD TIER, deliberately: Hermes reads `external_dirs` in place, so the simulated
-# "shipped" tree an earlier version built was fiction.
-# See docs/adr/0001-reference-not-symlink.md.
-# End-to-end is `scripts/verify-live.py` — it needs the real binary, so it cannot be a flake
-# check; `.github/workflows/ci.yml` runs it in its own job.
+# There is no build tier: Hermes reads `external_dirs` in place, so nothing is shipped.
+# End-to-end is `scripts/verify-live.py`, which needs the real binary — a CI job, not a flake check.
 {
   lib,
   pkgs,
@@ -81,11 +78,8 @@ in
         touch $out
       '';
 
-  # The formatter, enforced rather than requested. Four files had drifted by the time this was
-  # added — which is what an unenforced style rule does — and the drift was only visible because a
-  # council reviewer ran the tool by hand. One file is exempt and its presence is asserted: the
-  # golden target's bytes ARE the fixture a golden diff compares, so reformatting it would change
-  # what that test measures.
+  # The formatter, enforced. One file is exempt and its presence is asserted: the golden target's
+  # bytes ARE the fixture a golden diff compares, so reformatting it would change what it measures.
   formatting =
     pkgs.runCommand "check-formatting"
       {
