@@ -130,6 +130,13 @@ to the owner.
 lengths, filler, cross-skill n-gram redundancy, dead refs, orphaned support files):
 run it before and after, and diff the JSON.
 
+**Know what that audit counts.** It takes one root (extra arguments are ignored).
+`redundant_token_mass` includes frontmatter, so shared `version/author/tags` inflate it —
+on a 44-skill, 68k-token library the real prose duplication was 11 sentences, 122 words
+(0.23%). `dead_refs` flags a valid `script.py <arg>`; `orphans` flags files whose directory
+the prose names. Read every hit. Compile with `compile()`, not `py_compile`: the latter
+writes `__pycache__` and inflates `orphans` on the next run.
+
 **Freeze the instrument.** Hash the harness (`sha256sum`) and confirm the hash matches
 for both runs. A metric script edited between runs measures the edit, not the change.
 
