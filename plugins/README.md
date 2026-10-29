@@ -46,7 +46,7 @@ real installed binary.
 
 ```bash
 cp -r plugins/harness-audit "$HERMES_HOME/plugins/"       # or: hermes plugins install <path>
-hermes config set plugins.enabled '["harness-audit"]'      # `hermes plugins enable` needs uv.lock
+hermes config set plugins.enabled '["harness-audit"]'
 ```
 
 **3. `nix build .#harness-audit`** produces the distribution on its own, for pointing any
