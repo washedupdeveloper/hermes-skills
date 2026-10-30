@@ -426,6 +426,17 @@ recommended. A flag with no next step reads as work handed back, however well do
 it is — and a defect found while investigating a flag is worth more than the flag itself,
 so look before escalating.
 
+**When the fix is blocked outside your control, the elimination proof is the
+deliverable.** If the remaining steps live in a system you do not own — a remote
+endpoint, another team's config, a credential nobody has issued — then the work is to
+enumerate the candidate causes and close each one with a measurement, then hand over the
+exact ask. Do not ship a change whose effect nobody measured: an unverified patch into
+someone else's infrastructure is a claim, and it will be read as the fix. And when a
+measurement contradicts a step you yourself proposed earlier, correct it in the same
+breath instead of quietly working around it — the owner is acting on your last answer.
+"It breaks here, and this is what unblocks it" is a finished result; "this is what I
+would try next" is not.
+
 ## Failure modes this prevents
 
 - **A milestone declared verified on the repo's own gate alone** — the tests are the

@@ -277,6 +277,16 @@ PY="${HERMES_PYTHON:-$(command -v python3 || command -v python)}"
 
 Every command below uses `"$PY"`.
 
+**That variable exists only inside a Hermes-launched environment.** A bare login shell —
+the normal case when the council lives in WSL and the terminal tool does not — has
+`HERMES_PYTHON` unset, and the `python3 || python` fallback finds nothing on a NixOS host
+(there is no system Python). Do not conclude Python is missing; read the pinned path out
+of the wrapper:
+
+```bash
+PY=$(head -40 "$(command -v hermes)" | sed -n "s/^export HERMES_PYTHON='\(.*\)'/\1/p")
+```
+
 **3. The target project**, first match wins:
 
 1. **An explicit path** in the invocation (`/council <path/to/project>`) — always wins.
@@ -292,6 +302,27 @@ directory — a session with no project has the user's home as its cwd. Ask whic
 project they mean and offer the fix (anchor the session: desktop → Projects picker;
 TUI/CLI → `hermes --in /path/to/project`) or an explicit path. **State the resolved
 project in your reply** either way.
+
+## Host boundary — Windows shell, WSL backend
+
+The council runs where Hermes runs. When the desktop app drives a WSL backend, the
+`terminal` tool is a Windows shell, so `wsl.exe -d <distro> -- bash <script>` is the
+entry and every crossing path needs the `/mnt/c/...` form.
+
+- **Pass a script file, never `bash -c`.** A fish login shell eats the `-c` payload and
+  the command becomes a no-op that still exits 0. Write the script with `write_file`
+  (LF), then `wsl.exe -d <distro> -- bash /mnt/c/Users/.../run.sh`.
+- **Detach inside the distro, not on Windows.** `terminal(background=True)` tracks the
+  `wsl.exe` wrapper, not the round. Start it with
+  `setsid nohup "$PY" council.py review … > "$LOG" 2>&1 < /dev/null &` and return
+  immediately; the round then survives turn end without `persist_on_release`. Keep WSL
+  itself alive (a lingering user unit is enough).
+- **Poll, do not wait.** A second script prints `pgrep -af 'council.py|hermes -p council'`,
+  tails the log, and lists `round-1/`. Completion is the `OUTCOME:` block plus the sample
+  files, never a foreground timeout.
+- **Copy artifacts out before parsing.** `cp` the run to `/mnt/c/.../scratch/` and read
+  them with the Windows-side tools; parsing through `wsl.exe` output mixes encodings and
+  truncates.
 
 ## Bootstrap (once per machine)
 
@@ -502,6 +533,48 @@ describing the run as a failure.
 aggregate, per-dimension `llm`/`det`/`beta`/`score`, open blocking findings, and
 detected stacks.
 
+**Ids are not global.** The merged `GEN-000N` ids restart per dimension, so
+`security/GEN-0001` and `correctness/GEN-0001` are different claims; a parse keyed by id
+alone merges unrelated findings. Cluster by claim text (or by claimed lines) inside a
+dimension, and expect ~4–5× repetition — 67 entries on one 363-line file collapsed to 16
+distinct issues.
+
+**`blocking` counts entries, not problems.** Read the list, re-cluster it, then quote a
+number: 13 blocking entries were four distinct issues, one of which was a packaging
+artifact. Quoting 13 as "13 problems" overstates the review.
+
+**Confirm the samples were distinct after the fact:**
+`sha256sum round-1/generalist-*.json` must print N different hashes. Identical hashes are
+the shared-prompt-file failure (see Known limits) discovered after the run instead of
+during it.
+
+**With β = 0 the aggregate is a judgement score.** `beta: 0.0` plus single-digit `det`
+means no analyzer ran ("generic" stack), so `score` is the models' self-assessment; the
+blocking set is the only hard evidence in the run. Report the block first, the decimal
+last, and never present the decimal as a measurement.
+
+## Solo baseline, then council — the comparative read
+
+"Review it yourself, then with the council, and compare" is a delta question, and the
+delta only exists if the baseline was recorded before the round.
+
+1. **Write your own findings to a file first** (`scratch/solo-analysis.md`), `file:line`
+   and severity, before convening. Anything written after reading council output is not a
+   baseline and reads as retrofitted.
+2. **Package the target honestly.** The council reviews a *repo*: a single uploaded file
+   becomes a one-commit git repo, and the absent `manifest.json` / `package.json` / tests
+   then surface as findings that can block. Hand it the file, keep the scope there, and
+   label those findings as artifacts of the target rather than defects in the code.
+3. **Reconcile by claim, not by entry** (see **Reading a run**) and keep both directions:
+   what the council found that you missed, what you found that it missed.
+4. **Report severity disagreements explicitly.** They are the most useful output of the
+   comparison: name the setting where the council under-rates something (a `low` on a
+   silent data-loss path) or over-rates it (a blocked `high` on a packaging gap), say
+   which side you think is right, and cite the check you ran.
+5. **Compare instruments, not only lists.** Say what β and the per-dimension `llm` score
+   mean for this target, and what a file-level read sees that a rubric scoped to a diff
+   cannot — lifecycle state that outlives the worker is the usual gap.
+
 ## Hard rules
 
 - **Never report a run as passing on prose.** Read the gate's exit code.
@@ -512,6 +585,7 @@ detected stacks.
   if the council ran.
 - Hold the rubric and threshold **out** of the reviewers' context (anti-gaming).
 - **Never hardcode a machine path**, and never review an unanchored directory.
+- **Never quote the entry count as the problem count.** Re-cluster first.
 
 ## Requirements
 
