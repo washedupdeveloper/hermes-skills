@@ -180,6 +180,22 @@ whole and the skill keeps a pointer. Four steps, in order.
    section cited becomes unreachable the moment it leaves, and the next audit reports it as an
    orphan. Name them at the top level, or the move silently costs a hop nobody takes.
 
+**A routing number is evidence only if the queries were written blind.** Choose the query
+set before reading the descriptions, or draw it from real session requests — writing queries
+while looking at the text you are about to change measures your own fitting. Measured on one
+library: the tuned 31-query set read 0.87 → 0.97, while 30 held-out queries read 0.57 → 0.63.
+Quote the held-out delta as the effect size; the tuned figure only shows the set was too easy.
+
+**Score a candidate description in memory before writing it.** Substitute the string into the
+loaded row, re-run the router on both sets, and keep it only when held-out rises and nothing
+falls. A wording that wins one phrasing can lose another: deleting "turn" from a description
+lost a query the old text had won, and no size or duplicate metric sees that.
+
+**Count the trigger list against the bullets.** Eight triggers against 31 pitfalls leaves 23
+with no signal, so the move costs a hop for most readers. Raise coverage or add a catch-all
+line — "if a change fails in a way you did not predict, the answer is here" — because an
+enumeration can never name every case and a catch-all costs one line.
+
 Say the trade out loud in the report: the facts are one hop away, and a reader who ignores the
 trigger list will work without them. A pitfalls or rules block is usually why the skill exists
 — a large share is a reason to read the section before moving it, not a verdict.
@@ -274,6 +290,11 @@ repo the gate is **git**: a stray write shows in `git status` / `git diff` and r
 with `git checkout`, which is full coverage at zero friction — prefer it to
 `skills.write_approval`, and set that only where the tree is untracked. Run
 `git status` before committing anything you did not write yourself.
+
+**Stage explicit paths, never `git add -A`, in a tree another writer touches.** A blanket add
+folds the background review's uncommitted edits into your commit and destroys attribution:
+stage the files you changed by name, and give the foreign edits their own commit after
+reading them.
 
 **Attribute a change you did not make before you carry it.** A dirty file or an unfamiliar
 commit is the background review or a second agent, and the evidence names it: `git status
@@ -478,6 +499,11 @@ content** — and say plainly that the missing depth is a real gap worth writing
   tests live in `tests/unit/`, and the next step is a hand-built harness that proves less than
   the repo's own gate. Enumerate with `find tests -name 'test_*.py'` and read the runner before
   writing a check of your own.
+- **A CLI verb a skill teaches that the tool does not have.** `hermes pm install` reads like
+every command around it and fails only when a reader runs it. Extract every `hermes <verb>` the
+tree names, diff the set against `hermes --help`, and read each miss: prose like "hermes is…"
+is a false positive, a command in a code block is a dead instruction. Replace it with the verb
+that exists (`hermes update`), then re-grep for the retired string.
 - **Descriptions over 60 characters.** The window and its cost belong to
   `hermes-agent-skill-authoring` (the index truncates); past it, a trigger never fires.
 - **`related_skills` naming a skill that does not exist** in the scanned tree — a
