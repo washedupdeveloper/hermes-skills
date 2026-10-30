@@ -125,6 +125,39 @@ def test_related_skills_frontmatter_resolves():
     assert not bad, f"related_skills names nothing known: {bad}"
 
 
+def test_no_dead_paths_in_fenced_commands():
+    """A fenced command that runs a script this skill ships must find it.
+
+    `test_no_dead_references` reads inline spans only, and that is not where the
+    bug lived: a retired `scripts/install-bots.sh` sat in a fenced block and
+    survived three audits of this file. Only paths into a directory the skill
+    itself ships are checked — a `scripts/x.py` in a skill with no `scripts/`
+    belongs to some other repository, and cannot be verified from here.
+    """
+    write_verbs = re.compile(r"\b(write|create|add|author|generate|scaffold|produce)\b", re.I)
+    local = re.compile(r"\b((?:scripts|references|templates|assets)/[\w./-]+\.\w+)")
+    fence = re.compile(r"```[a-zA-Z]*\n(.*?)```", re.S)
+    bad = []
+    for p in sorted(SKILLS.rglob("*.md")):
+        if "__pycache__" in p.parts:
+            continue
+        d = p.parent if p.name == "SKILL.md" else next(
+            (a for a in p.parents if (a / "SKILL.md").is_file()), p.parent)
+        for block in fence.findall(p.read_text(encoding="utf-8", errors="replace")):
+            for raw in block.splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if any(c in line for c in "<>$") or write_verbs.search(line):
+                    continue
+                for ref in local.findall(line):
+                    if not (d / ref.split("/", 1)[0]).is_dir():
+                        continue
+                    if not (d / ref).exists():
+                        bad.append(f"{p.relative_to(SKILLS)} -> {ref}")
+    assert not bad, f"dead paths in fenced commands: {bad}"
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
