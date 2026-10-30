@@ -100,5 +100,5 @@ A printed `SMOKE_OK` proves the profile's credentials and model resolve.
   Set it to `0` on the orchestrator or any batch larger than two silently fails and a
   well-behaved agent falls back to doing the work inline.
 - Installing profiles does not install the *shell* the worker runs commands with. If
-  a run reports no shell, that is a Hermes install concern (`hermes pm install`), not
+  a run reports no shell, that is a Hermes install concern (`hermes update`), not
   a fleet concern.

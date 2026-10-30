@@ -1,7 +1,7 @@
 ---
 name: skill-library-curation
 description: "Curate the skill library: sourcing, overlap, conflicts."
-version: 1.2.1
+version: 1.3.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -121,8 +121,9 @@ dead reference, a description past the index window, a rule stated twice — and
 the **measured** recovery instead of claiming an improvement you did not verify.
 
 **When the owner asks for a library-wide rewrite, the measurement is the answer.** Run the
-audit first and report what it says: filler lands near 0.2% of the corpus and duplicated mass
-between 1.3% and 2.6%, so editing prose has almost nothing to recover and every cut risks a
+audit first and report what it says: filler lands near 0.2% of the corpus and duplicated 6-gram mass
+between 1.3% and 2.6% — frontmatter included, so quote it as n-gram mass, never as prose
+redundancy, so editing prose has almost nothing to recover and every cut risks a
 fact. Name the one structural candidate you can defend, such as a maximum-compression variant
 of a brevity skill, with its cost (a user-facing command, an index line), and leave the delete
 to the owner.
@@ -152,8 +153,36 @@ Having measured, cut without losing the point:
 
 - **Merge overlapping sections.** A skill often lists the same commands under two headings.
 - **Drop provenance narration and design history.** Keep the operative constraint, not the story of how it was discovered.
-- **Move bulk detail into `references/`** and leave a one-line pointer.
+- **Move bulk detail into `references/`** — the procedure, and the orphan trap that follows
+  it, are below.
 - **Prefer tables and checklists** over paragraphs — same content, fewer tokens.
+
+### Moving a section into `references/`
+
+Tiering is the only cut that lowers the load cost without deleting a fact: the section moves
+whole and the skill keeps a pointer. Four steps, in order.
+
+1. **Measure the share first.** `scripts/section-share.py <root>` prints each skill's largest
+   H2 section and its percentage — that share is exactly what the load cost falls by, so it is
+   the number to report, quoted from that run rather than from a previous one. Routing and load are a second measurement: `scripts/skill-bench.py <root>
+   assets/skill-queries.json` routes a frozen query set against the descriptions and reports
+   accuracy, MRR and the mean body-token cost of the skill it chose. Run it on a worktree of
+   HEAD and on the working tree, or the delta is not attributable to the pass.
+2. **Move the body byte-for-byte.** Split on `\n## <heading>\n`, write the tail to
+   `references/<topic>.md`, then assert the original body is a substring of the new file. The
+   assertion is the proof that nothing was deleted; a word count is not.
+3. **Replace it with a trigger list, not a pointer.** A line that only says "see the
+   references file" does not fire. List the operations the bullets cover — `mkForce`/`mkDefault`,
+   taking a version from a flake input, adding an output, copying out of `/nix/store` — so a
+   reader matches their task
+   against the list before acting.
+4. **Re-name whatever the moved text was the only mention of.** Every reference file that
+   section cited becomes unreachable the moment it leaves, and the next audit reports it as an
+   orphan. Name them at the top level, or the move silently costs a hop nobody takes.
+
+Say the trade out loud in the report: the facts are one hop away, and a reader who ignores the
+trigger list will work without them. A pitfalls or rules block is usually why the skill exists
+— a large share is a reason to read the section before moving it, not a verdict.
 
 ## Step 6 — Validate every file you touched
 
@@ -176,10 +205,17 @@ description ≤ 60 chars ending in a period, `name` matching the directory, and 
 **A skill's scripts are covered by no metric — compile and run them.** The audit counts
 bytes, descriptions, dead references and orphans; a promoted or freshly written Python file
 under `scripts/` with a syntax error passes all of those and ships dead, while the SKILL.md
-tells the reader to run it. Before calling a skill validated: compile the tree
-(`find <skills-root> -name '*.py' -print0 | xargs -0 -n1 "$PY" -m py_compile`) and run each
-script's `--help`, plus its real mode on a throwaway input. A script nobody can execute is a
+tells the reader to run it. Before calling a skill validated: parse the tree in memory (`compile(p.read_text(), str(p),
+"exec")` per file) — `py_compile` writes `__pycache__` into the tree you are measuring, which
+the next audit reports as orphaned support files — and run each script's `--help`, plus its
+real mode on a throwaway input. A script nobody can execute is a
 claim like any other — a dead reference the audit cannot see.
+
+**Count what the check actually examined.** A `while read … done < <(find …)` loop hands the
+child its file list on stdin, so one `python … --help` that reads stdin consumes the remainder
+and the loop exits early — a sweep reported 4 of 65 scripts and read as a clean run. Redirect
+the child (`</dev/null`) and assert the items checked against `find … | wc -l`; a check that
+silently skipped most of the tree is a pass you cannot quote.
 
 **Point the validator at every tree the loader sees, not just one.** `validate-skills.py`
 resolves `related_skills` against the union of the roots it is given, so a repo-only run
@@ -191,6 +227,12 @@ that asserts its counts in tests fails on the addition and tells you the right n
 the new skill first.** A Nix check copies only git-visible paths, so an untracked `SKILL.md`
 reads as absent: the counted total stays old and the README number you just corrected is
 reported FALSE. `git add` the new directory, then gate.
+
+**When the repo ships a test suite, that suite is the before/after.** `git stash push -u`, run
+the tests, `git stash pop`, run them again; equal counts on both sides is the reliability claim.
+A doc edit that moves a phrase a test measures fails here and nowhere in the audit — and the
+suite is usually found one level deeper than the obvious glob (`tests/unit/`), so enumerate
+before concluding a repo has none.
 
 ## Step 7 — Bulk rewrite mechanics
 
@@ -427,6 +469,15 @@ content** — and say plainly that the missing depth is a real gap worth writing
   "written": name the directory (`scripts/`) or lead with the verb. The escape cuts both
   ways — a genuine dead pointer on a line that happens to say "add" is silently skipped, so
   neither a pass nor a failure from that test is evidence until you have read the line.
+- **A cross-skill pointer written as a path is itself a dead reference.** Paths resolve
+  against the *naming* skill's own directory, so `council/scripts/install_bots.py` cited from
+  another skill names a path that does not exist under it — and repairing one dead reference
+  this way creates the next. Write `install_bots.py` in `council`: skill plus filename, never a
+  relative path.
+- **Declaring a suite absent from a one-level glob.** `ls tests/*.py` returns nothing when the
+  tests live in `tests/unit/`, and the next step is a hand-built harness that proves less than
+  the repo's own gate. Enumerate with `find tests -name 'test_*.py'` and read the runner before
+  writing a check of your own.
 - **Descriptions over 60 characters.** The window and its cost belong to
   `hermes-agent-skill-authoring` (the index truncates); past it, a trigger never fires.
 - **`related_skills` naming a skill that does not exist** in the scanned tree — a

@@ -1,0 +1,126 @@
+[
+  {
+    "query": "harden a web app against the OWASP top ten",
+    "expect": "security/web-app-security"
+  },
+  {
+    "query": "review this change for defensive coding and unsafe input handling",
+    "expect": "software-development/defensive-patterns"
+  },
+  {
+    "query": "a nix module sets the same option twice, I need mkForce",
+    "expect": "devops/nix-declarative-config"
+  },
+  {
+    "query": "rebuild the clan flake on this wsl host",
+    "expect": "software-development/nixos-clan-flake"
+  },
+  {
+    "query": "build a scoring gate and calibrate its threshold",
+    "expect": "software-development/deterministic-quality-gates"
+  },
+  {
+    "query": "prove the acceptance criteria before saying it is done",
+    "expect": "software-development/verify-and-stop"
+  },
+  {
+    "query": "write the spec before implementing the change",
+    "expect": "software-development/to-spec"
+  },
+  {
+    "query": "split the plan into tickets with blockers",
+    "expect": "software-development/to-tickets"
+  },
+  {
+    "query": "the glossary terms are vague, sharpen the domain model",
+    "expect": "software-development/domain-modeling"
+  },
+  {
+    "query": "write the postmortem for yesterday's outage",
+    "expect": "software-development/postmortem"
+  },
+  {
+    "query": "cut a release, bump semver, tag it",
+    "expect": "software-development/release-versioning"
+  },
+  {
+    "query": "sanitise git history before publishing the branch",
+    "expect": "security/git-history-sanitisation"
+  },
+  {
+    "query": "a maintainer's npm package was compromised, investigate the supply chain",
+    "expect": "security/oss-forensics"
+  },
+  {
+    "query": "delete the temp files this task left behind",
+    "expect": "devops/ephemeral-cleanup"
+  },
+  {
+    "query": "shrink this memory file's token count",
+    "expect": "communication/caveman-compress"
+  },
+  {
+    "query": "find where this function is defined and give me path:line",
+    "expect": "communication/caveman-explore"
+  },
+  {
+    "query": "review the pull request with one line per finding",
+    "expect": "communication/caveman-review"
+  },
+  {
+    "query": "answer briefly with no filler",
+    "expect": "communication/caveman"
+  },
+  {
+    "query": "maximum compression, fragments only",
+    "expect": "communication/ultracave"
+  },
+  {
+    "query": "delegate this subtask to a subagent and return a compressed result",
+    "expect": "communication/cavecrew"
+  },
+  {
+    "query": "hand this session off to another agent",
+    "expect": "software-development/handoff"
+  },
+  {
+    "query": "plan a new project from scratch with milestones",
+    "expect": "software-development/project-kickoff-planning"
+  },
+  {
+    "query": "the work is too big for one session, chart the decisions",
+    "expect": "software-development/wayfinder"
+  },
+  {
+    "query": "write docs that agents will read, like AGENTS.md",
+    "expect": "software-development/writing-for-agents"
+  },
+  {
+    "query": "install a fleet of hermes profiles on a new machine",
+    "expect": "autonomous-ai-agents/hermes-profile-fleet"
+  },
+  {
+    "query": "build a knowledge base pipeline that distils sessions",
+    "expect": "autonomous-ai-agents/hermes-knowledge-pipeline"
+  },
+  {
+    "query": "convene the review council on this repo",
+    "expect": "autonomous-ai-agents/council"
+  },
+  {
+    "query": "author an obsidian bases view",
+    "expect": "note-taking/obsidian-bases"
+  },
+  {
+    "query": "the terminal tool cannot see my files",
+    "expect": "autonomous-ai-agents/hermes-terminal-backend"
+  },
+  {
+    "query": "tests must pass on linux, macos and windows",
+    "expect": "software-development/cross-platform-test-portability"
+  },
+  {
+    "query": "curate the skill library and remove overlap between skills",
+    "expect": "software-development/skill-library-curation"
+  }
+]

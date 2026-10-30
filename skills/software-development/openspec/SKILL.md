@@ -1,11 +1,15 @@
 ---
 name: openspec
-description: "Use when a repo has openspec/. Spec before code."
+description: "Use when a repo has an openspec/ directory."
 version: 1.1.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 category: software-development
+metadata:
+  hermes:
+    tags: [openspec, spec, requirements, planning]
+    related_skills: [to-spec, to-tickets]
 ---
 
 # OpenSpec

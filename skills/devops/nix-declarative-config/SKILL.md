@@ -1,6 +1,6 @@
 ---
 name: nix-declarative-config
-description: "Use when making declarative Nix or home-manager changes."
+description: "Use when editing Nix modules, options, or overrides."
 version: 1.3.0
 author: Hermes Agent
 license: MIT
@@ -311,6 +311,9 @@ failure, not a warning:
 - copying skills or store files out of `/nix/store`
 - a `statix` failure, or a config key you have not grepped a reader for
 - user accounts, `mutableUsers`, or anything that must happen after activation
+
+Anything not listed is still in that file: if a Nix change fails in a way you did
+not predict, the answer is there — 31 measured failures, one per bullet.
 
 Two more references hang off that file's subjects but are worth knowing about directly:
 `references/flake-cost-and-structure.md` (closure size done right, what a cold runner must

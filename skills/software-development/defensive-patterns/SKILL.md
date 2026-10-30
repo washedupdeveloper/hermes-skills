@@ -1,6 +1,6 @@
 ---
 name: defensive-patterns
-description: "Use when reviewing or hardening a change."
+description: "Use when hardening code: input, subprocess, authz."
 version: 1.0.1
 author: user, Hermes Agent
 license: MIT

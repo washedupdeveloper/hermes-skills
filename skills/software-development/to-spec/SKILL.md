@@ -1,6 +1,6 @@
 ---
 name: to-spec
-description: "Turn a conversation into a written spec."
+description: "Turn a conversation or plan into a written spec."
 version: 1.0.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT

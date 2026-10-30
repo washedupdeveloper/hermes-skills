@@ -1,6 +1,6 @@
 ---
 name: hermes-project-handoff
-description: "Hand off a Hermes project to another machine."
+description: "Move a Hermes project and profiles to another machine."
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -90,7 +90,7 @@ install script), and that each profile archive lists `SOUL.md`, `profile.yaml`, 
 
 ```bash
 git clone repo.bundle <dir> && cd <dir>
-python3 scripts/install_bots.py                 # or: hermes profile import profiles/<name>.tar.gz
+python3 scripts/council.py setup bots           # or: hermes profile import profiles/<name>.tar.gz
 hermes profile list                             # expect the bots
 hermes -p <bot> tools list                      # capability set intact
 ```
