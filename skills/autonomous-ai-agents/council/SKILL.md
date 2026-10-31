@@ -306,14 +306,14 @@ project in your reply** either way.
 ## Host boundary — Windows shell, WSL backend
 
 The council runs where Hermes runs. When the desktop app drives a WSL backend, the
-`terminal` tool is a Windows shell, so `wsl.exe -d <distro> -- bash <script>` is the
+`terminal` tool is a Windows shell, so the launcher `nixos-clan-flake` documents is the
 entry and every crossing path needs the `/mnt/c/...` form.
 
 - **Pass a script file, never `bash -c`.** A fish login shell eats the `-c` payload and
   the command becomes a no-op that still exits 0. Write the script with `write_file`
-  (LF), then `wsl.exe -d <distro> -- bash /mnt/c/Users/.../run.sh`.
+  (LF), then run it through that launcher.
 - **Detach inside the distro, not on Windows.** `terminal(background=True)` tracks the
-  `wsl.exe` wrapper, not the round. Start it with
+  the launcher's wrapper, not the round. Start it with
   `setsid nohup "$PY" council.py review … > "$LOG" 2>&1 < /dev/null &` and return
   immediately; the round then survives turn end without `persist_on_release`. Keep WSL
   itself alive (a lingering user unit is enough).
@@ -321,7 +321,7 @@ entry and every crossing path needs the `/mnt/c/...` form.
   tails the log, and lists `round-1/`. Completion is the `OUTCOME:` block plus the sample
   files, never a foreground timeout.
 - **Copy artifacts out before parsing.** `cp` the run to `/mnt/c/.../scratch/` and read
-  them with the Windows-side tools; parsing through `wsl.exe` output mixes encodings and
+  them with the Windows-side tools; parsing through the launcher's output mixes encodings and
   truncates.
 
 ## Bootstrap (once per machine)
