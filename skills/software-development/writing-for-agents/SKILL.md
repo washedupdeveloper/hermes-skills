@@ -305,6 +305,15 @@ absent, a support file that exists but is untracked so the build never sees it, 
 whose served copy is a cached older version. So after writing, fetch it through the same
 path the agent uses and read what comes back.
 
+**A prose line that begins with a fence marker opens a code block.** Wrap a paragraph at a
+fixed width and the break can land so the next line starts with ``` — a phrase like "inside
+a ```bash block" split across lines — and every line after it renders as code until the next
+fence, silently swallowing the section. Nothing errors and the file still reads correctly in
+a plain-text diff. Rewrap so no prose line starts with backticks, and after any edit count the
+fence markers at line start: an odd count is an unterminated block. The same wrapped line
+often names a literal path, which a repo's dead-reference test then reads as a real pointer —
+use a placeholder (`scripts/<file>.py`) for a path you are discussing rather than citing.
+
 For a Hermes skill, the two paths differ and the difference decides whether your edit is
 checkable in-session:
 

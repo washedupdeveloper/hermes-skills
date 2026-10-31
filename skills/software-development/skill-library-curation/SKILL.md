@@ -173,6 +173,16 @@ whole and the skill keeps a pointer. Four steps, in order.
    It measures lexical overlap between your query text and the description — **not** whether
    an agent selects the skill — so treat the number as a smoke test for wording, never as
    evidence that a skill performs better.
+
+**A behavioural claim needs a control arm, not a better metric.** No text measure shows that
+a skill changes what an agent does. Run two arms on one task — the skill in the workspace for
+one, absent for the other, identical prompt — and pre-register three outcomes before any agent
+starts: the pristine fixture fails only for the planted reason, a gold solution passes, and the
+tempting naive fix fails on *content* while still evaluating cleanly. A trap that crashes
+teaches nothing; the wrong answer has to look right. Score the artifacts, never the reports.
+Equal arms is a real result: a strong model often solves the task from priors, so report "no
+measurable difference" rather than re-cutting the task until it separates. Recipe, fixture
+traps and the ceiling case: `references/benchmarking-a-skill.md`.
 2. **Move the body byte-for-byte.** Split on `\n## <heading>\n`, write the tail to
    `references/<topic>.md`, then assert the original body is a substring of the new file. The
    assertion is the proof that nothing was deleted; a word count is not.
@@ -548,7 +558,10 @@ that names the exact file the resolver chose, which is the only authoritative
 answer to "which copy is in play" when a local copy could be shadowing the mount.
 - **Reading a check's result through a pipe.** `cmd | tail` reports the *pipe's*
   exit status, not the command's, so a failing check looks like it passed. Check
-  `$?` on the command itself, or redirect to a file and inspect that.
+  `$?` on the command itself, or redirect to a file and inspect that. `tail -N`
+  also hides earlier output: a command that prints one summary line per item, read
+  from its last line, looks like the earlier items were skipped and gets reported
+  as a defect. `grep` the summary lines instead of tailing a fixed count.
 - **`rm -rf` on a directory you assumed was a clone.** Run `git remote -v` *in that
   directory*: a clean clone and an untracked snapshot of the same project can sit side by
   side, and only the first comes back. Step 10 has the per-file comparison that proves
@@ -578,3 +591,5 @@ answer to "which copy is in play" when a local copy could be shadowing the mount
 - [ ] A mined source is retired only after a per-file byte comparison against the copy
       kept, and only after confirming which directories have a remote
 - [ ] Any secret-scan hits audited by reading them, not by count
+- [ ] A claim that a skill improves outcomes is backed by an arm/control run with a
+      pre-registered negative and positive control, or is labelled unproven

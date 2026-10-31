@@ -22,6 +22,16 @@ matches what you are about to do, before you do it.
   the discarded definition was never evaluated. Forcing the whole service instead restates
   every field and loses the rest. Verify the scoping claim by removing the override and
   watching the original error return; do not assume `mkForce` suppresses evaluation.
+  **Say which level you are forcing, because only one of them works.** Measured on
+  `types.attrs`: `service.details = mkForce { … }` discards the upstream definition whole —
+  its `throw` never runs and `service.name` / `service.icon` still come from upstream —
+  while `service.details.host = mkForce …` changes nothing at all: `host` keeps upstream's
+  value and the throw still fires, because an `attrs` value merges shallowly and priority is
+  resolved at the `details` option, not inside it. `attrsOf` does accept the per-key force,
+  but a `throw` sitting in a sibling key of the same definition is still evaluated. And do
+  not force blind when checking this: **`nix eval --expr` is lazy**, so it prints `«error:
+  …»` placeholders *inside* an attrset instead of failing, and an unforced read looks like
+  the override did nothing — pass `--json` to force the whole value.
   Two corollaries: **`toString null` is `""`, not `"[::]"`**, so "use `toString` on both
   sides" is a different fix from a null conditional and renders `:1883` — pin the displayed
   value in a test, or the two look equivalent; and **an assertion whose subject is derived

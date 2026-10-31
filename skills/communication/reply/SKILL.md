@@ -56,6 +56,9 @@ then what the next maintainer inherits. Implementation detail follows, never lea
 - Terse is not permission to drop content. The sections the task needs (what changed, what it
   costs, what was not done, what is open) stay, each in one line.
 - A heading carries its fact rather than a label: "Gate green at HEAD" beats "Verification".
+- When the ask is concise, raw, or minimal: no decorative markdown. Tables and code blocks
+  stay only where they carry facts; drop bold-label scaffolding and a section per paragraph.
+  The content stays, the furniture goes.
 
 ## Verification
 
