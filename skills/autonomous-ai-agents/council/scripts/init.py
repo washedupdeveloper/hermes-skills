@@ -260,7 +260,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("       council doctor --repo <your-repo>")
     print()
     print("  3. Review something:")
-    print("       council review <your-repo> --mode advisory --max-rounds 1")
+    print(f"       council review <your-repo> --mode "
+          f"{cfg.get('review', {}).get('mode', 'full')} --max-rounds 1")
     print()
     print("  4. In an agent session, /council does the same thing and reads")
     print(f"     {cfg_mod.CONFIG_NAME} for how.")

@@ -1,6 +1,6 @@
 ---
 name: review-council-orchestrator
-description: "Set each round's goals, then judge the round against them."
+description: "Set each round's goals, then judge against them."
 version: 1.2.0
 author: user, Hermes Agent
 license: MIT

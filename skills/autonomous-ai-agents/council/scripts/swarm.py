@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import council_config as _council_config
+
 HERE = Path(__file__).resolve().parent
 FRAMEWORK = HERE.parent
 
@@ -67,6 +69,13 @@ class CardSpec:
     assignee: str
     parents: List[str] = field(default_factory=list)
     skills: List[str] = field(default_factory=list)
+
+
+def resolve_samples(samples: Optional[int], cfg: Dict[str, Any]) -> int:
+    """The config sets the default; --samples overrides it, exactly as the loop does."""
+    if samples is not None:
+        return samples
+    return int((cfg.get("review") or {}).get("samples", DEFAULT_SAMPLES))
 
 
 def build_plan(repo: Path, samples: int = DEFAULT_SAMPLES, round_no: int = 1,
@@ -213,8 +222,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "board the gateway's dispatcher can reclaim.")
     parser.add_argument("repo", nargs="?", default=".",
                         help="the repository to review (default: cwd)")
-    parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES,
-                        help=f"worker cards, one per sample (default: {DEFAULT_SAMPLES})")
+    parser.add_argument("--samples", type=int, default=None,
+                        help="worker cards, one per sample (default: [review].samples "
+                             f"from the config, else {DEFAULT_SAMPLES})")
     parser.add_argument("--round", type=int, default=1, dest="round_no",
                         help="round number, part of the dedup key (default: 1)")
     parser.add_argument("--run-root", default=None,
@@ -231,6 +241,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not repo.is_dir():
         print(f"swarm: not a directory: {repo}", file=sys.stderr)
         return 2
+    cfg, _ = _council_config.load()
+    args.samples = resolve_samples(args.samples, cfg)
     if args.samples < 1:
         print("swarm: --samples must be at least 1", file=sys.stderr)
         return 2

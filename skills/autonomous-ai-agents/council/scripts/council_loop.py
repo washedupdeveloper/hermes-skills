@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import council_config as _council_config
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 GATE = HERE / "score_reviews.py"
@@ -1407,6 +1409,23 @@ def confirm(prompt: str) -> bool:
 
 # --- The loop ---------------------------------------------------------------
 
+def resolve_review_defaults(mode, samples, max_rounds, threshold, cfg):
+    """Config sets the defaults; a command-line flag overrides it.
+
+    Every `[review]` key used to be inert: the loop never loaded the file, so
+    `mode = "advisory"` still ran `full` and `max_rounds = 3` still allowed 8.
+    `threshold = None` here still means "fall through to the calibration
+    manifest", which is why the caller keeps that fallback.
+    """
+    review = (cfg or {}).get("review", {}) or {}
+    return (
+        mode if mode is not None else review.get("mode", "full"),
+        samples if samples is not None else int(review.get("samples", 5)),
+        max_rounds if max_rounds is not None else int(review.get("max_rounds", 8)),
+        threshold if threshold is not None else review.get("threshold"),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="council_loop.py",
@@ -1416,9 +1435,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Repository to review. Omit to infer from the current directory "
                              "(nearest git root, or the nearest AGENTS.md/.hermes.md/CLAUDE.md "
                              "or build manifest).")
-    parser.add_argument("--mode", choices=("full", "semi", "advisory"), default="full",
-                        help="Autonomy mode (default: full)")
-    parser.add_argument("--samples", type=int, default=5,
+    parser.add_argument("--mode", choices=("full", "semi", "advisory"), default=None,
+                        help="Autonomy mode (default: [review].mode from the config, "
+                             "else advisory)")
+    parser.add_argument("--samples", type=int, default=None,
                         help="Samples of the generalist reviewer (default 5). Five "
                              "matched the five-specialist cost in the ablation, and "
                              "M8.5 found sampling — not profile count — is what buys "
@@ -1437,7 +1457,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-rounds", type=int, default=1,
                         help="Always attempt at least this many rounds (default 1), so one "
                              "unlucky round cannot end the run.")
-    parser.add_argument("--max-rounds", type=int, default=8,
+    parser.add_argument("--max-rounds", type=int, default=None,
                         help="Hard safety cap on rounds (default 8). The loop normally stops "
                              "earlier, once gains stall or the budget is spent.")
     parser.add_argument("--budget-seconds", type=float, default=0.0,
@@ -1939,8 +1959,18 @@ def priority_digest(verdict: Dict[str, Any], threshold: float,
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
 
-    # From the calibration manifest unless named, so the loop and the calibration cannot
-    # drift (it was hardcoded in three places).
+    cfg, cfg_path = _council_config.load()
+    problems = _council_config.validate(cfg)
+    if problems:
+        print(f"review-council.toml: {len(problems)} problem(s), nothing run:", file=sys.stderr)
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+        return 2
+    args.mode, args.samples, args.max_rounds, args.threshold = resolve_review_defaults(
+        args.mode, args.samples, args.max_rounds, args.threshold, cfg)
+
+    # Still from the calibration manifest when neither the flag nor the config names one,
+    # so the loop and the calibration cannot drift (it was hardcoded in three places).
     if args.threshold is None:
         args.threshold = float(_gate_module().calibrated_threshold())
 
@@ -1981,7 +2011,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     log = run_root / "council.log"
 
     plan = {
-        "repo": str(repo), "mode": args.mode, "scope": args.scope,
+        "repo": str(repo), "mode": args.mode, "samples": args.samples,
+        "config": str(cfg_path) if cfg_path else None, "scope": args.scope,
         "minimum_score": args.threshold, "min_rounds": args.min_rounds,
         "max_rounds": args.max_rounds, "budget_seconds": args.budget_seconds,
         "k": args.k, "epsilon": args.epsilon, "run_root": str(run_root),

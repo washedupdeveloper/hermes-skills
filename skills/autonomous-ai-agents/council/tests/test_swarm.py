@@ -277,3 +277,11 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def test_the_sample_count_comes_from_the_config_unless_flagged():
+    """swarm hardcoded 5 and never loaded the config, so `samples = 2` changed
+    `council review` and not `council swarm`."""
+    assert swarm.resolve_samples(None, {"review": {"samples": 2}}) == 2
+    assert swarm.resolve_samples(4, {"review": {"samples": 2}}) == 4
+    assert swarm.resolve_samples(None, {}) == swarm.DEFAULT_SAMPLES

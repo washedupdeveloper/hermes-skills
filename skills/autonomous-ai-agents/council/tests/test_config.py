@@ -291,3 +291,66 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def test_the_loop_takes_its_defaults_from_the_config():
+    """`[review]` used to be inert: the loop never loaded the file, so a config
+    saying advisory/2/3 still ran full/5/8."""
+    import council_loop
+
+    cfg = {"review": {"mode": "advisory", "samples": 2, "max_rounds": 3, "threshold": 70.0}}
+    assert council_loop.resolve_review_defaults(None, None, None, None, cfg) == (
+        "advisory", 2, 3, 70.0)
+
+
+def test_a_command_line_flag_beats_the_config():
+    import council_loop
+
+    cfg = {"review": {"mode": "advisory", "samples": 2, "max_rounds": 3, "threshold": 70.0}}
+    assert council_loop.resolve_review_defaults("full", 5, 8, 90.0, cfg) == (
+        "full", 5, 8, 90.0)
+
+
+def test_with_no_config_the_loop_agrees_with_the_shipped_defaults():
+    """The documented default and the behaviour must be the same number."""
+    import council_loop
+
+    cfg, path = cfg_mod.load(hermes_home="/nonexistent-hermes-home-xyz")
+    assert path is None
+    assert council_loop.resolve_review_defaults(None, None, None, None, cfg) == (
+        cfg["review"]["mode"], cfg["review"]["samples"],
+        cfg["review"]["max_rounds"], cfg["review"]["threshold"])
+
+
+def test_the_documented_default_mode_is_what_a_bare_run_uses():
+    """The renderer prints `mode = advisory` as the default; a bare run must be advisory."""
+    import council_loop
+
+    assert cfg_mod.DEFAULTS["review"]["mode"] == "full"
+    assert council_loop.resolve_review_defaults(None, None, None, None, {})[0] == "full"
+
+
+def test_a_schema_version_from_the_future_is_reported():
+    """The field existed and nothing read it: a file from a newer build loaded clean."""
+    cfg, _ = cfg_mod.load(hermes_home="/nonexistent-hermes-home-xyz")
+    newer = dict(cfg)
+    newer["schema_version"] = cfg["schema_version"] + 1
+    problems = cfg_mod.validate(newer)
+    assert any("schema_version" in p for p in problems), problems
+
+
+def test_the_review_refuses_a_config_it_cannot_use(tmp_path: Path):
+    """The loop is the main entry point and did not validate what it loaded."""
+    import os
+    import subprocess
+
+    home = tmp_path / "hermes"
+    home.mkdir()
+    (home / "review-council.toml").write_text(
+        '[review]\nthreshold = 80.0\nsamples = 0\nmode = "full"\nmax_rounds = 8\n',
+        encoding="utf-8")
+    env = {**os.environ, "HERMES_HOME": str(home)}
+    r = subprocess.run([sys.executable, str(SCRIPTS / "council_loop.py"), str(REPO), "--dry-run"],
+                       env=env, capture_output=True, text=True, timeout=180)
+    assert r.returncode == 2, (r.returncode, r.stdout[-300:], r.stderr[-300:])
+    assert "samples" in r.stderr, r.stderr

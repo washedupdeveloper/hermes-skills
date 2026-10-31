@@ -521,7 +521,13 @@ def test_update_novelty_tracks_and_resets_the_streak():
 
 def test_build_parser_defaults_match_the_documented_contract():
     args = loop.build_parser().parse_args([])
-    assert args.mode == "full", "autonomy is the point; semi/advisory are opt-in"
+    # The default is what a bare run USES, not what the parser stores: the config
+    # may set it, so the contract is asserted after resolution.
+    mode, samples, max_rounds, _ = loop.resolve_review_defaults(
+        args.mode, args.samples, args.max_rounds, args.threshold, {})
+    assert mode == "full", "autonomy is the point; semi/advisory are opt-in"
+    assert samples == 5
+    assert max_rounds == 8
     assert args.threshold is None, "resolved from calibration.json, never hardcoded"
     assert args.epsilon == 0.5
     assert args.min_rounds == 1
@@ -1248,7 +1254,9 @@ def test_the_reviewer_is_one_generalist_sampled_five_times_by_default():
     equal cost (22/22 injected defects against 13/22), so this is the only reviewer
     mode and five is the default sample count."""
     args = loop.build_parser().parse_args(["repo"])
-    assert args.samples == 5, args
+    _, samples, _, _ = loop.resolve_review_defaults(
+        args.mode, args.samples, args.max_rounds, args.threshold, {})
+    assert samples == 5, args
     # The specialists mode and its spawner were deleted, not merely defaulted away.
     assert not hasattr(args, "reviewer_mode"), args
     assert not hasattr(loop, "run_reviewers"), "the fan-out spawner still exists"

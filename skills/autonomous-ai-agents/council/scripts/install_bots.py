@@ -279,7 +279,7 @@ def main() -> int:
     print()
     review = cfg.get("review") or {}
     print("Then review something:")
-    print(f"  council review <repo> --mode {review.get('mode', 'advisory')} --max-rounds 1")
+    print(f"  council review <repo> --mode {review.get('mode', 'full')} --max-rounds 1")
     print()
     print(f"  --samples N trades recall for wall-clock (config default: "
           f"{review.get('samples', 5)}).")

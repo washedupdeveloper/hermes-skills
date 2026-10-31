@@ -842,3 +842,46 @@ def test_gitleaks_ignores_review_scratch(tmp_path):
     paths = [f["location"]["path"] for f in out["findings"]]
     assert paths == ["app.py"], (
         "ignored scratch was reported as a finding: " + str(paths))
+
+
+def test_flake_check_builds_what_it_reports(monkeypatch, tmp_path):
+    """A pass requires the build, not just the evaluation."""
+    (tmp_path / "flake.nix").write_text("{}\n", encoding="utf-8")
+    calls = []
+
+    def fake_bridge(root, args, timeout=600, **kw):
+        calls.append(list(args))
+        return 0, "all checks passed!"
+
+    monkeypatch.setattr(probes, "_bridge", fake_bridge)
+    res = probes.probe_flake_check(tmp_path)
+
+    assert len(calls) == 2, calls
+    assert "--no-build" in calls[0]
+    assert "--no-build" not in calls[1], calls[1]
+    assert res["ran"] is True
+    assert res["signal"] == 100.0
+
+
+def test_a_red_build_is_not_a_pass(monkeypatch, tmp_path):
+    """Evaluation green, build red: the old probe scored this 100."""
+    (tmp_path / "flake.nix").write_text("{}\n", encoding="utf-8")
+    seq = [(0, "all checks passed!"), (1, "error: Cannot build check-formatting.drv")]
+    monkeypatch.setattr(probes, "_bridge", lambda *a, **k: seq.pop(0))
+
+    res = probes.probe_flake_check(tmp_path)
+
+    assert res["signal"] == 0.0, res
+    assert res["findings"], res
+    assert "FAILED" in res["note"]
+
+
+def test_a_build_that_does_not_finish_is_not_a_pass(monkeypatch, tmp_path):
+    (tmp_path / "flake.nix").write_text("{}\n", encoding="utf-8")
+    seq = [(0, "ok"), (124, "timed out after 1800s")]
+    monkeypatch.setattr(probes, "_bridge", lambda *a, **k: seq.pop(0))
+
+    res = probes.probe_flake_check(tmp_path)
+
+    assert res["signal"] is None, res
+    assert "not counted as a pass" in res["note"]
