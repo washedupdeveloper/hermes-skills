@@ -118,7 +118,9 @@ around them is a rounding error.
 
 So never mass-rewrite a library for verbosity. Fix what is unambiguously broken — a
 dead reference, a description past the index window, a rule stated twice — and report
-the **measured** recovery instead of claiming an improvement you did not verify.
+the **measured** recovery instead of claiming an improvement you did not verify. Report
+shape: verdict, numbers, what was deliberately left alone and why — no process narration,
+minimal markdown, and no adjective where a count belongs.
 
 **When the owner asks for a library-wide rewrite, the measurement is the answer.** Run the
 audit first and report what it says: filler lands near 0.2% of the corpus and duplicated 6-gram mass
@@ -168,6 +170,9 @@ whole and the skill keeps a pointer. Four steps, in order.
    assets/skill-queries.json` routes a frozen query set against the descriptions and reports
    accuracy, MRR and the mean body-token cost of the skill it chose. Run it on a worktree of
    HEAD and on the working tree, or the delta is not attributable to the pass.
+   It measures lexical overlap between your query text and the description — **not** whether
+   an agent selects the skill — so treat the number as a smoke test for wording, never as
+   evidence that a skill performs better.
 2. **Move the body byte-for-byte.** Split on `\n## <heading>\n`, write the tail to
    `references/<topic>.md`, then assert the original body is a substring of the new file. The
    assertion is the proof that nothing was deleted; a word count is not.
@@ -233,6 +238,15 @@ and the loop exits early — a sweep reported 4 of 65 scripts and read as a clea
 the child (`</dev/null`) and assert the items checked against `find … | wc -l`; a check that
 silently skipped most of the tree is a pass you cannot quote.
 
+**A reference check must read fenced blocks, not only prose spans.** A dead path inside a
+```bash block is a command a reader runs, and a span-only scan never sees it — a retired
+`scripts/install-bots.sh` sat that way through three audits. Scope the check to a directory
+the skill actually ships: `scripts/x.py` in a skill with no `scripts/` names another
+repository and cannot be verified here, so skipping it is correct, not lenient. Then prove
+the check by injection: append a command naming a file that does not exist, watch the test
+fail on that exact path, remove the line, watch it pass. A check that has only ever passed
+is an untested claim.
+
 **Point the validator at every tree the loader sees, not just one.** `validate-skills.py`
 resolves `related_skills` against the union of the roots it is given, so a repo-only run
 reports every bundled sibling as unresolved and buries the real failures among false ones:
@@ -286,10 +300,15 @@ review patches an existing skill **in place, wherever it is found**, so an unatt
 agent can write into a source-of-truth repo. A symlink does not fix it either —
 `skill_manage` follows symlinks, so the write is *redirected* through the link rather
 than prevented. Only a Nix **store** path is genuinely immutable. For a git-tracked
-repo the gate is **git**: a stray write shows in `git status` / `git diff` and reverts
-with `git checkout`, which is full coverage at zero friction — prefer it to
-`skills.write_approval`, and set that only where the tree is untracked. Run
-`git status` before committing anything you did not write yourself.
+repo the gate is **git**: a stray write shows in `git status` / `git diff`, which is full
+coverage at zero friction — prefer it to `skills.write_approval`, and set that only where
+the tree is untracked. Run `git status` before committing anything you did not write
+yourself.
+
+**Never `git checkout -- <file>` to undo your own experiment.** It restores HEAD and
+silently discards whatever the background review appended since, with no copy and no
+warning; a dirty file was dirty before you touched it. `cp` it aside first and restore
+from the copy, or `stash` and read what the stash holds before dropping it.
 
 **Stage explicit paths, never `git add -A`, in a tree another writer touches.** A blanket add
 folds the background review's uncommitted edits into your commit and destroys attribution:
@@ -502,8 +521,10 @@ content** — and say plainly that the missing depth is a real gap worth writing
 - **A CLI verb a skill teaches that the tool does not have.** `hermes pm install` reads like
 every command around it and fails only when a reader runs it. Extract every `hermes <verb>` the
 tree names, diff the set against `hermes --help`, and read each miss: prose like "hermes is…"
-is a false positive, a command in a code block is a dead instruction. Replace it with the verb
-that exists (`hermes update`), then re-grep for the retired string.
+is a false positive, a command in a code block is a dead instruction — unless the dispatch
+table registers it as a hidden or dev verb, which `--help` never lists, so read the table
+before calling it dead. Replace it with the verb that exists (`hermes update`), then re-grep
+for the retired string.
 - **Descriptions over 60 characters.** The window and its cost belong to
   `hermes-agent-skill-authoring` (the index truncates); past it, a trigger never fires.
 - **`related_skills` naming a skill that does not exist** in the scanned tree — a
