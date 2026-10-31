@@ -34,6 +34,11 @@ treatment. Same model, same toolset, same scope and reporting instructions.
 
 - **A delta inside the noise is not a result.** Two samples, one task, one model is a pilot. Say
   "no measurable difference"; never "X is better".
+- **Print the range before quoting a mean.** With two runs per arm you cannot estimate noise,
+  but the spread is visible in the four numbers: one arm finishing in 51s and 421s on the same
+  task has a range eight times wider than a 25s difference between the arms' means, so that
+  difference is not a result. Means conceal this and read as precision; the range exposes it.
+  Effort figures are descriptive unless the arms' ranges separate.
 - **Absolute scores do not travel.** A threshold calibrated on real repositories scores a
   scratch repository in the 50s. Only the delta between arms is meaningful, and it is meaningful
   only because both arms sat under the same gate and threshold.

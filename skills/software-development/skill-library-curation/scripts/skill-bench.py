@@ -69,9 +69,11 @@ def load(root: pathlib.Path) -> list[dict]:
         text = p.read_text(encoding="utf-8", errors="replace")
         fm = frontmatter(text)
         rel = p.parent.relative_to(root).as_posix()
-        tags = re.search(r"tags:\s*\[([^\]]*)\]", text)
-        blob = " ".join([rel.replace("/", " "), fm.get("description", ""),
-                         tags.group(1) if tags else ""])
+        # Only what the model receives: the prompt lists a skill as `name: description`.
+        # The loader reads name/description/platforms/category/environments/related_skills;
+        # `metadata.hermes.tags` is read by nothing, so scoring it measures an easier problem
+        # than routing — it doubled the measured effect once.
+        blob = f"{fm.get('name', p.parent.name)} {fm.get('description', '')}"
         rows.append({
             "skill": rel,
             "name": fm.get("name", p.parent.name),

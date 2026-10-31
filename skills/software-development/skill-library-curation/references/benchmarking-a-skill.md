@@ -22,6 +22,9 @@ A benchmark is only readable if the scorer was proven in both directions first.
 
 1. **Pristine fails, and only for the planted reason.** Print the full reason list:
    any other entry is a false positive in the scorer, and it will mislabel the arms.
+   A second, unrelated reason voids the run: a fixture that disagrees with its own task text,
+   or a scorer that reads an untracked harness file, means the batch cannot be scored. Rebuild
+   the fixture and re-dispatch; do not report numbers from a run you know is broken.
 2. **A gold solution passes.** A scorer that only ever fails measures nothing.
 3. **The tempting naive fix fails on content, not on exit.** This is the whole design:
    a trap that crashes teaches nothing, because every agent notices a crash. The wrong

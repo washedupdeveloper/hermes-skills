@@ -158,6 +158,19 @@ def test_no_dead_paths_in_fenced_commands():
     assert not bad, f"dead paths in fenced commands: {bad}"
 
 
+def test_the_routing_bench_scores_only_what_the_prompt_shows():
+    """Hermes lists a skill to the model as `name: description`.
+
+    The bench once scored `metadata.hermes.tags` too — a field the loader reads
+    nowhere — and reported twice the effect size: held-out 0.57 -> 0.63 became
+    0.43 -> 0.47 once the tags were removed.
+    """
+    src = (SKILLS / "software-development/skill-library-curation/scripts/skill-bench.py").read_text(
+        encoding="utf-8")
+    assert "tags.group" not in src, "the bench is scoring metadata the loader never reads"
+    assert "fm.get('description', '')" in src, "the description must be in the scored blob"
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

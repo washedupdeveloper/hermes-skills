@@ -198,7 +198,11 @@ traps and the ceiling case: `references/benchmarking-a-skill.md`.
 **A routing number is evidence only if the queries were written blind.** Choose the query
 set before reading the descriptions, or draw it from real session requests — writing queries
 while looking at the text you are about to change measures your own fitting. Measured on one
-library: the tuned 31-query set read 0.87 → 0.97, while 30 held-out queries read 0.57 → 0.63.
+library: the tuned 31-query set read 0.87 → 0.97, while 30 held-out queries read 0.43 → 0.47.
+The first run of the bench reported 0.57 → 0.63 because it scored `metadata.hermes.tags` as
+well; the loader never reads that field, so half the effect was a signal the model does not
+receive. Score only what the prompt shows — name and description — or the number measures
+an easier problem than routing.
 Quote the held-out delta as the effect size; the tuned figure only shows the set was too easy.
 
 **Score a candidate description in memory before writing it.** Substitute the string into the

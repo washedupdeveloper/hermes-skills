@@ -66,6 +66,14 @@ Each states the defect it prevents and the check that can fail.
   project > custom > user > bundled.
 - **Defaulting is explicit at the boundary** — a named `resolve(request): Spec` in the owning
   implementation, never a hidden `?? default` inside the operation that consumes it.
+- **A config file needs a reader, and the reader needs a proof of effect.** A documented key that
+  nothing loads is worse than no key: the user edits it, the system ignores it, and no error says
+  so. Prove it with a dry run that prints resolved values — identical output with and without the
+  file means the file has no reader. Repair by resolving once at the boundary (a pure
+  `resolve(flags, cfg)`, flags defaulting to `None` so "unset" is distinguishable from "set to
+  the default"), then move any contract test that asserts a parser default onto the resolved
+  value: the contract is effective behaviour, not argparse. Procedure and the four-run proof:
+  `references/config-plumbing.md`.
 - **Tunables are config, not constants.** Deployment-varying choices are validated config
   fields; a `DEFAULT_*` constant or a test hook is not configurability. Protocol constants,
   external specs and security invariants stay fixed.
