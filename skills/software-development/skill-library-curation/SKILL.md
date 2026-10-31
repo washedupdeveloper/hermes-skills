@@ -239,13 +239,13 @@ the child (`</dev/null`) and assert the items checked against `find … | wc -l`
 silently skipped most of the tree is a pass you cannot quote.
 
 **A reference check must read fenced blocks, not only prose spans.** A dead path inside a
-```bash block is a command a reader runs, and a span-only scan never sees it — a retired
-`scripts/install-bots.sh` sat that way through three audits. Scope the check to a directory
-the skill actually ships: `scripts/x.py` in a skill with no `scripts/` names another
-repository and cannot be verified here, so skipping it is correct, not lenient. Then prove
-the check by injection: append a command naming a file that does not exist, watch the test
-fail on that exact path, remove the line, watch it pass. A check that has only ever passed
-is an untested claim.
+fenced block is a command a reader runs, and a span-only scan never sees it — a retired
+install script sat that way through three audits. Scope the check to a directory the skill
+actually ships: a `scripts/<file>.py` in a skill with no `scripts/` names another repository
+and cannot be verified here, so skipping it is correct, not lenient. Then prove the check by
+injection: append a command naming a file that does not exist, watch the test fail on that
+exact path, remove the line, watch it pass. A check that has only ever passed is an untested
+claim.
 
 **Point the validator at every tree the loader sees, not just one.** `validate-skills.py`
 resolves `related_skills` against the union of the roots it is given, so a repo-only run
