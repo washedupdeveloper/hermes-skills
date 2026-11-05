@@ -215,7 +215,16 @@ credential; the reviewer said nothing; the aggregate is 100 and the run looks cl
 the producer against the toolchain's own record: if the analyzers observed a defect and the run
 settled **no** claim at all, the verdict is `unprovable` — not satisfied, and not failed. Leave the
 number at 100 (it is honest about what it measured) and let the verdict carry the gap, so the
-score keeps its meaning and the run cannot be certified on a silence. Measured before the rule
+score keeps its meaning and the run cannot be certified on a silence.
+
+**Scope that cross-check to findings that could block.** "The probes saw a defect" is too broad a
+predicate when any finding counts: a clean tree still yields low-severity nits (an unused lambda, a
+missing architecture doc), so a producer that correctly stays silent about them is scored
+`unprovable` and its rung is discarded from the corpus. Measured: two `low` probe findings turned a
+clean rung into `unprovable` with an aggregate of 100, cost a six-run corpus one of its three clean
+members, and the derivation refused. Count only findings at a severity that could block
+(`high`/`critical`), and treat an **unlabelled** finding as blocking — a probe that names no
+severity is not evidence the producer was entitled to ignore it. Measured before the rule
 existed: probes found two defects, the reviewer settled none, aggregate 100.0, verdict clean.
 **Partial silence is the same failure attenuated, and the score rewards it.** Caps and penalties
 attach only to claims that were **confirmed**, so a producer that finds a fraction of the planted

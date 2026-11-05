@@ -90,6 +90,12 @@ def test_no_dead_references():
                 if not (p.parent / rel).exists():
                     bad.append(f"{p.parent.name} -> {rel}")
             for m in re.finditer(r"`(\.\./[^`\s]+)`", line):
+                rel = m.group(1)
+                # A placeholder is not a path — the same exemption the reference rule above
+                # already makes. `../…` in prose names nothing, and without this the sentence
+                # that documents the escape detector is itself flagged by it.
+                if any(ch in rel for ch in "<>…*"):
+                    continue
                 if write_verbs.search(line) or illustration.search(line):
                     continue
                 bad.append(f"{p.parent.name} -> {m.group(1)} (escapes the skill dir)")

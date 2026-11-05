@@ -46,6 +46,28 @@ path, and print their line ranges. A measurement that says "never found" is a hy
 matcher until that file has been read. Without the column at all, the derivation cannot tell "the
 reviewer found everything" from "the reviewer found nothing and scored 100".
 
+## Prove rung 0 is clean, and sample inside the toolchain
+
+Two environment faults make every point wrong while each individual run looks healthy. Check both
+before paying for the corpus.
+
+**A "clean" base is a hypothesis until the gate's own probes agree.** Rung 0 is the base untouched,
+which is not the same as clean: a fixture whose `flake.nix` does not evaluate fails `nix flake check`,
+so the probe records `critical` findings and the rung can never certify — the derivation then refuses
+and reads like a scorer bug. Run the gate on the base once, and accept it only when it comes back
+clean at the probes' own hands, before any producer time is spent. Measured: a golden fixture was
+used as rung 0 on the strength of its name, every clean run failed `nix flake check`, and the corpus
+had to be rebuilt on a two-file base that actually evaluates.
+
+**Sample inside the pinned toolchain, or detection reads as zero.** The producer emits proofs, but
+`collect` is what *executes* them: run it where the analyzers are absent and every proof comes back
+`unrunnable`, which the claims scale reads as a defect the producer missed. Measured on a six-run
+ladder sampled from a bare shell: `detected 0/1` on all three defective rungs, with the note naming
+the unrunnable proofs. The same runs, re-adjudicated inside the devshell, confirmed two critical
+findings including the planted credential. Run the sampler and `collect` under the same toolchain
+invocation the gate documents, and treat "undetected" with unrunnable proofs as an environment
+finding rather than a producer one — the two lead to opposite repairs.
+
 ## Shape the ladder before you spend a run on it
 
 A ladder that raises the defect count by **adding files** also raises what the deterministic half

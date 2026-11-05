@@ -540,6 +540,12 @@ content** — and say plainly that the missing depth is a real gap worth writing
   "written": name the directory (`scripts/`) or lead with the verb. The escape cuts both
   ways — a genuine dead pointer on a line that happens to say "add" is silently skipped, so
   neither a pass nor a failure from that test is evidence until you have read the line.
+  **A path being transformed is an illustration, not a pointer.** Teaching a string-handling trap
+  means writing the bad path literally — `lstrip("./")` strips characters, so `../a.py` becomes
+  `a.py` — and a bare backticked `../…` matches the escape detector, naming no file the skill
+  expects to have. Do not delete the example to make the gate green: a correct illustration is the
+  content. Teach the check that a line showing a transformation (`becomes`, `turns into`, `->`, `→`)
+  is describing a value, not referencing a file, and pin it with the illustration itself.
 - **A cross-skill pointer written as a path is itself a dead reference.** Paths resolve
   against the *naming* skill's own directory, so `council/scripts/install_bots.py` cited from
   another skill names a path that does not exist under it — and repairing one dead reference
