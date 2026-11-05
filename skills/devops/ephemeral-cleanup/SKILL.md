@@ -65,7 +65,11 @@ survive reboots (verified). Treat every probe run on the guest as a cleanup debt
 - **Read-only caches need `chmod` first.** Go marks its module cache read-only;
   plain `rm -rf ~/go` fails file-by-file with `Permission denied`. Use
   `chmod -R u+w ~/go && rm -rf ~/go ~/.cache/go-build ~/.config/go`, then verify
-  each target is gone.
+  each target is gone. **A materialised container rootfs is the same shape at a larger
+  scale**: every store path in it is mode 0444, so `rm -rf` on a 2.5 GB copy emits one
+  `Permission denied` per file — megabytes of output in a single tool result — and deletes
+  nothing. `chmod -R u+w <tree> && rm -rf <tree> 2>/dev/null`, then assert the path is gone;
+  the noise is not evidence of progress and reading it costs more than the cleanup.
 - **`nix build -o /tmp/…` output symlinks are gcroots.** The symlink is the only
   thing pinning that store path; remove it once the artefact is inspected.
 - **`nix-collect-garbage` and generation deletion are never automatic.** Old

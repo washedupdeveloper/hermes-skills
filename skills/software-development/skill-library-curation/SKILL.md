@@ -546,6 +546,10 @@ content** — and say plainly that the missing depth is a real gap worth writing
   expects to have. Do not delete the example to make the gate green: a correct illustration is the
   content. Teach the check that a line showing a transformation (`becomes`, `turns into`, `->`, `→`)
   is describing a value, not referencing a file, and pin it with the illustration itself.
+  **Exempt placeholders in every rule that parses a path, not just in the one that flagged you** —
+  `../…`, `../<name>` and `../*` name no file. A checker whose reference rule skips `<`/`>` but
+  whose escape rule does not will flag the very sentence that documents the exemption, and the
+  tempting repair is to delete a correct example: give both loops the same placeholder test instead.
 - **A cross-skill pointer written as a path is itself a dead reference.** Paths resolve
   against the *naming* skill's own directory, so `council/scripts/install_bots.py` cited from
   another skill names a path that does not exist under it — and repairing one dead reference

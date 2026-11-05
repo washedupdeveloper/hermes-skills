@@ -194,6 +194,17 @@ corpus measured at a cheaper configuration than the one that ships describes a d
 
 - **Dropping an undetected bad rung silently.** The manifest then contains only the rungs the
   producer happened to handle, which is a threshold fitted to the producer's strengths.
+- **A derived threshold written beside the installed module never lands.** The default
+destination is the module's own directory, which in a packaged build is a read-only store path:
+the derivation succeeds and then dies at `OSError: [Errno 30] Read-only file system`, so the next
+run is still uncalibrated while the console showed a threshold. Resolve the destination from the
+checkout in the working directory when one is present, keep an explicit `--out` for everything
+else, and then make the file part of what ships — a module list is an explicit enumeration, so a
+new JSON asset beside the scripts is invisible to every packaged build until it is added to that
+list. Because a flake's source is the **git-tracked** tree, it must also be staged before the
+build that copies it can see it (`cp: cannot stat …calibration.claims.json` is an untracked file,
+not a typo). Prove it from the artifact: `ls <framework>/scripts/calibration.claims.json`, and
+compare the threshold it carries with the one the gate reports.
 - **Deriving from the same single sample twice.** Two derivations over one draw agree with each
   other and both describe the same accident; the agreement reads as corroboration.
 - **Deriving before the coverage rule exists.** See "a score derived from what the producer

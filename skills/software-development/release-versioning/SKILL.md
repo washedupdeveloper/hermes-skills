@@ -269,6 +269,16 @@ tree's.
   before the change and re-measure each after it — the mechanics are in the
   `nix-declarative-config` skill, `flake-cost-and-structure.md`.
 
+- **A tag freezes every sentence about the released behaviour — grep them before tagging.**
+  The version check compares version strings, so a doc stating the *old* behaviour passes it
+  and ships inside the tag. Measured: a release closed a milestone's open parameter and the
+  tag went on while `docs/FRAMEWORK.md` still said a claims-scored run "is reported
+  `uncalibrated` rather than compared" — true before the release, false in it. Before the tag,
+  grep the docs and README for the shapes a behaviour change invalidates (`does not exist`,
+  `not supported`, `rather than`, `cannot`, `not yet`) and fix or delete every hit. If the tag
+  is already pushed, land the correction as a follow-up commit and say the tag is one commit
+  behind; do not force-move a published ref to spare the reader one `git log`.
+
 ## Writing it down
 
 Put the policy in `docs/VERSIONING.md`, link it from the README's docs table, and name it
