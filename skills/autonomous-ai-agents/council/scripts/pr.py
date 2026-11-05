@@ -167,6 +167,42 @@ def _change_line(run_dir: Path) -> str:
             f"Its requirements and tasks are the plan; this comment is the evidence for it.")
 
 
+def _claims(run_dir: Path, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The claim ladder for this run, or None when claims.py cannot be loaded.
+
+    A missing ladder must not break the post — but it must not be *silent* either, which is why the
+    body says so rather than omitting the section.
+    """
+    try:
+        module = load("claims", HERE / "claims.py")
+        return module.build(run_dir, result=result)
+    except Exception:  # noqa: BLE001 - publishing is not the place to fail on a side read
+        return None
+
+
+def _claims_block(run_dir: Path, result: Dict[str, Any]) -> List[str]:
+    """What this run may say about the world, and the first thing it may not.
+
+    This is the enforcement point for the whole ladder: the comment is generated, so a claim the
+    evidence does not support cannot appear in the text a reviewer reads.
+    """
+    payload = _claims(run_dir, result)
+    if payload is None:
+        return ["### Claims this run supports", "",
+                "_claims.py could not be evaluated for this run; no claim is asserted._", ""]
+    lines = ["### Claims this run supports", "",
+             f"Evidence reaches **{payload.get('claim_label') or payload.get('claim_state')}**.", ""]
+    blocked = payload.get("blocked_claims") or []
+    if blocked:
+        first = blocked[0]
+        label = str(first.get("claim", "")).replace("_", " ")
+        lines += [f"**Not claimed: {label}.** {first.get('reason', '')}", ""]
+    if payload.get("not_applicable"):
+        lines += [f"_Not applicable to this run: {', '.join(payload['not_applicable'])}._", ""]
+    lines += [f"<sub>{payload.get('claim_boundary', '')}</sub>", ""]
+    return lines
+
+
 def body_for(result: Dict[str, Any], run_dir: Path, pr: int) -> str:
     """The review body: the verdict, then the evidence, then the marker."""
     satisfied = result.get("status") == "satisfied"
@@ -194,8 +230,7 @@ def body_for(result: Dict[str, Any], run_dir: Path, pr: int) -> str:
         lines += ["### The change", "", change, ""]
 
     stacks = ", ".join(result.get("stacks") or []) or "none detected"
-    lines += [
-        "---",
+    lines += [*_claims_block(run_dir, result), "---",
         f"<sub>review-council · {result.get('size_kloc', 0):.1f} KLOC · "
         f"stacks: {stacks} · run `{run_dir.resolve().name}` · "
         f"recomputed from the reviewer files by the deterministic gate</sub>",
@@ -388,7 +423,36 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"  posted review {review_id} to {args.repo}#{args.pr}")
     if url:
         print(f"  {url}")
+
+    # A 2xx is the write being accepted, not the write being visible. Read it back before
+    # recording the receipt: the `published` rung claims a fact, and a claim with no read-back is
+    # the thing this whole ladder exists to stop.
+    receipt = _confirm_published(args, url, review_id, run_dir, token)
+    if receipt is None:
+        print("  read-back failed: the review is not recorded as published "
+              "(the `published` claim stays blocked)", file=sys.stderr)
+        return 0
+    print(f"  read back ok — recorded in {receipt}")
     return 0
+
+
+def _confirm_published(args: argparse.Namespace, url: Optional[str], review_id: Optional[Any],
+                       run_dir: Path, token: str) -> Optional[Path]:
+    """GET the review we just created; write the receipt only when it comes back."""
+    if not url or review_id is None:
+        return None
+    status, payload = request("GET", str(url), token)
+    if status != 200:
+        return None
+    observed = payload.get("html_url") if isinstance(payload, dict) else None
+    if not observed:
+        return None
+    try:
+        module = load("claims", HERE / "claims.py")
+        sha = target_sha(run_dir) or ""
+        return module.record_published(run_dir, str(observed), int(review_id), sha)
+    except Exception:  # noqa: BLE001 - the post stands; only the receipt is lost
+        return None
 
 
 if __name__ == "__main__":

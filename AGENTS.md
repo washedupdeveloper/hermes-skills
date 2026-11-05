@@ -21,6 +21,12 @@ The source of truth for locally-authored Hermes skills, mounted into Hermes thro
    agent-created skills land in `~/.hermes/skills/` to be promoted by hand. `./setup.sh` applies
    both settings.
 
+5. **The contract is one file.** `library/contract.json` holds the required frontmatter, the index
+   window and the category set. `nix/tests.nix`, `scripts/skill-contract.py` and
+   `plugins/library-guard` read it instead of restating it. Change a rule there, never in three
+   places; the plugin's `DEFAULTS` mirror is asserted by `tests/unit/test_library_guard.py`, so a
+   half-change fails the gate.
+
 ## Adding a skill
 
 - One directory per skill: `<category>/<skill-name>/SKILL.md`.

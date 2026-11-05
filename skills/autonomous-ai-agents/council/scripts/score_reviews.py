@@ -64,6 +64,10 @@ STACK_TOOLS: Dict[str, Dict[str, List[str]]] = {
         "python": ["pytest", "py-compile"],
         "nix": ["flake-check", "nix-eval"],
         "javascript": ["jest", "tsc"],
+        # The runtime lane: what the page does when loaded, which no source check can answer.
+        # `browser` is a probe, not an EXTERNAL_TOOL: the driver is host-provided, and its absence
+        # is reported as `ran: false` so beta drops instead of the score passing on nothing.
+        "web": ["browser"],
         "rust": ["cargo-test", "cargo-check"],
         "go": ["go-test", "go-vet"],
         "shell": ["bash-n"],
@@ -146,6 +150,29 @@ STACK_MARKERS: Dict[str, Tuple[str, ...]] = {
     "nix": ("flake.nix", "default.nix", "shell.nix"),
     "python": ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "tox.ini"),
     "javascript": ("package.json", "tsconfig.json"),
+    # A page that can be LOADED, which is a different question from "is there JavaScript in here".
+    # The marker is the entry point, so a JS library with no page stays out of the runtime lane and
+    # is never penalised for it.
+    "web": (
+        "index.html",
+        "public/index.html",
+        "src/index.html",
+        "vite.config.ts",
+        "vite.config.js",
+        "next.config.js",
+        "next.config.mjs",
+        "svelte.config.js",
+        "astro.config.mjs",
+        "nuxt.config.ts",
+        # App-Router and Pages-Router projects have no root HTML to load: they need a server, which
+        # is what `$COUNCIL_WEB_URL` is for. Detected here so the stack is still `web` and the
+        # reviewer is told the runtime was not observed rather than being scored as if there were
+        # nothing to observe.
+        "app/page.tsx",
+        "app/page.jsx",
+        "pages/index.tsx",
+        "pages/index.jsx",
+    ),
     "rust": ("Cargo.toml",),
     "go": ("go.mod",),
     "shell": ("Makefile",),
@@ -155,6 +182,7 @@ STACK_EXTENSIONS: Dict[str, Tuple[str, ...]] = {
     "nix": (".nix",),
     "python": (".py",),
     "javascript": (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"),
+    "web": (),
     "rust": (".rs",),
     "go": (".go",),
     "shell": (".sh", ".bash"),

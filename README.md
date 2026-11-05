@@ -176,6 +176,7 @@ bash tests/e2e/test_setup.sh      # setup.sh, against a stubbed `hermes`
 | gate | what it enforces | where |
 |---|---|---|
 | `skills` | frontmatter complete and closed, every key parsed, name matches its directory, unique, description inside the index window, no CRLF | `nix/tests.nix` |
+| `contract` | every catalog skill satisfies `library/contract.json`, through the same function the runtime guard calls | `nix/checks.nix` |
 | `tests` | the retained unit suite, on **Linux, macOS and Windows** | `.github/workflows/ci.yml` |
 | `live` | the real Hermes discovers every catalog skill and honours `environments:` | same |
 | `claim audit` | every mechanical claim in the prose is checked, not asserted | same |
@@ -189,6 +190,28 @@ unverified here, and an unverified assertion teaches people to ignore red.
 `scripts/verify-live.py` installs nothing; it asks the `hermes` on your PATH, and the `live` CI job
 installs Hermes to run it. It honours `environments:`, so a skill gated on `[s6]` is correctly absent
 everywhere else.
+
+### The contract, and the guard that enforces it
+
+[`library/contract.json`](library/contract.json) is the one home for what makes a skill valid: the
+required frontmatter, the index window, the category set. Three readers share it rather than restate
+it — `nix/tests.nix` (eval tier), `scripts/skill-contract.py` (this gate, and one file on demand),
+and `plugins/library-guard`, which enforces two of the rules where the writes happen instead of
+minutes later in another process:
+
+- a `SKILL.md` write is read back and validated, and the violation returns **inside the same tool
+  result** — the model corrects it while it still has the context;
+- a write into a skill listed in `.bundled_manifest` is refused, because `hermes update` rewrites
+  that directory and the divergence is silent until it bites.
+
+The guard fails open: a hook that can break a tool call is worse than a missing one. Its `DEFAULTS`
+mirror the contract for a wheel installed away from this tree, and
+`tests/unit/test_library_guard.py` fails when the two disagree — the mirror has an owner.
+
+```bash
+python scripts/skill-contract.py --all                              # the gate's own reading
+python scripts/skill-contract.py --check skills/devops/ephemeral-cleanup/SKILL.md
+```
 
 ## Decisions
 

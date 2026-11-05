@@ -15,7 +15,11 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import re
+import shlex
+import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -1357,6 +1361,238 @@ def probe_pytest(root: Path) -> Dict[str, Any]:
     return result("pytest", True, score_from_density(len(findings), root), findings, summary[:120])
 
 
+# --- the runtime lane: a page, observed -------------------------------------
+#
+# Every probe above answers a question about the SOURCE. None of them can tell you what the page
+# does when a browser loads it, which is the one question a frontend change turns on: a component
+# that mounts cleanly in the diff can throw on hydration, a route that resolves in a test can 404,
+# a selector a test mocks can be absent from the real DOM. Reviewing that by reading produces a
+# confident wrong answer, so this lane runs the page and reports what it saw.
+#
+# The driver is a HOST binary, not a shipped one: chromium is a 400 MB closure and the council
+# image is a review tool, not a browser. `browser` therefore joins neither EXTERNAL_TOOLS (the
+# toolchain does not ship it) nor the builtin set (it does not always run). When no driver is
+# present the probe reports `ran: false` with the install hint, beta drops, and the report says the
+# runtime was not observed — the honest answer, and the one this lane exists to make possible.
+# See docs/WEB.md.
+
+#: One argv contract, so a real chromium and a test stub are interchangeable.
+BROWSER_BINARIES: Tuple[str, ...] = (
+    "chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome",
+)
+
+WEB_ENTRIES: Tuple[str, ...] = (
+    "index.html", "public/index.html", "dist/index.html", "build/index.html", "site/index.html",
+)
+
+#: A repository may pin the assertions it wants checked; absent, only runtime failures count.
+WEB_ASSERTIONS = Path(".review-council") / "web-assertions.json"
+
+#: What a browser writes to stderr when the page failed at RUNTIME rather than at load.
+PAGE_ERROR = re.compile(
+    r"\b(Uncaught|TypeError|ReferenceError|SyntaxError|RangeError|Failed to load resource)\b", re.I
+)
+
+
+def browser_driver() -> Optional[str]:
+    """``$COUNCIL_BROWSER_CMD`` verbatim, else a chromium-family binary on PATH, else None."""
+    override = os.environ.get("COUNCIL_BROWSER_CMD", "").strip()
+    if override:
+        return override
+    for name in BROWSER_BINARIES:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def browser_argv(driver: str, url: str, screenshot: Path, budget_ms: int = 8000) -> List[str]:
+    """The exact argv this probe runs, exported so a test can pin the contract without a browser.
+
+    ``$COUNCIL_BROWSER_CMD`` may carry arguments (`/path/chromium --user-agent=…`, or
+    `nix run nixpkgs#chromium --`), so it is split the way a shell would.
+    """
+    prefix = shlex.split(driver) or [driver]
+    return [
+        *prefix,
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--hide-scrollbars",
+        "--disable-dev-shm-usage",
+        f"--virtual-time-budget={budget_ms}",
+        f"--screenshot={screenshot}",
+        "--dump-dom",
+        url,
+    ]
+
+
+def _run_host(argv: List[str], cwd: Path, timeout: int = 120) -> Tuple[int, str, str]:
+    """Run a HOST binary (not the pinned toolchain). ``(rc, stdout, stderr)``; never raises."""
+    try:
+        proc = subprocess.run(
+            argv, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, check=False
+        )
+        return proc.returncode, proc.stdout or "", proc.stderr or ""
+    except FileNotFoundError:
+        return 127, "", f"cannot execute {argv[0]}"
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timed out after {timeout}s"
+    except OSError as exc:  # pragma: no cover - platform dependent
+        return 126, "", f"{type(exc).__name__}: {exc}"
+
+
+def _dom_text(dom: str) -> str:
+    """Visible-ish text of a DOM dump: tags and scripts removed, whitespace collapsed."""
+    without_scripts = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", dom, flags=re.I | re.S)
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", without_scripts)).strip()
+
+
+def _selector_present(dom: str, selector: str) -> bool:
+    """A deliberately small selector grammar, documented rather than guessed.
+
+    Supported: ``#id``, ``.class``, ``tag``, ``tag[attr=value]`` and ``text:<phrase>``. This is not
+    a CSS engine and does not pretend to be one: a full matcher is a dependency, and every
+    unsupported selector would otherwise fail silently as "absent".
+    """
+    s = selector.strip()
+    if not s:
+        return True
+    if s.lower().startswith("text:"):
+        return s[5:].strip().lower() in _dom_text(dom).lower()
+    if s.startswith("#"):
+        return re.search(r'id\s*=\s*["\']%s["\']' % re.escape(s[1:]), dom, re.I) is not None
+    if s.startswith("."):
+        return re.search(r'class\s*=\s*["\'][^"\']*\b%s\b' % re.escape(s[1:]), dom, re.I) is not None
+    attr = re.match(r"^([A-Za-z0-9-]+)\[([A-Za-z-]+)=[\"']?([^\"'\]]+)[\"']?\]$", s)
+    if attr:
+        tag, name, value = attr.groups()
+        return re.search(
+            r"<%s\b[^>]*\b%s\s*=\s*[\"']?%s" % (re.escape(tag), re.escape(name), re.escape(value)),
+            dom, re.I,
+        ) is not None
+    return re.search(r"<%s\b" % re.escape(s), dom, re.I) is not None
+
+
+def probe_browser(root: Path) -> Dict[str, Any]:
+    """Load the app in a headless browser and report what the page DID, with artifacts.
+
+    The signal is the runtime state, not the source: page errors, an empty render, or a missing
+    asserted selector each cost score. When the lanes cannot run — no entry point, no driver — the
+    result is `ran: false` with the reason, never a pass: unobserved is not correct.
+    """
+    url_env = os.environ.get("COUNCIL_WEB_URL", "").strip()
+    entry: Optional[Path] = None
+    if not url_env:
+        for candidate in WEB_ENTRIES:
+            if (root / candidate).is_file():
+                entry = root / candidate
+                break
+    if not url_env and entry is None:
+        return result(
+            "browser", False, None, [],
+            "no web entry point (index.html, dist/index.html, …) and no COUNCIL_WEB_URL — "
+            "runtime behaviour not observed",
+            parsed=False,
+        )
+
+    driver = browser_driver()
+    if driver is None:
+        return result(
+            "browser", False, None, [],
+            "no headless browser found (looked for %s; set COUNCIL_BROWSER_CMD) — "
+            "runtime behaviour not observed" % ", ".join(BROWSER_BINARIES),
+            parsed=False,
+        )
+
+    url = url_env or (entry.resolve().as_uri() if entry is not None else "")
+    scratch = Path(tempfile.mkdtemp(prefix="council-browser-"))
+    shot = scratch / "page.png"
+    dom_path = scratch / "dom.html"
+    rc, stdout, stderr = _run_host(browser_argv(driver, url, shot), cwd=root)
+
+    findings: List[Dict[str, Any]] = []
+    where = {"path": str(entry.relative_to(root)) if entry is not None else url, "line_range": ""}
+    command = " ".join(browser_argv(driver, url, shot))
+
+    dom = stdout if "<" in stdout else ""
+    if dom:
+        # `newline="\n"`: the artifact must be byte-identical on every platform (test_skills.py
+        # pins this rule for every generator in scripts/).
+        dom_path.write_text(dom, encoding="utf-8", errors="replace", newline="\n")
+
+    if rc != 0 or not dom:
+        tail = (stderr or stdout).strip().splitlines()[-3:]
+        findings.append({
+            "severity": "critical", "status": "open", "location": where,
+            "claim": f"the page did not load (exit {rc}): {' / '.join(tail)[:200]}",
+            "falsifiable_check": command,
+        })
+    else:
+        text = _dom_text(dom)
+        # No visible text AND no media element = nothing rendered. A page of only `<div id="app">`
+        # is the classic failed mount; a canvas- or image-only page is not, which is why the media
+        # check is part of the predicate rather than a length threshold.
+        if not text and not re.search(r"<(canvas|svg|img|video|audio)\b", dom, re.I):
+            findings.append({
+                "severity": "critical", "status": "open", "location": where,
+                "claim": "the page rendered no visible content — the app did not mount",
+                "falsifiable_check": command,
+            })
+
+    seen: set = set()
+    for line in (stderr or "").splitlines():
+        if PAGE_ERROR.search(line) and line.strip() not in seen:
+            seen.add(line.strip())
+            findings.append({
+                "severity": "major", "status": "open", "location": where,
+                "claim": f"runtime error in the browser: {line.strip()[:200]}",
+                "falsifiable_check": command,
+            })
+        if len(seen) >= 8:
+            break
+
+    assertions_path = root / WEB_ASSERTIONS
+    if assertions_path.is_file() and dom:
+        try:
+            declared = json.loads(assertions_path.read_text(encoding="utf-8"))
+            rows = declared.get("assertions", []) if isinstance(declared, dict) else declared
+            for row in rows if isinstance(rows, list) else []:
+                selector = str(row.get("selector", "") if isinstance(row, dict) else row).strip()
+                why = str(row.get("why", "") if isinstance(row, dict) else "").strip()
+                if selector and not _selector_present(dom, selector):
+                    findings.append({
+                        "severity": "major", "status": "open", "location": where,
+                        "claim": f"`{selector}` is absent from the rendered DOM"
+                                 + (f" — {why}" if why else ""),
+                        "falsifiable_check": command,
+                    })
+        except (OSError, ValueError) as exc:
+            findings.append({
+                "severity": "minor", "status": "open",
+                "location": {"path": str(WEB_ASSERTIONS), "line_range": ""},
+                "claim": f"web-assertions.json did not parse: {type(exc).__name__}",
+                "falsifiable_check": f"cat {WEB_ASSERTIONS}",
+            })
+
+    critical = sum(1 for f in findings if f["severity"] == "critical")
+    major = sum(1 for f in findings if f["severity"] == "major")
+    minor = len(findings) - critical - major
+    signal = max(0.0, min(100.0, 100.0 - 40 * critical - 20 * major - 5 * minor))
+
+    note = (
+        f"observed {url} with {Path(driver).name}; dom={dom_path} screenshot={shot}; "
+        f"{critical} critical, {major} major, {minor} minor"
+    )
+    return result("browser", True, signal if parsed_ok(dom) else None, findings, note,
+                  parsed=parsed_ok(dom))
+
+
+def parsed_ok(dom: str) -> bool:
+    """A DOM dump is parseable evidence only if it contains markup at all."""
+    return bool(dom and "<" in dom)
+
+
 PROBES: Dict[str, Callable[[Path], Dict[str, Any]]] = {
     "secret-grep": probe_secret_grep,
     "py-compile": probe_py_compile,
@@ -1383,6 +1619,9 @@ PROBES: Dict[str, Callable[[Path], Dict[str, Any]]] = {
     "zizmor": probe_zizmor,
     "shellcheck": probe_shellcheck,
     "pytest": probe_pytest,
+    # The runtime lane. Expected only where a web entry point or `$COUNCIL_WEB_URL` exists, so a
+    # CLI library is never penalised for having no page to load.
+    "browser": probe_browser,
 }
 
 

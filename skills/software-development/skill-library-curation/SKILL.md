@@ -1,7 +1,7 @@
 ---
 name: skill-library-curation
 description: "Curate the skill library: sourcing, overlap, conflicts."
-version: 1.3.0
+version: 1.3.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -402,6 +402,23 @@ Intake is a different entry point from auditing your own library: the question i
    is registered as a source and installed, so its owner keeps maintaining it. Treat
    "I don't want to maintain this myself" as an instruction to reference, not vendor —
    and when a skill is already vendored that way, say so rather than leaving it.
+
+### Price the pack before taking any of it
+
+An external pack's descriptions are injected before any tool call, so the aggregate
+frontmatter is the recurring cost of importing it — and it is the number nobody quotes.
+
+- **Sum the descriptions.** `awk '/^description:/ {sub(/^description:[ ]*/, ""); t += length($0)}
+  END {print t}' skills/*/SKILL.md`, ÷4 for tokens. Measured: a 153-skill pack carried ~53k
+  characters ≈ 13k tokens of index. Compare against the library's own total before calling
+  a pack "free to install".
+- **Count collisions by family, not by name.** Grep the candidate's skill list for the
+  library's dominant families (review, quality, delegation, ops). Eleven review-family
+  skills in one pack compete with the single review owner for the same trigger words, and
+  the router cannot know which one is measured.
+- **Check the ownership model against Step 8.** A pack that copies into `$HERMES_HOME/skills`
+  and polices edits to its "managed" copies is the opposite of the mounted-repo model.
+  Running both gives one namespace two owners; say which model wins before installing.
 
 ### A source that is mostly a trigger table is a router
 

@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance or auditing another's work.
-version: 1.9.0
+version: 1.10.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -60,6 +60,17 @@ What "run it" means, by artifact:
 | a generator or copier | the output file exists and its content is what you claimed |
 | a container | the image builds and the entrypoint runs once |
 
+**A flag that reaches the parser and the signature but not the call between them is invisible to
+unit tests.** Adding an option is three edits — the argument parser, the function signature, and the
+call site — and the third is the one that gets skipped: the function accepts the new parameter, every
+direct call in the suite passes it, and the CLI still calls the old two-argument form, so the option
+parses, is accepted, and does nothing. The symptom is a feature that "works" in tests and has no
+effect from the command line, and it survives review because no test goes through the parser. After
+adding any flag, drive the **CLI** end to end and assert the effect it was supposed to have — a file
+written, a field populated, a different exit code — not merely that the command exits 0. The same
+shape covers a config key read in one place and ignored in another, and an environment variable
+documented but never consulted.
+
 **A test that requires a fixture you cannot supply is a blocker, not a pass.** Say
 "unproven: needs `<thing>`", never "covered". And when the run contradicts the suite, the
 run wins — the suite is a model, the run is the system.
@@ -95,6 +106,38 @@ observation was true. None was evidence about the target.
 **Run it again after the last edit.** A proof produced before the final change is a proof
 of a tree that no longer exists; this is the same rule as the stale-verdict one below, and
 it is the one that gets skipped because the edit was "only a doc".
+
+## When you cannot observe it, say so — "not observed" is a value
+
+A runtime claim has three states, and only two of them are evidence:
+
+| State | Means | May you call it passing? |
+|---|---|---|
+| **observed** | you ran it and have output: a DOM dump, a status code, a log line, a screenshot path | yes, quoting the artifact |
+| **partly observed** | some paths ran; the failing branch, the client-side route, the browser-only path did not | no — name what did not run, and cap the score |
+| **not observed** | the driver was missing, the service would not start, you reviewed source only | no — and never "appears correct" |
+
+The vocabulary matters because the collapse is invisible: "it evaluates", "the tests are green" and
+"this should work" all read as success, and none of them is an observation. Write `not observed`
+and the reader knows to check; write "looks right" and they do not.
+
+**A review that could not run the thing is a review of the source.** For anything browser-facing
+that is not enough: a component can read correctly and throw on hydration, a route can resolve in a
+unit test and 404 in the app, a selector can exist in a mock and not in the DOM. If you cannot load
+the page, your finding is `runtime not observed`, not a verdict.
+
+Concretely, the cheapest observation that counts:
+
+```bash
+# a static entry, a dev server, or an explicit driver — one of these, and quote what it printed
+council probes browser --repo .                        # review-council's runtime lane (DOM + screenshot)
+COUNCIL_WEB_URL=http://127.0.0.1:3000 council probes browser --repo .
+chromium --headless=new --screenshot=/tmp/p.png --dump-dom https://the.page   # or any driver you have
+node -e 'fetch("http://127.0.0.1:3000/health").then(r=>console.log(r.status))'
+```
+
+Assert a selector, an HTTP status, a console error — something a second person can re-run — instead
+of describing the screen. A screenshot you did not keep is not evidence; a path in the report is.
 
 ## Rules
 
@@ -224,6 +267,20 @@ it is the one that gets skipped because the edit was "only a doc".
   unreachable is not a crash — the honest output is "not reproducible", with the reason.
   Do not add a guard that can never fire to close a finding you did not reproduce; that
   changes behaviour to satisfy a report rather than to fix a defect.
+- **A probe that fails must be shown to fail for the reason under test — reproduce the
+  production caller's environment before believing it.** A gate with a deliberate dispatch
+  guard (an env flag the harness sets, a wrapper the loop uses) refuses a bare invocation, so
+  a probe that calls the library directly gets "could not evaluate the run" and working code
+  looks broken. The failure belongs to the probe: it ran as a different caller. Set the
+  variables the harness sets — and say which — or drive the entry point production uses,
+  before a red result becomes a defect; otherwise the next move is a phantom fix that
+  "repairs" a gate which was never wrong.
+- **`git diff` measures unstaged changes, so a staged tree diffs to nothing.** In a workflow
+  that stages and does not commit, `git diff --stat` prints nothing while every file is
+  modified, and the empty output reads as "unchanged tree" — including in this user's
+  stage-don't-commit convention. Ask `git diff --cached --stat` (or `git diff HEAD`) for the
+  change against the last commit, and name which of the three you ran: a "no diff" drawn from
+  the wrong command is a false clean, and it is the one a reader will trust.
 - **A fix is proven by a repro that fails before and passes after.** A green run after
   the edit is not proof: without the failing case, the edit and an unrelated change are
   indistinguishable. Keep the repro.
@@ -313,7 +370,14 @@ it is the one that gets skipped because the edit was "only a doc".
   vacuously once the pattern stops matching, because it is comparing two empty results.
   `test -s <extracted>` before the comparison is the difference between a check and a
   formality — and the same shape covers any `grep -c` that could return 0 for the wrong
-  reason.
+  reason. **The same trap sits in the one-off verification you write to prove a fix**, where
+  there is no fixture to notice it: `if cmp -s a.png b.png; then echo SAME; else echo
+  DIFFERENT; fi` prints **DIFFERENT** when `cmp` is not installed *and* when both files are
+  missing — and DIFFERENT is the answer that reads as evidence. Require the operands
+  (`[ -s a ] && [ -s b ] || echo INCONCLUSIVE`) and require the comparator to exist before
+  trusting its verdict, or the tool you reached for silently becomes the result. Then open
+  the artefact: a hash difference proves the input mattered, not that the output is right —
+  the two screenshots only became proof when they were looked at.
 
 - **A test of a limit needs an input that crosses it.** A truncation test, a cap, a
   pagination boundary, a "too long" branch — the fixture has to exceed the threshold, or
@@ -326,6 +390,38 @@ it is the one that gets skipped because the edit was "only a doc".
   nothing while reading as coverage. Delete it or make it assert — and when a test was
   written around the wrong fixture, say that the test was wrong rather than that the code
   passed it.
+
+## The verifier is code too
+
+A script written to prove a claim is itself unproven until it has been watched failing. Three
+shapes it takes, and all three report success:
+
+- **A runner that never calls its checks.** Functions defined and never invoked print
+  `0 passed, 0 failed` and exit 0 — a summary indistinguishable from a clean run unless you read
+  the number. Count what executed and fail on zero (`if not ran: sys.exit(1)`), and print the
+  count beside the verdict. Same shape: a loop over an empty list, a `pytest -k` that matched
+  nothing, a `grep` whose pattern stopped matching.
+- **A fixture that never reaches the subject.** When the thing under test sits behind a sequence
+  of gates — a ladder of rungs, a chain of validators — a fixture that fails an early gate makes
+  every later assertion vacuous: the check "passes" because the code it names never ran. Assert
+  the path was reached (the earlier rungs are open, the branch counter moved), not only that the
+  outcome is the one you wanted.
+- **A check that greps for the rule instead of calling it.** A text search (`search_files`, or
+  `grep` inside a shell script) for `if state == "refuted"` is a claim about where the code lives:
+  it fails on a refactor that moved the rule, and it passes on a comment that quotes it. Call the
+  function with one input per branch and assert the outputs; keep text search for "this string
+  exists nowhere", which is a fact about the tree.
+  **A whole-file substring check cannot see a stale line, and a doc is where this hides.** A
+  presence test over the file's vocabulary (`"claims" in text and "cap" in text`) passes on a
+  section that still states the old formula, because the words appear elsewhere in the document.
+  Assert the *line that would be wrong* — the formula, the constant, the sentence being replaced —
+  and assert its absence in the same check, so the assertion fails when the old wording survives.
+
+**When a change alters what a word means, the verifier's expectations are part of the change.** A
+check asserting `certified` after a semantic change that now yields `uncalibrated` reports a false
+failure — and the mirror case is worse, because an expectation written loosely still passes and
+now certifies the old meaning. Re-derive each expectation from the new contract in the same
+change, and say which ones changed meaning rather than quietly editing them.
 
 ## Auditing commits you did not write
 
@@ -416,6 +512,16 @@ The design of a with/without comparison, and how to read a delta smaller than th
 
 Stop immediately when the acceptance proof is complete. Report the commands, their
 results, and any unresolved risk — nothing else.
+
+**Rank the options by what they are, not only by which you prefer.** A design question usually
+offers three kinds, and they are not interchangeable: an **instrument** measures the problem, an
+**objective** removes it, a **workaround** hides it. Recommending the instrument above the objective
+reads as a category error and earns the fair question "why is A above C?" — because A leaves the
+defect exactly where it was. In the option text, name which kind each one is, say plainly that the
+objective cannot be measured (and therefore sequenced safely) without the instrument, and put the
+objective first when the user is asking what to *do*. The workaround goes last, with the cost it
+adds and the fact that it hides the symptom rather than removing it. A recommendation that ranks
+the measurement tool highest is still a recommendation to change nothing.
 
 **An unresolved item is not a deliverable until it carries a decision.** This user
 rejects a report that ends on a list of open questions — the ask is "solve this, or

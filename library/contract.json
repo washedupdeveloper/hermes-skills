@@ -1,0 +1,17 @@
+{
+  "schema": "skill-contract/v1",
+  "description_window": 57,
+  "required_frontmatter": ["name", "description", "version", "author", "license", "platforms"],
+  "categories": [
+    "autonomous-ai-agents",
+    "communication",
+    "devops",
+    "note-taking",
+    "productivity",
+    "security",
+    "software-development"
+  ],
+  "support_dirs": ["assets", "references", "templates", "scripts", "examples"],
+  "gate_command": "nix flake check",
+  "_why": "One home for the values every enforcer reads: nix/tests.nix (eval tier), scripts/skill-contract.py (CLI and gate), plugins/library-guard (runtime). A value here that disagrees with the gate is a failure, not a preference."
+}

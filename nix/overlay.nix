@@ -10,39 +10,54 @@
 # exposed one level deep, where `nix flake check` expects it.
 { }:
 let
-  pluginOf = prev: prev.callPackage ./plugin.nix { };
+  # Every plugin in ./plugins, built from the consumer's own pkgs: one home for the list, so a
+  # consumer cannot enable the audit plugin and silently miss the guard.
+  pluginsFor = prev: [
+    (prev.callPackage ./plugin.nix {
+      src = ../plugins/harness-audit;
+      module = "harness_audit";
+    })
+    (prev.callPackage ./plugin.nix {
+      src = ../plugins/library-guard;
+      module = "library_guard";
+    })
+  ];
+
 in
 {
   default =
     final: prev:
     let
       base = prev.hermes-agent or null;
-      plugin = pluginOf prev;
+      plugins = pluginsFor prev;
     in
     prev.lib.optionalAttrs (base != null) {
       hermes-agent = base.override {
-        extraPythonPackages = [ plugin ];
+        extraPythonPackages = plugins;
       };
-      inherit plugin;
+      plugin = builtins.head plugins;
+      plugins = plugins;
     };
 
   wrapper =
     final: prev:
     let
       base = prev.hermes-agent or null;
-      plugin = pluginOf prev;
+      plugins = pluginsFor prev;
+      suffix = prev.lib.concatMapStringsSep ":" (p: "${p}/${prev.python3.sitePackages}") plugins;
     in
     prev.lib.optionalAttrs (base != null) {
       hermes-agent = prev.symlinkJoin {
-        name = "hermes-agent+harness-audit";
+        name = "hermes-agent+hermes-skills-plugins";
         paths = [ base ];
         nativeBuildInputs = [ prev.makeWrapper ];
         postBuild = ''
           wrapProgram $out/bin/hermes \
-            --suffix PYTHONPATH : "${plugin}/${prev.python3.sitePackages}"
+            --suffix PYTHONPATH : "${suffix}"
         '';
         meta = base.meta or { };
       };
-      inherit plugin;
+      plugin = builtins.head plugins;
+      plugins = plugins;
     };
 }

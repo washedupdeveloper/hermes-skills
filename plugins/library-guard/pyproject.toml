@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-library-guard"
+version = "1.0.0"
+description = "Runtime enforcement of the skill library contract: validate a SKILL.md write, refuse a write into a bundled skill"
+requires-python = ">=3.10"
+dependencies = []
+license = { text = "MIT" }
+
+# Hermes scans `hermes_agent.plugins` for installed distributions
+# (hermes_cli/plugins_discovery.py: ENTRY_POINTS_GROUP) and `ep.name` is the plugin key
+# that `plugins.enabled` matches. The same directory is also a drop-in plugin
+# (`plugin.yaml` + `__init__.py`), so the code exists once.
+[project.entry-points."hermes_agent.plugins"]
+library-guard = "library_guard:register"
+
+[tool.setuptools]
+py-modules = ["library_guard"]

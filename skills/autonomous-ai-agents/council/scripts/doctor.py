@@ -344,6 +344,30 @@ def calibration_note(repo: Path) -> List[str]:
     return out
 
 
+def runtime_lane_line() -> str:
+    """The browser driver, or the reason the runtime lane cannot answer.
+
+    `browser` is the one expected tool whose binary is HOST-provided (docs/WEB.md), so its absence
+    is not a toolchain gap to install — it is the difference between a correctness score and
+    "runtime not observed", and doctor is where that difference gets named.
+    """
+    try:
+        import probes as _probes  # same directory; lazy so doctor works without it
+
+        driver = _probes.browser_driver()
+        looked = ", ".join(_probes.BROWSER_BINARIES)
+    except Exception:  # noqa: BLE001 - doctor must still report the rest
+        driver, looked = None, "chromium"
+    if driver:
+        return f"    driver    : {driver}  (COUNCIL_BROWSER_CMD overrides)"
+    return (
+        f"    driver    : NONE — looked for {looked}\n"
+        "    without it the `browser` probe reports ran:false, beta drops on a web stack, and the\n"
+        "    correctness dimension says 'runtime not observed' instead of scoring it. Set\n"
+        "    COUNCIL_BROWSER_CMD='nix run nixpkgs#chromium --' or install chromium."
+    )
+
+
 def render(report: Dict[str, Any]) -> str:
     lines: List[str] = []
     lines.append("review-council doctor")
@@ -374,6 +398,9 @@ def render(report: Dict[str, Any]) -> str:
     lines.append("")
     lines.append("  built-in probes (always available, no install):")
     lines.append(f"    {', '.join(report['builtin_tools'])}")
+    lines.append("")
+    lines.append("  runtime lane (a page, observed):")
+    lines.append(runtime_lane_line())
     lines.append("")
     lines.append("  per dimension:")
     for dim in report["dimensions"]:

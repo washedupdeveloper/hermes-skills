@@ -46,7 +46,16 @@ def test_the_self_test_check_is_not_vacuous():
     """Negative control: the same assertion must fail on a broken copy."""
     with tempfile.TemporaryDirectory() as tmp:
         root = pathlib.Path(tmp) / "kb"
-        shutil.copytree(KB, root, ignore=shutil.ignore_patterns("__pycache__"))
+        # `copy_function=shutil.copyfile`: copytree's default (`copy2`) preserves the source's
+        # mode, and a store path is read-only, so the control could not write its own broken copy
+        # — it passed in a checkout and failed in `nix flake check`. The control needs a writable
+        # copy, and nothing else about the file matters.
+        shutil.copytree(
+            KB,
+            root,
+            ignore=shutil.ignore_patterns("__pycache__"),
+            copy_function=shutil.copyfile,
+        )
         script = root / "scripts/kb_selftest.py"
         src = script.read_text(encoding="utf-8")
         assert "raise SystemExit(main())" in src, "control cannot be built"

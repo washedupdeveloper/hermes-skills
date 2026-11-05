@@ -77,3 +77,34 @@ skill catalog with its completeness.
 - No `override=True` on any built-in tool: nothing is intercepted or replaced.
 - No argument values in the log — only key names, plus a digest of each result. An audit
   log that quotes the thing it is auditing becomes the leak it exists to prevent.
+
+## library-guard
+
+The skill contract, enforced where the writes happen instead of in CI minutes later.
+
+| Hook | What it does | Why that seam |
+|---|---|---|
+| `transform_tool_result` | After a `SKILL.md` write, the file is read back and validated against `library/contract.json`; every violation returns appended to the same tool result, naming the field and the fix. | The model still has the edit in context. The alternative is a red gate in another process, after the turn is over. |
+| `pre_tool_call` | A write into a skill named in `$HERMES_HOME/skills/.bundled_manifest` is **blocked**, with the reason: `hermes update` rewrites that directory. | AGENTS.md rule 1. The failure is silent — the edit applies, looks right, and disappears on the next update. |
+| `pre_tool_call` | A `SKILL.md` write whose payload contains CRLF is **blocked** before it lands. | The tree is LF-only and the gate rejects CRLF; the unattended reviewer produced it twice, and a note arrives after the damage. Refusing costs one retry; the gate costs a red tree nobody is watching. |
+
+It is a guard, not a validator with a plugin attached: `check_skill_text` is the same function
+`scripts/skill-contract.py` runs for the gate, so the tree and the runtime cannot disagree about
+what a valid skill is. Every hook swallows its own errors and returns `None` — a guard that can
+break a tool call is worse than a missing one.
+
+`library_guard.DEFAULTS` mirrors the contract for a wheel installed away from this tree, and
+`tests/unit/test_library_guard.py` fails when the two disagree.
+
+### Install
+
+Same three routes as harness-audit above; the overlay now installs both plugins, and the
+hand-installed path is:
+
+```bash
+cp -r plugins/library-guard "$HERMES_HOME/plugins/"
+hermes config set plugins.enabled '["harness-audit", "library-guard"]'
+nix build .#library-guard          # the distribution on its own
+```
+
+Restart Hermes afterwards: discovery happens once, at startup.

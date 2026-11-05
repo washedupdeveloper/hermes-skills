@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.4.0
+version: 1.6.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -31,6 +31,15 @@ state, platform-owned semantics, timeout budgets, quiescent teardown, and the fi
 mask a flake instead of closing it — see `references/test-reliability.md`. The CI half —
 freezing the evidence, the classification, the smallest reproducing topology, and what a
 diagnosis-only request authorizes — is `references/flake-diagnosis.md`.
+
+For a verdict that has to rest on claims the gate can re-run — the closed proof vocabulary,
+the per-claim control, the admission classes, the `unprovable` state, the determinism
+checklist, and how to instruct a producer model to emit a usable proof — see
+`references/proof-carrying-claims.md`.
+
+For deriving a threshold once the score comes from admitted claims — the labelled corpus of
+*reviewed* runs, matching seeded defects to confirmed claims, the five refusals, and the file
+layout for two coexisting scales — see `references/calibrating-from-runs.md`.
 
 ## When to Use
 
@@ -74,6 +83,19 @@ prevent, committed by the gate itself, which is why it survives review: the repo
 looks like evidence. When a property genuinely cannot be read from the artifact, the
 honest verdict is an explicit unknown with the reason — an honest gap is worth more
 than a fabricated pass.
+
+**A verdict is one rung, not a certificate: publish the ladder and block the claims above
+it.** "Satisfied" answers a question about one artifact, and a reader extends it to the
+adjacent ones — published, CI-passed, merge-ready — that the run never observed. Project the
+run's own files into an ordered ladder (recorded → measured → recomputed → calibrated → CI
+observed → merge-ready → published), each rung allowed only when evidence exists and otherwise
+BLOCKED with the reason and what would open it; then *generate* the outward-facing text — PR
+comment, report, badge — from that projection, so a claim the evidence does not support cannot
+appear in prose at all. Two clauses keep it honest: a rung opens on a **receipt keyed to the
+artifact's identity** (a CI result for a different commit is not evidence for this one), and a
+blocked rung that needs two things names both ("merge-ready needs a satisfied verdict AND an
+observed CI result") — `blocked` alone sends the reader to the wrong problem. A rung that does
+not apply is `not_applicable`, never silently open.
 
 **A false alarm is a defect in the gate, not a finding about the artifact.** A gate
 that exits non-zero on a valid input teaches its reader to ignore it, and an ignored
@@ -119,7 +141,11 @@ enforces it. Verify the exposure claim before writing the boundary into a commen
 edge — the model adapter, the network, the clock — and keep the registry, the persistence and
 the dispatch path real. A hand-rolled stand-in proves the bridge moves bytes, not that the
 shipping tool behaves as asserted, and the fixture it needs becomes a second definition of
-the system that must be updated with every real change.
+the system that must be updated with every real change. For a gate that shells out to a host
+binary a distribution cannot ship — a browser, a cloud CLI — pin the invocation as a function
+the test can call (`argv(driver, url, out)`) and drive a stub implementing that same contract:
+the logic is then gated on machines where the binary is absent, and the stub cannot drift from
+the real call because both are built by one function.
 
 **Every acceptance rule needs a negative control.** A check that cannot fail is not a
 gate: a predicate that silently matches everything passes its own test, and that pass
@@ -130,6 +156,186 @@ inferring it: a length rule is tested at the limit and one past it, because a `>
 for `>` rejects the last value that fits, and no real artifact sits on the boundary. A
 copy of the predicate written for the test proves nothing about the gate — extract it, so
 the test and the gate call one function.
+
+**A finding is prose; a claim is a proof the gate re-runs. Demand one per blocking claim.**
+Nothing in a sentence about the code can be executed, so a gate that accepts a prose finding is
+accepting an opinion with a location attached. Require each claim to name a check from a **closed
+vocabulary the gate owns** — kinds declared in one data file, each with typed parameters, each
+executed by the gate itself — returning exactly `supported`, `refuted` or `unrunnable`. Three
+things must hold before any of it is trusted. `unrunnable` is a third outcome and never folds into
+`refuted`: no browser, no server, no toolchain proves nothing about the code, and treating it as
+"false" lets a missing tool certify the artifact. A parameter outside the declared set is
+`unrunnable`, not ignored — an executable off the project's toolchain, a URL off loopback —
+because otherwise the proof quietly becomes "run something arbitrary and report success". And the
+contract is data, with a test asserting the executor registry and the contract agree in **both**
+directions, so a kind cannot exist in one and not the other. A **blocking** claim additionally
+needs a control the gate requires to be **refuted** — the claim-level form of the rule above: a
+pattern matching nothing anywhere supports both "this symbol is unused" and "this symbol is
+everywhere". Admit three classes and no more: `proven` (may lower a score and block a merge),
+`unproven` (may not lower a score and must not be reported as a defect — but it **does** stop
+certification: an unproven blocking claim makes the verdict **`unprovable`**, neither satisfied nor
+failed, naming the claim that stopped it), `refuted` (drop the claim and charge the producer). The
+asymmetry is the point and it is worth stating plainly: only `refuted` clears a blocking finding, so
+a claim is outstanding until its proof fails, and a confirmed defect and an unsettled claim stop a
+merge for opposite reasons — one is a thing to fix, the other a thing to settle. A prose
+`falsifiable_check` the producer supplied is preserved as the candidate for a proof, never counted
+as one.
+
+**Derive the control when the producer does not supply one.** A control the producer writes about
+its own check is a promise, and a producer often writes none at all — so the orchestrator builds it
+from the proof. Two shapes, because there are two kinds of check: a **tree-reading** proof
+(`absent`, `present`, `command`, `json`) is controlled by running the same check against the **base
+revision** (it holds here and not there), while a **runtime** proof (`dom`, `http`) cannot be
+re-run against a tree and is controlled by the same observation with the opposite expectation; a
+`diff` proof by the same line with the opposite mode. Two mechanics decide whether it works: rebase
+every absolute path under the root into the base root, or the control executes the *defective*
+tree's own script and proves nothing; and materialise the base with `git archive` rather than a
+worktree, because a base tree carrying `.git` answers `git` questions about the wrong repository.
+Never replace a control the producer did supply — fill the gap, record which happened
+(`control_source`), and leave a control-less claim `uncontrolled` when no base revision is given,
+because the absence of a control is not a control.
+
+**A proof of the right thing in the wrong place is not evidence.** Every proof names a subject — a
+path, a URL, a diff line — and every claim names a location. Compare them before accepting the
+proof: measured, a claim about a committed credential at `src/svc/__init__.py:4` was proven by a
+`present` check over `src/svc/client.py:9`, and because the check passed and its control failed,
+adjudication confirmed it and it blocked a merge. Nothing in the proof machinery compared the two, so
+any true statement about the repository could be attached to any finding. Demote a mislocated proof
+to `unsettled` rather than refuting it — the claim may still be true, it is simply not what was
+proven — and leave proofs that name no path (`command`, run over the tree) to their control, which
+is the rule that catches a check that cannot fail. Normalise the path by removing a leading `./` and
+nothing else: `lstrip("./")` strips **characters**, so `../a.py` becomes `a.py` and a proof from
+outside the tree is accepted as being about a file inside it.
+
+**A score derived from what the producer admitted rewards silence — check it against an
+independent observation.** Once the number comes from evidence the producer supplied (admitted
+claims rather than its own self-assessment), a producer that reports nothing scores perfectly and
+nothing blocks, because there is no claim to block on. The analyzer ran and found a committed
+credential; the reviewer said nothing; the aggregate is 100 and the run looks clean. Cross-check
+the producer against the toolchain's own record: if the analyzers observed a defect and the run
+settled **no** claim at all, the verdict is `unprovable` — not satisfied, and not failed. Leave the
+number at 100 (it is honest about what it measured) and let the verdict carry the gap, so the
+score keeps its meaning and the run cannot be certified on a silence. Measured before the rule
+existed: probes found two defects, the reviewer settled none, aggregate 100.0, verdict clean.
+**Partial silence is the same failure attenuated, and the score rewards it.** Caps and penalties
+attach only to claims that were **confirmed**, so a producer that finds a fraction of the planted
+defects keeps the rest of its score: measured on one corpus, a rung with 2 of 16 defects detected
+scored 58.79 while a rung with 4 of 4 scored 53.56 — missing twelve defects was worth five points.
+Guard the calibration set with a **minimum detection rate per member**, refuse to derive from a
+member below it, and make any exclusion explicit and recorded in the manifest's provenance rather
+than silently dropped — otherwise the producer's blind spots become the threshold's policy.
+
+**Severity is a property of what was detected, not of the producer's description of it.** When one
+defect is labelled `critical`, `critical`, then `medium` across three passes of a single tree, every
+cap that hangs off severity turns that disagreement into a score swing — and no amount of repetition
+removes it. Derive severity from the evidence instead, in one declared rule table (keyed on a tool,
+or on the content that was matched) where each rule states *why*: a committed credential is critical
+because it is an access grant, not because of how the finding reads. Three clauses decide whether this works. **Authority depends on how much the rule knows.** A rule
+that names the defect class — a cited credential literal, a quoted `SyntaxError` — is **exact**: it
+settles severity in both directions, because the class is not a matter of taste. A rule that only
+knows *which tool ran* is a **floor**: it may raise the producer's label and must never lower it,
+because over-stating makes the gate stricter while under-stating lets a real defect through. Both
+halves are measured. Applied as a plain override everywhere, evidence downgraded a `critical` claim
+to `low` because that claim's proof happened to invoke a lint tool. Applied as a floor everywhere,
+one syntax error proved *through a linter* kept the producer's label — `critical`, `critical`, `high`
+on one line — because the tool's own `low` could not lower it and no rule named the class. And evidence is **content as well as tool**: a `present` proof
+that cites the credential's own value is evidence even though it names no executable, so a table
+keyed only on tool names leaves that proof with the producer's label and reintroduces the very flip
+the table exists to remove. Where no rule covers the evidence the producer's label stands, and the
+disagreement it then shows is a real finding — report it rather than inventing a rule to silence it.
+**Scope each rule to the artifact it is about, and let corroboration govern the CAP rather than the
+block.** Two ways this table goes wrong, both measured. A content rule keyed on a pattern fires on
+a *command's stdout* as readily as on a citation: `ruff format --check` echoed the credential it was
+reformatting, so a formatting finding was stamped `critical` by the credential rule and produced the
+corpus's lowest score. Content rules apply only to proofs that **cite a line** (`present`/`absent`,
+or params carrying one) — a citation has a subject, a tool's output is whatever it printed. And
+authority over severity is not authority over the verdict: keep **blocking** on the asserted
+severity, because a block that should not have been raised is visible and arguable while one that
+was never raised is invisible, and let **corroboration** govern the **cap**, holding an
+uncorroborated `critical` at `high` so an opinion cannot set the numeric ceiling. Measured: that
+single split moved the outlier pass from 52.49 to 58.72 and the six-pass spread from 15.59 to 9.36.
+
+**A measurement that reports a miss is a claim about your matcher until the producer's own output
+says otherwise.** A seeded defect is a **block** of lines, and a producer may cite the offending
+line inside it rather than the block's first line; comparing a point against a point records a real
+detection as a blind spot. Record the span from the same template that plants the text (one home,
+so the manifest cannot drift from the tree), compare the two ranges for overlap, and backfill
+manifests that stored only a start. Then, before writing "the producer never found it", open its raw
+artefact for that location: measured, three passes had each reported the defect at the seeded
+block's second line, and the corpus had scored all three as misses — the blind spot was the
+measurement's, and three passes of evidence said so the whole time.
+
+**The verdict artifact is a function of the tree: no clock, and no caller-supplied result.**
+Recompute the gate even when the caller hands you its verdict — a ladder that trusts the caller's
+arithmetic can be opened by passing the right dict — and report the **recomputed** numbers, not
+the ones you were given; echoing the caller's dict while judging the recomputed one is the subtle
+version, where the summary agrees with a verdict nothing enforced. Three mechanical traps in the
+same family: candidate ordering must be **numeric** (`round-10` sorts before `round-2` as text, so
+the newest attempt is silently skipped, and a string sort fails quietly rather than loudly); a
+caller may point at any level of the run, so resolve the root by walking to the marker file
+instead of trusting the argument's depth; and two builds over one tree must be **byte-identical**
+— the single test that covers clock use, set-iteration order, and every input you forgot to pin.
+
+**Wire a new artifact in as a stage, not a stamp.** The cheapest integration reads the new file at
+the end and copies a field into the output: no failure path, so a missing or malformed artifact
+yields an output that looks complete and is indistinguishable from a computed one. Give it what
+every other stage has — separate outcomes for **absent**, **unreadable** and **empty** (three
+different facts, and "empty" is the one most often read as clean), a value that is recomputed
+rather than passed through, and a test that drives the degraded case. Name the field for what it
+is: a `snapshot` of a later-recomputable quantity, never a `verdict`, or the next recomputation
+reads as a contradiction instead of as a second measurement.
+
+**A stage that does not decide anything must say so in its own artifact.** Landing the computation
+before the wiring is the right order — it keeps the diff readable and measureable — but the output
+then sits in a directory beside files that *do* decide, in the shape of a verdict, and a reader will
+take it for one. Write the mode into the artifact and into the human summary (`enforced: false`,
+"this report does not change the verdict"), so nobody reads "nothing is unsettled" as "the gate
+passed", and so the eventual flip is a visible change in the output rather than an invisible change
+in meaning.
+
+**Filtering a blocking list is not the same as deciding with it.** When a stage splits findings
+into `still_blocking` and `unresolved`, every predicate that used to read the whole list now reads
+a subset — and the subset is empty in exactly the case that matters, because a run whose only
+blocking claims are unsettled looks identical to a run with no blocking claims. Measured: the
+first wiring moved unsettled claims out of `blocking`, recomputed `satisfied` from what remained,
+and **certified** a round carrying two unsettled critical claims; the unresolved list was recorded,
+printed, and consulted by nothing. After any such split, re-read every consumer of the old list and
+make the new one fail satisfaction in its own right.
+
+**Record the enforcement mode where every consumer that recomputes can read it.** A verdict is
+recomputed by the gate, by the claim ladder and by any manual re-run. If the mode travels only on
+the invocation, a re-run silently recomputes with the default and disagrees with the run it is
+auditing — and the ladder reports that as a mismatch rather than as the mode difference it is.
+Write it into the run's own metadata beside the other facts the harness owns, and have all three
+read it back.
+
+**The strict verdict is the default; laxity is the opt-out, named after its effect.** A default that
+needs a flag to be strict *is* a lax default, and a verdict must not change meaning depending on an
+argument nobody remembers. So ship enforcement on (`--allow-unproven` to reproduce an old score,
+never `--require-proof` to be honest), name the opt-out for what it does rather than what it skips,
+and record the mode in the run's metadata beside the other facts the harness owns. Do not price a
+correctness property in tokens: the marginal cost of demanding a proof is a prompt section plus
+seconds of subprocess when the producer was already running the analyzer. What costs is unprovable
+runs — and that is the signal, not the fee.
+
+**Flipping a default is a migration through every consumer, not one boolean.** Inverting a flag
+leaves every caller that builds argv from the old name broken, and the break arrives as a
+*downstream* error: argparse rejects the unknown flag, the child exits 2 with empty stdout, and the
+parent reports "could not evaluate the run" — a message pointing at the input, not the argument.
+Grep the old flag name across the tree in the same change; then re-read each consumer of the value
+it controls, because a boolean flip does not touch them and they do not fail loudly: the renderer
+that prints "2 blocking claims" and lists none (it still read the pre-split list), the claim ladder
+that recomputes, the packaged copies of the module, and the fixtures. Triage the failing tests
+explicitly — a fixture asserting the pre-flip behaviour gets an in-place opt-out *with the reason it
+is testing something else*, a genuine behavioural gap gets fixed, and at least one new test asserts
+the new default or the flip is untested at exactly the point it changed.
+
+**A summarising stage reads the set the gate scores, not every file that looks like findings.** A
+round directory holds both the raw producer outputs and the merged files the gate reads; a stage
+that globs for anything with a `findings` key adjudicates every claim twice — measured, 30 records
+for 25 findings — and every count downstream of it is inflated while the run looks healthy. Prefer
+the merged set when present, fall back to the raw inputs only when it is not, and say which set the
+stage used in its own artefact.
 
 **A test whose expectation was copied from the code's output pins the bug.** An assertion
 written by running the code and pasting what it returned certifies the implementation, not
@@ -157,6 +363,37 @@ punish large repos: a 100-line file with 5 findings and a 10,000-line repo with 
 are not equivalent, and a count-based curve scores them identically. When the size
 is unknown, fall back explicitly and say so in the output — never normalize by a
 number you did not measure.
+
+**A calibration ladder must vary the one thing you are calibrating, or it measures the other
+thing.** Rungs that add files to raise the defect count also raise tool coverage, so the
+deterministic half moves for a reason unrelated to the defects: measured, `det` rose 6.8–13.7
+points per dimension between the clean rung and the sixteen-defect rung, and the defective rung
+**outscored** the clean one (43.52 against 42.36) — no threshold can separate that. Seed defects
+*into* the base's existing files so file count, stacks and coverage are identical across rungs;
+with that change the same corpus separated by 21.6 points. The corollary is mechanical: when a
+guard or floor divides by a quantity, apply it to **every** term that divides by it — a size floor
+given to the claims term but not to `det` left a 56-line tree judged denser than a 16-defect tree,
+and extending the same floor to both moved the separation margin from +7.8 to +20.4.
+
+**A corpus records the question and the draw, or its points are not comparable.** Two mechanics,
+both cheap and both easy to leave out. A **harness digest** — a hash over the prompt template, the
+profile, the dimensions and the default goals — written into every run's metadata, so a prompt edit
+invalidates the old points *visibly*: pooling runs made by two different prompts averages answers to
+two different questions, and every number looks fine while it happens. (Assert the digest is stable
+across identical runs **and** that it changes with the profile, or an invariant digest makes two
+different producers look identical.) And a **repeat id per member** — `level-<N>-run-<k>` — with one
+tree built per rung and *shared* by its repeats, so what varies between them is the producer and not
+the ladder. A manifest that cannot express a repeat cannot produce n>1, and one draw per class makes
+every interval a point dressed as a range.
+
+**A pinned fixture is re-pinned by reading its diff, not by accepting it.** The suite going red
+after a deliberate change is the suite working; `--update` on reflex is exactly the failure the pins
+exist to catch, and refusing to update is the other one, because a test that fails forever gets
+ignored. So print the diff first and confirm **every** moved field is one the change should have
+moved — a scoring change that moves only `det` and the scores fed by it, with no weight, threshold
+or calibration rows, is the change you made; a stray row is a second change you did not intend. Then
+re-pin in the same commit, and say in the change description which fields moved and why, so the next
+reader can tell an intended re-pin from a regenerated expectation.
 
 **One layer owns normalization.** The component that computes the score owns the
 curves, the weights and the threshold; a per-dimension rubric emits findings and a
@@ -218,6 +455,17 @@ that measures an intermediate quantity (`score_from_densities`) while the gate c
 two look interchangeable — both are called "the score" — and they are not. Confirm which
 expression the gate actually evaluates before deriving anything, then derive on that one;
 otherwise the threshold and its evidence are two different measurements sharing a name.
+
+**Changing what a number is derived from invalidates the threshold derived from the old
+derivation — record the scale and refuse the comparison.** A threshold is a statement about a
+distribution; swap the score's source (a producer's self-assessment for a count of proven
+defects) and the same number means something else, while the threshold looks unchanged and the
+comparison still runs. Carry the scale in the calibration manifest (`"scale": "deterministic"`),
+carry the run's own source in its result (`score_source`), and give the mismatch its own verdict
+state (`uncalibrated`) instead of letting it fall through to pass or fail: the score is still
+reported, nothing is certified, and the reason names the command that would fix it. A run that
+cannot be compared is a different answer from a run that failed, and collapsing the two hides
+which one happened.
 
 **When the labelled classes overlap, derive the equivalence band — not a gap.** A
 *separating* threshold exists only if the worst known-good member scores above the best
@@ -320,7 +568,17 @@ half is a deterministic *formula over a non-deterministic input*, and the number
 between runs on the same commit and toolchain. Document what beta actually covers ("the
 LLM's score does not enter") rather than "the score is deterministic"; the second sentence
 is false and it is the one a reader will quote back when a repeat run disagrees. A spread
-measured with beta = 1 is still reviewer variance, not measurement error.
+A spread measured with beta = 1 is still reviewer variance, not measurement error.
+
+**A term in a weighted blend can be multiplied by zero — measure the weight before claiming the
+term has effect.** `score = beta*det + (1-beta)*llm` at beta = 1 makes the second term identically
+zero, so changing *what that term is computed from* moves nothing: measured on a real round, a
+producer's own 0.00 and a claims-derived 33.06 both landed in a zero-weighted term and the
+aggregate was 89.73 either way. Tests that assert the term's own value pass throughout, because
+the term is computed correctly and then discarded. Before shipping a new input to a blend, print
+the weight's distribution over real runs; if it saturates, the input needs a route that cannot be
+diluted — a cap, a floor, a separate blocking condition — and the test that proves it asserts the
+**aggregate** moved, not the term.
 
 **Two bands that disagree are usually two samples, not a contradiction.** A stored
 manifest derives its interval from the labelled set it was fitted on; an independent
@@ -339,7 +597,12 @@ restore and confirm it passes. A check that cannot fail is indistinguishable fro
 passing one in a green run, so this failure mode is silent by construction. Where a check
 derives its expectation by extraction — parsing a list out of another file, grepping a
 manifest — assert the extraction is non-empty first (`test -s`), or a broken pattern
-compares two empty results and passes.
+compares two empty results and passes. **Read the child's status before you pipe it.**
+`cmd | tail` leaves `$?` holding *tail's* status, so a check that exits 1 reports 0 and the
+mutation you just made looks like it changed nothing — measured twice in one session, once
+nearly dismissing a working check as vacuous and once hiding a CLI exit code behind a
+`| tail -1`. Capture `rc=$?` on the line after the bare command, or redirect to a file and
+read the exit code from the file, and never from a pipeline.
 **When the fix has redundant layers, the mutation has to remove all of them.** A guard
 built from two independent filters -- a directory name and a file suffix -- still fires
 when only one is deleted, so the test passes and reads as "no teeth" when the truth is
@@ -352,6 +615,17 @@ statement is not one edit: CLI output, wizard text, a generated config comment a
 calibration manifest's own caveats each restate it, and each is a separate copy. Grep the
 source for the sentence, not just the docs. A tool that contradicts its own documentation
 is worse than either being wrong alone, because the reader cannot tell which to trust.
+
+**An enumeration is a claim too, and nothing reads it.** A plan document that lists the CLI's
+verbs, the milestones, or the shipped features drifts the moment one is added, because no check
+compares the list to the code — measured: four verbs stale in one document while the tree's own
+command-surface check passed, since that check compares the tree to `--help` and never to the
+prose. Diff the list mechanically when auditing a plan (extract from the document, extract from
+the source of truth, compare **both** directions, so a removed item shows up as well as a missing
+one), and prefer a check that does it over a habit of reading. The same gap hides a release: a
+version check that compares the manifest, the changelog and the prose but never the git tag
+reports "consistent" for a version that was never tagged — the tag is the one artifact a release
+leaves behind, and it is the one a hermetic check cannot see.
 
 **Calibrate from labelled evidence and record the result in a file.** An
 unrecorded calibration is a guess with extra steps: the moment the manifest is
@@ -544,8 +818,26 @@ happened to mention first.
 - **A skipped test is unmeasured, not passing.** A suite that self-skips without its key,
   kernel or tool keeps keyless CI green — a policy, and a good one — but the skipped case
   contributes nothing to the verdict. Count skips beside passes, and never quote the run as
-  coverage of the case that skipped.
+  coverage of the case that skipped. **The same shape governs a tool's own self-test**, and there
+  it has cost a shipped image: a `--self-test` that counted a skipped lane as `ok` printed
+  `10/10 passed` inside a container whose browser was aborting on a missing `/dev/null`, so the
+  green summary carried no information about the lane that mattered. Give it three exit codes —
+  `0` every lane exercised and passing, `3` **incomplete** naming the lanes never exercised, `1` a
+  lane ran and failed — and make a lane that *is* present but fails a `1`, not a `3`: "could not
+  run here" and "ran and broke" are different facts, and the second is the one being hidden.
 - **A collection error read as "0 failures".** A suite that aborts at collection
   reports nothing, and nothing looks like a pass in a summary line. Treat a collection
   error as zero coverage, not as a clean run — the code that ships is validated by
   exactly the tests that actually executed.
+- **A receipt compared by equality is evidence for the empty string.**
+  `receipt.get("id") == meta.get("id")` passes when BOTH sides are missing — `None == None`,
+  and `""` is falsy, so a payload with no identity field reads as a match. Validate identity
+  where it is **written** (a full lowercase hex commit id, an exact ref) and refuse anything else
+  at write time, so an unkeyable receipt cannot be stored at all; at read time require the field
+  to be present before comparing, and give "names no commit" its own blocked reason rather than
+  reporting a mismatch — the reader needs to know which of the two things happened.
+- **A bounded scan that truncates converts "did not look" into "found nothing".** A file walk or
+  probe loop that stops at N results and reports what it collected has the missing-analyzer
+  failure one layer down: an empty result is indistinguishable from a clean tree. Refuse instead
+  — exceed the budget, return `unrunnable` naming the limit and the narrowing to apply — and keep
+  the order deterministic (sort the paths) so two runs report the same first hits.

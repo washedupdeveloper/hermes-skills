@@ -148,6 +148,26 @@ directory, so it never follows into the target. Windows `rmSync(link)` throws
 *Check:* can the removal primitive follow a link into its target? *Boundary:* a path the
 code created itself in a directory it owns.
 
+**A missing working directory is not a missing executable.** A spawn given a `cwd` raises
+`FileNotFoundError` for an absent directory exactly as it does for an absent program, so a handler
+that maps that one exception to "tool not installed" reports a working binary as absent and sends
+the reader to reinstall something already there. Validate the working directory before spawning and
+raise a distinct error naming the path.
+*Prevents:* a re-run pointed at a directory that did not exist reported every analyzer as not
+installed; the operator's obvious next step could not have changed the result.
+*Check:* can this code report a missing executable for a reason that is not the executable?
+*Boundary:* one errno for both is the platform's contract; the rule binds the handler, not the call.
+
+**A recompute that overwrites an artefact validates its inputs first.** A stage that re-runs a check
+and replaces the previous result cannot tell "the input was bad" from "the answer changed": with a
+missing input every check fails, the stage writes a vacuous report, and the good artefact it
+replaced is gone. Refuse before writing when a precondition the checks depend on is absent.
+*Prevents:* a re-adjudication pointed at a tree that did not exist wrote an all-failed report over a
+round whose four claims were confirmed — the file was the run's only record of them.
+*Check:* does the write path verify a precondition, or can any malformed invocation reach `write()`?
+*Boundary:* a stage whose output derives only from files it just validated needs no extra gate; the
+rule binds the case where an external argument — a path, a revision, a URL — can be wrong.
+
 ## Boundaries and pure logic
 
 **Validate at the boundary, trust inside.** Parse untrusted input once, at the edge (CLI args,

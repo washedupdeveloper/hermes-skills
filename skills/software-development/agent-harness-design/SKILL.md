@@ -1,7 +1,7 @@
 ---
 name: agent-harness-design
 description: "Use when changing harness seams, tools, or registries."
-version: 2.2.0
+version: 2.3.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -170,7 +170,16 @@ system-prompt bytes per request, so a change to the offered surface has evidence
 
 A hook that imports cleanly proves nothing. Run it under the real binary in a throwaway
 home, so it fires through the same path a session takes and the real `$HERMES_HOME` is
-never the test's to edit:
+never the test's to edit.
+
+**A plugin can load and still never fire, and both mechanisms are quiet.** A directory-drop
+plugin is imported by path with `__path__` set to its own directory, so its `__init__.py` must
+re-export with a RELATIVE import (`from .module import register`); an absolute
+`from module import register` raises `No module named …`, and discovery writes one line to
+`$HERMES_HOME/logs/errors.log` and carries on. Independently, `plugins.enabled` must name the
+plugin — a dropped directory with no config entry is simply absent from `hermes plugins list`.
+Check three things before believing a hook is live: the list says `enabled`, the error log does
+not name it, and `has_hook("<event>")` is True in the same home.
 
 ```sh
 S=~/.hermes/cache/scratch/plugin-probe
@@ -197,6 +206,18 @@ HERMES_HOME="$S" timeout 180 hermes -z "say hi"
 - **Then run the repo's gate, with new files staged.** `git add` any new support file
   first: the Nix sandbox copies only git-visible paths, so an untracked reference file
   fails there while passing on disk (`writing-for-agents` owns that rule).
+- **Call the host's own dispatch, not only your callback.** `resolve_pre_tool_block(tool,
+  args)` and `model_tools._apply_transform_tool_result_hook(...)` are the functions the loop
+  calls; importing them in a scratch home proves registration, payload keys and directive shape
+  with no model turn and no key. A unit test on your callback proves the callback, which is the
+  one part already known to work.
+- **A dispatched module needs its `__main__` block, and only an end-to-end run covers it.** A
+  verb whose module defines `main()` but no `if __name__ == "__main__": raise SystemExit(main())`
+  exits 0 having printed nothing, while a suite that imports the module and calls `main()` stays
+  green. Run the verb through its dispatcher once — argv, dispatch and exit status together.
+- **`hermes -p <profile>` does not export `HERMES_HOME` to plugin code.** A plugin resolving paths
+  from the environment sees the default home inside a named profile, so a profile-scoped test
+  proves nothing about a profile install; set the variable explicitly for the run.
 
 ## When a rule cannot be implemented
 

@@ -13,18 +13,16 @@ let
   # Every adopted copy is checked against it, so bumping is this file plus the sites it lists.
   pins = import ./pins.nix;
 
-  # The index truncates at 57 chars + "...", so the trigger must be self-contained there:
-  # past that, the only part loaded before a skill opens is cut mid-word.
-  descMax = 57;
+  # The contract is ONE file, read here and by the runtime guard in `plugins/library-guard`;
+  # `scripts/skill-contract.py` runs the same rules over a single file. A value that disagreed
+  # with the contract would be a failure, not a preference — see the category assertion below.
+  # The index truncates at `description_window` + "...", so the trigger must be self-contained
+  # there: past that, the only part loaded before a skill opens is cut mid-word.
+  contract = builtins.fromJSON (builtins.readFile (src + "/library/contract.json"));
 
-  required = [
-    "name"
-    "description"
-    "version"
-    "author"
-    "license"
-    "platforms"
-  ];
+  descMax = contract.description_window;
+
+  required = contract.required_frontmatter;
 
   # Extensions the repo treats as text. A `.pyc` would make `readFile` return whatever
   # bytes it happens to contain, so it is not scanned.
@@ -802,6 +800,21 @@ in
     # --- layout -------------------------------------------------------------
     test_every_skill_directory_holds_a_skill_md = {
       expr = builtins.filter (d: !(builtins.pathExists (src + "/skills/${d}/SKILL.md"))) skillDirs;
+      expected = [ ];
+    };
+
+    # The contract names the categories and the filesystem is the other half: both directions,
+    # so a new directory with no contract entry and a contract entry with no directory each fail
+    # naming the value. Fail closed on an empty contract, which would pass both scans.
+    test_the_contract_names_every_category_on_disk = {
+      expr =
+        let
+          onDisk = builtins.attrNames (builtins.readDir (src + "/skills"));
+          declared = contract.categories;
+        in
+        (if declared == [ ] then [ "library/contract.json declares no categories" ] else [ ])
+        ++ map (c: "on disk, not in library/contract.json: ${c}") (lib.subtractLists declared onDisk)
+        ++ map (c: "in library/contract.json, not on disk: ${c}") (lib.subtractLists onDisk declared);
       expected = [ ];
     };
 

@@ -1883,11 +1883,35 @@ def render_next_steps(*, result: Dict[str, Any], history: List[Dict[str, Any]],
     return "\n".join(lines)
 
 
+def claims_snapshot(run_root: Path) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """The claim ladder as it stood when the run ended, or the reason it could not be computed.
+
+    A SNAPSHOT, and named as one in outcome.json: `--record-ci` moves the ladder afterwards, and the
+    authority is always `council claims --run <dir>`, which recomputes from the files. This exists so
+    an archived run still records what its own evidence supported at the moment it stopped, with no
+    second command to remember.
+
+    Fail-open with a NAMED error: a claims failure must never cost the outcome record, and it must
+    never be invisible either.
+    """
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("claims", HERE / "claims.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["claims"] = module
+        spec.loader.exec_module(module)
+        return module.build(run_root), None
+    except Exception as exc:  # noqa: BLE001 - the outcome record outranks the ladder
+        return None, f"{type(exc).__name__}: {exc}"
+
+
 def write_outcome(run_root: Path, outcome: str, reason: str, scores: List[float],
                   args: argparse.Namespace, repo: Path, *,
                   plan_path: Optional[Path] = None,
                   met_minimum: bool = False,
                   handover: Optional[Dict[str, Any]] = None) -> None:
+    claims_at_outcome, claims_error = claims_snapshot(run_root)
     (run_root / "outcome.json").write_text(
         json.dumps({"outcome": outcome, "reason": reason, "scores": scores,
                     "threshold": args.threshold, "mode": args.mode,
@@ -1897,8 +1921,12 @@ def write_outcome(run_root: Path, outcome: str, reason: str, scores: List[float]
                     "max_rounds": args.max_rounds,
                     "budget_seconds": args.budget_seconds,
                     "next_steps": str(plan_path) if plan_path else None,
-                    "handover": handover if handover else None},
-                   indent=2), encoding="utf-8")
+                    "handover": handover if handover else None,
+                    # A snapshot of the ladder at run end, not its current state: `council claims`
+                    # recomputes, and a later receipt moves it.
+                    "claims_at_outcome": claims_at_outcome,
+                    "claims_error": claims_error},
+                   indent=2), encoding="utf-8", newline="\n")
 
     print("\n" + "=" * 60)
     print(f"OUTCOME: {outcome.upper()}")

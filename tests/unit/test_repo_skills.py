@@ -71,6 +71,11 @@ def test_no_dead_references():
     """
     write_verbs = re.compile(
         r"\b(write|create|add|author|generate|scaffold|produce)\b", re.I)
+    # A path being TRANSFORMED is an illustration, not a pointer. `deterministic-quality-gates`
+    # teaches the `lstrip("./")` trap — "strips characters, so `../a.py` becomes `a.py`" — and
+    # the escaped path there names no file the skill expects to have. Without this the rule
+    # forces a correct example out of the text or the example makes the suite red.
+    illustration = re.compile(r"\b(becomes|turns into)\b|→|->")
     bad = []
     for p in catalog_files():
         _, body = parse(p)
@@ -85,7 +90,7 @@ def test_no_dead_references():
                 if not (p.parent / rel).exists():
                     bad.append(f"{p.parent.name} -> {rel}")
             for m in re.finditer(r"`(\.\./[^`\s]+)`", line):
-                if write_verbs.search(line):
+                if write_verbs.search(line) or illustration.search(line):
                     continue
                 bad.append(f"{p.parent.name} -> {m.group(1)} (escapes the skill dir)")
     assert not bad, f"dead references: {bad}"

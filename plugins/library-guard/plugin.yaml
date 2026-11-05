@@ -1,0 +1,7 @@
+name: library-guard
+version: "1.0.0"
+description: >-
+  Makes the skill library's contract real where the writes happen: a SKILL.md write is validated
+  against library/contract.json and the violation is returned inside the same tool result, and a
+  write into a skill Hermes ships is refused because `hermes update` would overwrite it silently.
+author: user

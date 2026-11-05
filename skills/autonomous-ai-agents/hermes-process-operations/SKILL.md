@@ -1,6 +1,6 @@
 ---
 name: hermes-process-operations
-description: "Use when spawning or auditing Hermes agent subprocesses."
+description: "Use when spawning background jobs or Hermes subprocesses."
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -23,6 +23,9 @@ appear only when another program drives it.
 
 - A harness renders a prompt and shells out to `hermes` (the council, an ablation
   runner, a benchmark, a batch job).
+- **You are about to launch any long-running script in the background** — not only one that
+  spawns an agent. The `127` (written the same turn as the launch), `143` (killed with the
+  turn), and "read the artifact, not the live process" rules below apply to every such job.
 - A spawned agent produced no output, or exited non-zero with no explanation.
 - You need to know which session, task or job started a process, wrote a file, or
   created a run directory.
@@ -62,8 +65,18 @@ session), and read the result from the artifacts the job writes rather than from
 process. `143` is the tell: it is the signal, not the job's own failure, and a partial
 set of outputs is what it leaves behind.
 
+**A foreground `timeout` arrives at the child as SIGINT, and its log then accuses the code.** A
+foreground tool call's timeout is a deadline the harness enforces, not a limit the job respects:
+when it fires the child is interrupted (`rc=-2`, signal 2) mid-write, and what lands on disk reads
+like an application fault — a `KeyboardInterrupt` raised inside a `queue.wait()`, a stdio read, or a
+thread join, under a traceback that names the program you were testing. Decide from the budget
+before the first run: anything that may outlast the foreground cap goes `background=True` with
+`notify=True` from the start, and a result you read from `notify` costs one turn instead of a
+re-run. If you already have such a traceback, re-run it backgrounded before diagnosing anything —
+the job was stopped, not broken, and the partial artifact set is the evidence of that.
+
 **A child that dies before starting leaves no trace in the agent.** The caller's
-summary carries only `rc=126` or an empty result. Write a log per child and keep it
+summary carries only `rc=126` (not executable), `rc=127` (no such file) or an empty result. Write a log per child and keep it
 beside the output file — a harness that reports "no file produced" and discards the
 child's stderr has thrown away the only evidence. Distinguish "the child ran and found
 nothing" from "the child never ran": a missing output file plus a non-zero exit is
@@ -106,6 +119,17 @@ the problem, then propose the narrowest thing that addresses it.
 - **Reading `143` as the job's failure.** It is `SIGTERM` from the lifecycle, so the
   job's own logs will be truncated rather than reporting a fault. Re-run it detached
   instead of debugging the work.
+- **Reading a child's `KeyboardInterrupt` traceback as a defect in the child.** It is the
+  harness's foreground timeout arriving as `SIGINT` (`rc=-2`), and the traceback points at a
+  blocking read rather than at the logic. Same family as `143`: the job was stopped, so re-run it
+  backgrounded and read the artifact — do not open a debugging session on a process nobody let
+  finish.
+- **Launching a background job in the same turn that writes its script.** Writing the script and
+  starting it are two tool calls, and the launch can be dispatched before the file exists — the
+  child then exits `127` with `No such file or directory` naming the script, which reads like a
+  broken path rather than a race, and the job silently never ran. Write the file, then launch it in
+  a **separate** call; when a background job exits `127`, check that the script exists before
+  checking anything about the command inside it.
 - **Letting the child inherit the caller's identity implicitly.** Per-profile
   credentials are not inherited, so a spawned `hermes` must be given the profile it
   should run as (and that profile set up), or it authenticates as the wrong identity.

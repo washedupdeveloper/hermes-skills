@@ -78,6 +78,19 @@ in
         touch $out
       '';
 
+  # The contract over the whole tree, through the same function the runtime guard calls: the hook
+  # and the gate cannot disagree about what a valid skill is, because there is one implementation.
+  contract =
+    pkgs.runCommand "check-contract"
+      {
+        nativeBuildInputs = [ python ];
+      }
+      ''
+        cd ${src}
+        python scripts/skill-contract.py --all
+        touch $out
+      '';
+
   # The formatter, enforced. One file is exempt and its presence is asserted: the golden target's
   # bytes ARE the fixture a golden diff compares, so reformatting it would change what it measures.
   formatting =

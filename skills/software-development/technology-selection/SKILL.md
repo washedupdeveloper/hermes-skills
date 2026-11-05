@@ -1,7 +1,7 @@
 ---
 name: technology-selection
 description: "Use when choosing between candidate stacks or platforms."
-version: 1.0.0
+version: 1.1.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -53,6 +53,9 @@ properties of the silicon, not the runtime. Compare against a dedicated-purpose
 baseline before declaring a platform viable.
 8. **Sources at the end.** Every load-bearing claim traceable to a URL. Use
 `grounded-citations` when the analysis is a written deliverable.
+9. **A candidate's documentation is advertising; its installed tree is the spec.**
+Never let a polished doc set stand in for a measurement — clone the thing and count it
+before comparing anything.
 
 ## Procedure
 
@@ -108,6 +111,54 @@ In order:
 9. **Sources.**
 
 Dense and tabular over prose. Tables for anything enumerable. No filler.
+
+## Adopting an external system over an in-house one
+
+The question is not "is this product good" but "what does it add to what I already run,
+and what does installing it cost". Both halves need numbers from the actual tree. Probe
+recipe and commands: `references/external-system-footprint-audit.md`.
+
+1. **Clone it and count it.** LOC per directory, test-file count, module and skill
+   counts, package size. Where its docs advertise one number and the tree shows another
+   (83 skills advertised, 153 `SKILL.md` present), quote both and treat the gap as
+   unknown scope — not as evidence of the larger figure.
+2. **Price what it loads on every turn.** A skill pack's aggregate `description:` text is
+   paid in the prompt before any tool runs. Sum it and divide by four: 153 skills came to
+   ~53k characters, ~13k tokens, against a 50-skill in-house library a fraction of that.
+   A pack that looks free to install is the largest recurring cost in the decision.
+3. **Read the installer for what it writes into the user's environment.** Grep the
+   installer and setup module for config writes, managed markers and skills directories. A
+   product that "manages" config carries the stale-marker failure mode — every write
+   refused, silently — and a skill-copying installer conflicts with a repo mounted through
+   `external_dirs`, giving one namespace two owners.
+4. **Read the extension manifest for authority it takes.** `plugin.yaml` (or equivalent):
+   the host-version gate measured against the version actually installed, the tool count,
+   which hooks it registers, and whether it offers a memory provider — that last one is a
+   takeover of hand-curated memory, not a feature.
+5. **Separate measured from editorial.** If its own docs say a table is "not a benchmark, a
+   ranking, or a measured capability claim", it is metadata. Do not import metadata over a
+   system that has calibration or ablation data behind its numbers.
+6. **Score the delta against your own baseline with the same metrics, and credit what you
+   already have.** A candidate 44× your codebase, aimed at surfaces you do not use, is not
+   an upgrade even when several of its ideas are good. The answer is the delta, not the
+   ranking.
+7. **Verdict shape: adopt / do not adopt, plus N patterns to harvest.** Each harvested
+   pattern gets four things: the gap it closes, the file in which repo it lands, an effort
+   estimate, and the gate that would enforce it. "Take the good parts" without a
+   destination is not a recommendation.
+8. **Name the first thing to build and offer to start**, with the input you need first —
+   e.g. write the routing case file against the existing skill descriptions so the
+   failures it surfaces are real ones.
+
+Pitfalls specific to this shape:
+
+- **Mistaking documentation discipline for engineering value.** A product whose docs say
+  "prepared is not evidence" is more trustworthy about its *claims*; that says nothing
+  about whether its machinery is worth its size. Score footprint and surface area first,
+  then read the prose.
+- **Treating "it has a feature you lack" as "install it".** Copy the mechanism into the
+  skill or module that already owns that subject. A second source of truth for the same
+  job is the cost, not the feature.
 
 ## Pitfalls
 
@@ -173,3 +224,6 @@ Dense and tabular over prose. Tables for anything enumerable. No filler.
   and the do-not-buy list, sensor power gating, analog reading and calibration,
   battery-life arithmetic, enclosure notes, and how to package a build as a kit
   other people run.
+- `references/external-system-footprint-audit.md` — measuring a third-party system
+  before adopting it: tree sizing, aggregate skill-description token cost, what the
+  installer writes, extension authority, and the baseline comparison table.

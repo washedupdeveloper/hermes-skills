@@ -203,7 +203,7 @@ def test_python_probes_degrade_without_a_toolchain():
 #: The stacks this toolchain ships for. `STACK_TOOLS` also lists JavaScript, Rust
 #: and Go tools, which the framework does not claim to cover — asserting those
 #: would demand probes for tools that are deliberately absent.
-SUPPORTED_STACKS = ("nix", "python", "shell")
+SUPPORTED_STACKS = ("nix", "python", "shell", "web")
 
 
 def _expected_for_supported_stacks() -> set:

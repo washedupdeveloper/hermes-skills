@@ -44,6 +44,8 @@ VERBS: Dict[str, Tuple[str, str, bool, str]] = {
     "goal": ("goal.py", "user", True, "express a run as a native Hermes /goal + quality gate"),
     "cron": ("cron.py", "user", True, "print or install a scheduled unattended review"),
     "pr": ("pr.py", "user", True, "post a run's verdict to a GitHub pull request"),
+    "claims": ("claims.py", "user", True,
+               "the run's claim ladder: what its evidence supports, and what it does not"),
     "version": ("version.py", "dev", True, "check or bump the release version (docs/VERSIONING.md)"),
     "corpus": ("inject_defects.py", "dev", True, "build a defect corpus with independent truth"),
 }
