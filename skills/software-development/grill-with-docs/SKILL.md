@@ -1,6 +1,6 @@
 ---
 name: grill-with-docs
-description: "Use when grilling a plan in a repo and recording decisions."
+description: "Use when grilling a repo plan and writing decisions."
 version: 1.0.0
 author: "Matt Pocock (mattpocock/skills) + Hermes Agent"
 license: MIT

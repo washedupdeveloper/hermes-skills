@@ -1,6 +1,6 @@
 ---
 name: request-refactor-plan
-description: "Use before a refactor. Interview, scope, tiny commits, plan doc."
+description: "Use before a refactor: interview, scope, tiny commits."
 version: 1.0.0
 author: "Matt Pocock (mattpocock/skills, request-refactor-plan), adapted for Hermes"
 license: MIT
@@ -63,6 +63,14 @@ not just shared understanding.
 ## How we will know
 <the command(s) that decide it — exit codes, not prose>
 ```
+
+## When it is a rewrite, not a refactor
+
+A refactor edits in place and the tests are the reference. A **rewrite** replaces a working
+implementation and has no reference until you make one: freeze the old outputs first, enumerate the
+differences you intend, and compare the two implementations on the same inputs. See
+`references/differential-rewrite.md` for the freeze, the thin first slice, the three outcomes, and the
+attribution rules a rewrite has to re-derive rather than inherit.
 
 ## Rules that outrank style
 

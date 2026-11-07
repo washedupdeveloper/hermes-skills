@@ -1,6 +1,6 @@
 ---
 name: zoom-out
-description: "Use when lost in unfamiliar code. Map modules and callers one layer up."
+description: "Use when lost in code: map modules, callers, one layer."
 version: 1.0.0
 author: "Matt Pocock (mattpocock/skills, zoom-out), adapted for Hermes"
 license: MIT

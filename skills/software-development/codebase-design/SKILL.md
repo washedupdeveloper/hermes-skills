@@ -1,6 +1,6 @@
 ---
 name: codebase-design
-description: "Use when designing module shape or judging a refactor. Deep modules, one vocabulary."
+description: "Use when designing module shape or judging a refactor."
 version: 1.0.0
 author: "Matt Pocock (mattpocock/skills, codebase-design), adapted for Hermes"
 license: MIT

@@ -1,6 +1,6 @@
 ---
 name: improve-codebase-architecture
-description: "Use to find shallow modules and propose deepening refactors."
+description: "Use to find shallow modules and propose deep refactors."
 version: 1.0.0
 author: "Matt Pocock (mattpocock/skills, improve-codebase-architecture), adapted for Hermes"
 license: MIT
