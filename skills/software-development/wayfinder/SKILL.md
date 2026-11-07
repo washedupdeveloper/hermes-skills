@@ -79,7 +79,8 @@ agent answering its own grilling questions has broken this.
   decision waits on. Use when the knowledge lives outside this working directory.
 - **prototype** (HITL) — raise fidelity with a cheap rough artifact to react to.
   Use when "how should it look / behave" is the question.
-- **grilling** (HITL) — conversation; the default. See `grill-me`.
+- **grilling** (HITL) — conversation; the default. See `grilling` (`grill-me` is the
+  stateless entry point).
 - **task** (HITL or AFK) — work that must happen before a *decision* is possible:
   nothing to decide, but discussion is blocked until it is done. Earns its place by
   unblocking a decision, not by delivering the destination.
@@ -110,7 +111,7 @@ in **Decisions so far**, which records the route actually walked.
 
 ## Charting a map
 
-1. **Name the destination.** Grill (`grill-me`) to pin down what this map finds its
+1. **Name the destination.** Grill (`grilling`) to pin down what this map finds its
    way to — a spec, a decision, or a change. The destination fixes scope, so it is
    settled first.
 2. **Map the frontier, breadth-first** — fan across the whole space rather than deep

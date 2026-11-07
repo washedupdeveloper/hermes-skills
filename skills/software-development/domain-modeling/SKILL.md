@@ -10,7 +10,7 @@ metadata:
   hermes:
     tags: [domain-modeling, glossary, adr, vocabulary, terminology]
     source: mattpocock/skills@v1.3.1
-    related_skills: [grill-me, to-spec]
+    related_skills: [grilling, grill-me, to-spec]
 ---
 
 # domain-modeling
