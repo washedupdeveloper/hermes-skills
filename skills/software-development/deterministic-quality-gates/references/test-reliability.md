@@ -62,7 +62,9 @@ injected dependency or an instance-local adapter. When mutation is required:
 - **No POSIX permission or signal semantics.** A case that needs them takes an explicit
   platform skip naming the reason, rather than an assertion weakened on every platform.
 
-Prefer an observation that holds everywhere; exclude explicitly where one cannot.
+Prefer an observation that holds everywhere; exclude explicitly where one cannot. The wider
+platform matrix — paths, temp roots, modes, short names, and how to reproduce a host condition
+locally — is `cross-platform-test-portability`, which owns it.
 
 ## Budget timeouts against the lane
 
@@ -75,6 +77,30 @@ teardown.
 
 Where a timeout is the subject, keep the outer wait far larger than the timeout under test,
 or load decides which deadline reports first.
+
+## Count the work, not the wall clock
+
+A test's cost is **process spawns and real waits**, not its local duration. Timing it on a quiet
+workstation measures the workstation.
+
+- **Size a timeout by counting spawns**, not by timing them. A fixture that shells out for version
+  control or a package manager can make dozens of process events per case; multiply by a per-spawn
+  cost measured on the slowest CI leg, then compare with the budget.
+- **Start independent children together.** A loop of sequential spawns is the commonest way a suite
+  becomes slow in one commit.
+- **Test parsing and validation in-process**; keep one or two real subprocess tests per file for
+  exit codes, signals and stdio.
+- **Never assert wall-clock speed.** An `elapsed < 500ms` assertion fails at 510 ms on a loaded
+  runner. Count operations instead, or choose an input where a regression is catastrophic and let
+  the test timeout catch it. A ratio of two timings still fails on a load spike; where one stays,
+  use a generous factor and label it timing-sensitive.
+- **Advance a fake clock to the next timer** (`advanceTimersToNextTimer`, `runOnlyPendingTimers`),
+  never in fixed 10 ms steps: a fuzz case under step-wise advancement becomes hundreds of thousands
+  of event-loop turns.
+- **Do not reach for `--isolate` or bare `--parallel` to fix one test.** Isolation buys correctness
+  with a multiple on suite wall time. The leak is the bug — a module mock, a global hook, a shared
+  registry a test left behind. Keep files independent instead, and make a runner-level decision
+  separately, measured on every OS leg.
 
 ## Synchronise on state
 
@@ -122,6 +148,17 @@ passes for a subject that only narrated success.
 **Only a run with real credentials proves a model-facing path; a test without them proves
 plumbing.** Live-provider calls are the top of the evidence ladder rather than a luxury to
 ration, and a case that self-skips without its key is unmeasured, not green.
+
+## Two consecutive runs, and a leak census
+
+One green run proves little: eventual consistency, a retry that leaks a resource, another process
+deploying the same name, and an API that sometimes ignores a write all show up in only some runs.
+
+- **Run the suite twice, and treat the second run as part of the first one's evidence.**
+- **Census what the run left behind** — accounts, temp roots, child processes, containers, ports,
+  queue entries, uploaded artifacts. A suite is stable when two consecutive full runs pass *and*
+  the census after each is empty.
+- **A diagnosis-only request stays read-only**: report the cause and the evidence, and stop.
 
 ## Evidence to report
 

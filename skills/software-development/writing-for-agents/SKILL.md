@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: "Write documents agents read: skills, AGENTS.md, docs."
-version: 1.6.0
+version: 1.7.0
 author: Matt Pocock (mattpocock), adapted by user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -27,6 +27,11 @@ packaging.
 
 Tool definitions, parameter schemas and tool results are the same craft on a surface read
 every turn rather than on demand: `references/tool-surface.md`.
+
+Prose whose vantage is the authoring session rather than the repository — `(decision 7)`,
+"this used to", "rejected in review" — is an audit with its own taxonomy and its own
+keep-rules, so that a purge removes the transcript without deleting the references that
+still resolve at `HEAD`: `references/session-vantage.md`.
 
 ## Context pointers
 

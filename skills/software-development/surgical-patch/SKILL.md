@@ -28,6 +28,17 @@ available evidence. Then patch, prove, stop.
   one-line fix into an unreviewable diff and hides the real change.
 - Add only the regression proof relevant to the task.
 
+## Instrumentation you add is part of the patch
+
+- **Tag every temporary log with one unique prefix** (`[DEBUG-a4f2]`), so cleanup is one
+  search. Untagged logs survive the patch; tagged ones die with it.
+- **Remove the instrumentation before declaring done**, and say what you searched for.
+- **A missing seam is itself a finding.** The regression test belongs at a seam that exercises
+  the real bug pattern at its call site. When the only available seam is too shallow — a
+  single-caller test for a bug that needs several, a unit that cannot reproduce the chain
+  that triggered it — a test there is false confidence. Record that the architecture stopped
+  the bug being locked down, and report it instead of writing the shallow test.
+
 ## When a fix fails twice
 
 - **Two fixes that share a premise have failed the same gate.** Write the premise down, the

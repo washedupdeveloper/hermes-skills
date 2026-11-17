@@ -69,31 +69,33 @@ it. When infra's hermes module returns, the same declaration belongs there and `
 
 ```
 skills/
-├── autonomous-ai-agents/   council ( + its 6 rubrics under assets/rubrics/ )
-│                           hermes-bot-authoring  hermes-knowledge-pipeline
-│                           hermes-profile-fleet  hermes-project-handoff
-│                           hermes-terminal-backend
-├── communication/          caveman  ultracave  caveman-review  cavecrew
-│                           caveman-explore  caveman-compress
-├── devops/                 ephemeral-cleanup
-│                           hermes-s6-container-supervision
-│                           nix-declarative-config
-├── note-taking/            obsidian-bases
-├── productivity/           wait-what
-├── security/               oss-forensics  web-app-security
-└── software-development/   agent-harness-design  defensive-patterns
-                            deterministic-quality-gates  domain-modeling
-                            grill-me  handoff  nixos-clan-flake  postmortem
-                            retro  skill-library-curation  surgical-patch
-                            to-spec  to-tickets  verify-and-stop  wayfinder
-                            wizard  writing-for-agents
-                            project-kickoff-planning  technology-selection
+├── autonomous-ai-agents/ council  hermes-bot-authoring  hermes-knowledge-pipeline
+│                         hermes-process-operations  hermes-profile-fleet
+│                         hermes-project-handoff  hermes-terminal-backend
+├── communication/        cavecrew  caveman  caveman-compress  caveman-explore
+│                         caveman-review  reply  ultracave
+├── devops/               ephemeral-cleanup  hermes-s6-container-supervision
+│                         nix-declarative-config
+├── note-taking/          obsidian-bases
+├── productivity/         wait-what
+├── security/             git-history-sanitisation  oss-forensics  web-app-security
+│                         workflow-security
+└── software-development/ agent-harness-design  api-docs  codebase-design
+                          cross-platform-test-portability  defensive-patterns
+                          deterministic-quality-gates  domain-modeling  failure-semantics
+                          grill-me  grill-with-docs  grilling  handoff
+                          improve-codebase-architecture  issue-triage  nixos-clan-flake
+                          openspec  postmortem  pr-description  project-kickoff-planning
+                          release-versioning  request-refactor-plan  retro
+                          skill-library-curation  surgical-patch  technology-selection
+                          to-spec  to-tickets  two-axis-review  verify-and-stop  wayfinder
+                          wizard  writing-for-agents  zoom-out
 ```
 
-50 `SKILL.md` across 44 skills — 43 load on Windows; `hermes-s6-container-supervision` declares
+62 `SKILL.md` across 56 skills — 55 load on Windows; `hermes-s6-container-supervision` declares
 `platforms: [linux]` and is correctly skipped there.
 
-Six of the 50 are the council's reviewer rubrics (`council/assets/rubrics/reviewer-*/SKILL.md`).
+Six of the 62 are the council's reviewer rubrics (`council/assets/rubrics/reviewer-*/SKILL.md`).
 They carry frontmatter, but `assets/` is one of Hermes's support directories, so they are not
 catalog skills: they travel with the council, and its orchestrator reads them.
 
