@@ -632,6 +632,9 @@ a reversed decision requires, and why a deferral must carry its measured consequ
 
 ## References
 
+- `references/topology-render.md` — building the flake's topology diagram from the machine
+  configs and `topology.nix`, reading `main.svg` against `network.svg`, and why a node the
+  global file never mentions came from that machine's own `topology.self`.
 - `references/external-mesh-peers.md` — joining someone else's overlay network from a clan
   machine: their peer list as pinned-input DATA rather than modules, the keypair generator
   whose public half leaves the repo, the minimum interface that opens nothing inbound, and

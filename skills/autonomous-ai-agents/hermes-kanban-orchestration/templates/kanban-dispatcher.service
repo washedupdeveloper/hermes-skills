@@ -1,0 +1,37 @@
+# Durable dispatcher for a Hermes kanban board.
+#
+# A board is durable STORAGE, not a scheduler: without a dispatcher ticking, a graph that
+# is complete and sitting `ready` never moves a card. This unit is what makes "durable"
+# true — it survives logout (linger), restarts on failure, and returns after a reboot.
+#
+# Install to ~/.config/systemd/user/, then:
+#     systemctl --user daemon-reload
+#     systemctl --user enable --now kanban-dispatcher.service
+#     systemctl --user is-active  kanban-dispatcher.service
+#     systemctl --user is-enabled kanban-dispatcher.service
+#
+# Linger must be on for this to outlive the login session:
+#     loginctl enable-linger "$USER"
+#
+# Substitute the RESOLVED absolute path to the CLI. Resolve it at install time rather
+# than hardcoding a location: the binary may come from a nix profile, homebrew or the
+# shell installer, and a unit naming the wrong one fails at boot with no obvious cause.
+# Refuse to install if the daemon subcommand is absent from that build, so a future CLI
+# that drops it fails loudly at install instead of silently at every start.
+#
+# --force: the standalone daemon refuses to start while it believes a gateway owns
+# dispatch. If a messaging gateway IS installed on this host, do NOT install this unit —
+# use the gateway's embedded dispatcher instead. Two dispatchers race for the same claims.
+[Unit]
+Description=Hermes kanban dispatcher (standalone)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/absolute/path/to/hermes kanban daemon --force --interval 60 --verbose
+Environment=PATH=/absolute/path/to/bin:/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

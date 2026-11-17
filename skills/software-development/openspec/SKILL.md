@@ -49,7 +49,8 @@ method.
 - **The artifacts are the brief.** The proposal's Why and What Changes, the requirements, and
   `tasks.md` are what the work is judged against. Write them before the first edit.
 - **A requirement is observable.** Each one carries at least one scenario of `WHEN` / `THEN` /
-  `AND`. No implementation nouns, no file paths, no "use X".
+  `AND`. No implementation nouns, no file paths, no "use X". The scenario heading takes exactly
+  four `#`s (`#### Scenario:`); at the wrong level the validator ignores it without complaint.
 - **A scenario names a path.** Every branch that can return before the guarded call needs its
   own scenario. Measured on one task: a spec that covered only the request path let `--dry-run`
   compose and print a refused base, and the implementing agent stopped exactly at the spec's
@@ -59,6 +60,11 @@ method.
   `archive`, never by hand during a change.
 - **A task is a commit.** `tasks.md` checkboxes are the plan. Tick one when its code and test
   land, and let the commit body name the tasks it closes.
+- **Validate without Node when the host has none.** A container, sandbox or agent runtime that
+  ships no Node still has to check a change before presenting it as a handover:
+  `references/shape-check-without-the-cli.md` encodes the CLI's own structural rules, treats an
+  empty change as invalid rather than absent, and says how to test the checker against a change
+  the tool actually produced.
 - **The repo is the gate.** `openspec validate <name> --strict` runs in the repo's CI, not only
   by hand. A repo whose CI lacks it gets that step before its first change; the job block to
   append is `templates/ci-job.yml`, with the repository's own checkout pin.
