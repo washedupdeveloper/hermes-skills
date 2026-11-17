@@ -272,6 +272,14 @@ the new skill first.** A Nix check copies only git-visible paths, so an untracke
 reads as absent: the counted total stays old and the README number you just corrected is
 reported FALSE. `git add` the new directory, then gate.
 
+The asymmetry is what bites: a **modified tracked** file is copied with its working-tree
+content, but an **untracked** one is absent entirely. So a tracked `SKILL.md` whose edit cites
+an untracked `references/<topic>.md` fails as a dead reference with the file sitting on disk
+beside it — and every later commit inherits the failure, because the citation is tracked and
+the target is not. When the failure is the other writer's, `git worktree add --detach <dir>
+<sha>` gives a clean tree at your own commit, so your verification does not depend on their
+uncommitted state.
+
 **When the repo ships a test suite, that suite is the before/after.** `git stash push -u`, run
 the tests, `git stash pop`, run them again; equal counts on both sides is the reliability claim.
 A doc edit that moves a phrase a test measures fails here and nowhere in the audit — and the
