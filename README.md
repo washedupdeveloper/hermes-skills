@@ -1,69 +1,75 @@
 # hermes-skills
 
-The source of truth for the skills we author ourselves — the ones Hermes does not ship and no
-registry provides.
+A library of **agent skills**: short, self-contained instructions an agent loads when a task calls
+for them. Every skill here is either authored in this repository or adapted from an upstream source,
+and every one of them is validated before it is accepted.
 
-This repo is not a mirror: machines mount it through `skills.external_dirs`, they do not push into
-it. Nothing here is generated, and no script overwrites it.
+Nothing in this repository is specific to one agent. `SKILL.md` is the format several agents already
+read, the gate is a Python script with no dependencies, and the installer links the tree into whatever
+directory your agent scans. The eleven skills that only make sense inside one host say so in their
+frontmatter, and are listed under [host-scoped skills](#host-scoped-skills).
 
-## What belongs here
+## What a skill is
 
-| class | owner | updated by | in this repo? |
-|---|---|---|---|
-| bundled | Hermes | `hermes update` | **no** |
-| hub / registry | its upstream | `hermes skills update` | **no** |
-| ours | us | `git pull` | **yes** |
-
-Only the third row. A bundled skill is tracked in `$HERMES_HOME/skills/.bundled_manifest` and
-refreshed by `hermes update`; copying one in here gives a single file two owners, so `git pull`
-fights the refresh and `hermes skills diff` / `reset` stop meaning anything.
-
-Before adding anything:
-
-```bash
-# is it bundled (i.e. not ours)?
-grep -q "^<skill-name>:" "$HERMES_HOME/skills/.bundled_manifest" \
-  && echo "bundled — do not add" || echo "ours — belongs here"
-
-hermes skills list-modified      # bundled skills you have edited
-hermes skills diff <name>        # exactly what you changed in one
-hermes skills reset <name>       # keep your copy, re-baseline against stock
+```
+skills/<category>/<name>/SKILL.md     # the entry point: frontmatter + prose
+              references/…            # optional: depth the entry point points at
+              scripts/…               # optional: code the skill tells you to run
+              templates/…             # optional: files it copies
 ```
 
-## How it is used
+The frontmatter is the contract:
 
-```bash
-git clone git@github.com:washedupdeveloper/hermes-skills.git ~/hermes-skills
-cd ~/hermes-skills && ./setup.sh
+```yaml
+---
+name: failure-semantics                    # must equal the directory name
+description: "Use when designing error types, codes or recovery."
+version: 1.0.0
+author: "…"
+license: MIT
+platforms: [linux, macos, windows]         # where its commands work
+category: software-development
+targets: [hermes]                          # only when it is host-scoped; omit otherwise
+metadata:
+  hermes:                                  # optional, host-specific hints (tags, related_skills)
+    tags: [errors, retries]
+    related_skills: [defensive-patterns]
+---
 ```
 
-`setup.sh` resolves its own location, so it runs from any clone path on Windows, Linux, macOS and
-WSL2. It merges rather than clobbers: an entry already in `external_dirs` survives.
+**The description is the whole index.** An agent shows itself the name and the description and
+nothing else before choosing, so the first 57 characters must carry the trigger on their own. Every
+description here fits that window, which is the tightest one the hosts we know of impose.
 
-| Command | Does |
-|---|---|
-| `./setup.sh` | apply the desired state |
-| `./setup.sh --check` | report drift, change nothing (exit 1 on drift) |
-| `./setup.sh --print` | show the desired state |
+A skill is chosen per task and may not be chosen at all. A rule that must apply on every turn belongs
+in the agent's system prompt, not in a skill.
 
-The declaration is the script's `DESIRED STATE` block, and the script only makes the machine match
-it. When infra's hermes module returns, the same declaration belongs there and `setup.sh` goes.
+## Install it into an agent
 
-### What it declares
+```sh
+git clone https://github.com/washedupdeveloper/hermes-skills.git
+cd hermes-skills
+./install.sh ~/.claude/skills              # symlink every skill, flat
+./install.sh ~/.hermes/skills --nested     # recreate <category>/<skill>
+./install.sh /tmp/skills --copy --dry-run  # see the plan, change nothing
+```
 
-- **A reference, not a copy.** `skills.external_dirs` points at this repo's `skills/`; reading is
-  live, so `git pull` is the update mechanism. It is not a permission boundary — the mount makes
-  this tree readable, not protected. [ADR-0001](docs/adr/0001-reference-not-symlink.md).
-- **No approval prompts.** `skills.write_approval: false`, because a write lands in the working tree
-  where `git status` shows it and `git checkout` reverts it. Set it `true` where you would rather
-  approve each write.
-- **New skills land outside this repo.** `create_dir` is unset, so agent-created skills go to the
-  profile-local `~/.hermes/skills/` and are promoted here deliberately. That keeps this repo free
-  of the untracked files Nix cannot see, but it does not protect an existing skill: a patch lands
-  in place, wherever the skill is found, and the git diff is what covers that half.
-- **Precedence:** `trusted project > local profile > skills.create_dir > external_dirs`. A skill
-  present both locally and here resolves to the local copy, silently — keep names unique across the
-  two.
+`install.sh` is POSIX `sh`, takes a target directory, and never touches what is already there. A
+symlink keeps one home for the text: edit the repository and every agent sees the change.
+
+| Host | Where it reads skills | How to point it here |
+|---|---|---|
+| Hermes Agent | `$HERMES_HOME/skills/`, plus any path in `skills.external_dirs` | `hermes config set skills.external_dirs '["~/hermes-skills/skills"]'` — read in place, so `git pull` is the update |
+| Claude Code | `~/.claude/skills/` | `./install.sh ~/.claude/skills` |
+| Codex, and any `AGENTS.md` host | a directory named in `AGENTS.md` | `./install.sh ./.agents/skills --nested`, then name that directory |
+| OpenCode | `.opencode/skills/` | `./install.sh .opencode/skills` |
+| Anything else that reads `SKILL.md` | — | `--copy` into the directory it scans |
+
+Hosts differ in what they do with a skill's supporting files: some resolve them relative to the
+skill directory, some flatten the tree. `--copy` is the safe default for a host you have not tested.
+
+Editing the library while an agent is running: a new skill appears only after the host rescans. In
+Hermes that is `/reload-skills` in the CLI or a restart of the app.
 
 ## Layout
 
@@ -101,124 +107,75 @@ skills/
 `platforms: [linux]` and is correctly skipped there.
 
 Six of the 76 are the council's reviewer rubrics (`council/assets/rubrics/reviewer-*/SKILL.md`).
-They carry frontmatter, but `assets/` is one of Hermes's support directories, so they are not
-catalog skills: they travel with the council, and its orchestrator reads them.
+They carry frontmatter, but `assets/` is a support directory, so they are not catalog skills: they
+travel with the council, and its orchestrator reads them.
 
-Also at the top level, not skills: `soul/` (the SOUL fragment) and `setup.sh` (the initializer).
+## Host-scoped skills
 
-## The always-on voice
+Eleven skills only make sense inside one agent, and say so in their frontmatter
+(`targets: [hermes]`). Every other skill here is host-neutral: it names tools where a
+tool is what the skill is about, and nothing in the library requires that host.
 
-`SOUL.md` is slot #1 of the system prompt, injected on every turn and never chosen by the model. A
-skill is chosen per task and may not be, so a communication contract that lives only in a skill is a
-suggestion. The standing one lives in `SOUL.md`; the `caveman` skill is its on-demand long form.
-
-Hermes reads `SOUL.md` only from `$HERMES_HOME`, so the repo carries the fragment and each machine
-applies it:
-
-```sh
-sed -n '/^<!-- BEGIN SOUL -->$/,/^<!-- END SOUL -->$/p' soul/caveman-voice.md \
-  | sed '1d;$d' > "$HERMES_HOME/SOUL.md"
-```
-
-| Where | File | Reaches |
+| Skill | Targets | What ties it to the host |
 |---|---|---|
-| Global agent | `$HERMES_HOME/SOUL.md` | every session on that machine |
-| Council reviewer | `review-council/bots/council-generalist/SOUL.md` | every review sample |
-| Council orchestrator | `review-council/bots/council-orchestrator/SOUL.md` | every round |
+| `hermes-bot-authoring` | `hermes` | Bot personas and capability sets are Hermes' plugin model. |
+| `hermes-file-editing` | `hermes` | `write_file` and `patch` have their own staleness guards to work around. |
+| `hermes-kanban-orchestration` | `hermes` | The durable queue is a Hermes cron job plus a board it owns. |
+| `hermes-knowledge-pipeline` | `hermes` | Capture, distillation and indexing are wired to Hermes cron and its session store. |
+| `hermes-process-operations` | `hermes` | Background jobs are spawned through Hermes' own process and plugin seams. |
+| `hermes-profile-fleet` | `hermes` | The unit is a Hermes profile and its per-profile config. |
+| `hermes-project-handoff` | `hermes` | Moving a project means moving Hermes profiles with it. |
+| `hermes-remote-backend` | `hermes` | `hermes serve`, the desktop gateway and its token. |
+| `hermes-terminal-backend` | `hermes` | The failure modes are the terminal tool's own backends. |
+| `hermes-wsl-backend` | `hermes` | Running Hermes itself inside a WSL2 distro. |
+| `hermes-s6-container-supervision` | `hermes` | s6 services in the Hermes Docker image. |
 
-A council profile is its own `HERMES_HOME`, so the global file does not reach it; `council setup
-bots` copies the per-member files into the profiles, which is why they are version-controlled too.
+## Adding a skill
 
-It costs **~500 tokens** of system prompt on every turn, including turns where brevity does not
-matter — the price of it applying, and why the fragment is condensed rather than the full skill.
+**Author it here, not in a live library.** A skill in a host's own skills directory that neither the
+host ships nor a registry owns is a skill with no owner, no review and no backup. The gate cannot see
+it, and the next machine does not get it.
 
-## Adding or changing a skill
+**Do not vendor what someone else maintains.** Two classes do not belong here:
 
-Every skill we author lives here; none lives only in the live library. A skill in
-`$HERMES_HOME/skills/` that is neither bundled nor from the hub is ours with no owner and no backup
-— and on a Nix-managed machine a flake copies only git-visible paths, so it is invisible to every
-build and switch.
+| class | owner | updated by |
+|---|---|---|
+| bundled with a host | the host | its own updater |
+| from a registry or hub | its upstream | the registry's update command |
 
-Find strays by provenance, not by listing files:
+A copy of either gives one file two owners, and the update path silently loses. Reference it instead
+— `docs/upstream.md` records every source, what was taken and what was refused.
 
-```sh
-hermes skills list | awk -F'  +' '$4=="local" && $3!="external"'
-```
+Then:
 
-A non-empty result is a skill we own that is not in this repo. Copy it here, then delete the local
-copy: a local copy shadows this tree silently.
-
-Edit it here, commit, and `git pull` on each machine. A new skill appears as a `/<name>` command
-only after the app restarts, because the command table is memoised in-process (`/reload-skills`
-works in the CLI).
-
-## Upstream skills
-
-Some skills are local snapshots of external sources, and nothing updates them automatically.
-[docs/upstream.md](docs/upstream.md) pins the revisions, what was taken, what was rejected and why.
+1. `skills/<category>/<name>/SKILL.md`, with the frontmatter above. The description must fit 57
+   characters and start with a trigger: `Use when …`. When the skill only makes sense in one host,
+   add `targets: [<host>]` and a row to the table above.
+2. `python3 scripts/validate.py` — the gate names every rule you broke, with the fix.
+3. `python3 -m pytest tests/ -q` — the suite exercises the code the skills ship.
+4. Commit. A host that mounts this tree sees the change on its next scan.
 
 ## Checks
 
-`nix flake check` is the gate: two tiers plus a live check. An assertion belongs in the cheapest tier
-that can make it.
-
-| tier | answers | cost |
+| command | answers | needs |
 |---|---|---|
-| eval | what the tree **says** — frontmatter, index window, names, encoding | milliseconds |
-| run | **behaviour** — `setup.sh` against a stub, the prose claims against the tree | seconds |
-| live | does the **real Hermes** load every skill | one install |
+| `python3 scripts/validate.py` | is every skill valid, and are the documents still true of the tree | a Python 3 standard library |
+| `python3 -m pytest tests/ -q` | does the code the skills ship still work | `pip install pytest` |
+| `python3 scripts/claim-audit.py` | is every mechanical claim in the prose true | nothing |
+| `nix flake check` | all of the above under a pinned toolchain, plus the formatter and this repository's own CI assertions | Nix |
 
-`nix/tests.nix` holds the eval tier and `nix/checks.nix` the run tier; each says why its assertions
-belong there. There is no build tier: an earlier one checked a simulated "shipped" tree against a
-copier that does not exist, so the artefact was fiction and was deleted.
+The first three are the project. The fourth is convenience for a maintainer who has Nix; it runs the
+same `validate.py` and adds nothing a contributor needs.
 
-```bash
-nix flake check                   # the gate: eval + run tiers
-python scripts/verify-live.py     # the real Hermes loads every skill (exit 2 = no hermes)
-python -m pytest tests/ -q        # the retained Python suite; the docs gate is part of it
-python scripts/claim-audit.py     # exit 1 on any claim in the prose that is FALSE
-bash tests/e2e/test_setup.sh      # setup.sh, against a stubbed `hermes`
-```
+`library/contract.json` is the one home for the values the gate reads: the required frontmatter, the
+index window, the category set, the host list, and the external skills a `related_skills` entry may
+name. Add a category there before you add a directory to `skills/`.
 
-| gate | what it enforces | where |
-|---|---|---|
-| `skills` | frontmatter complete and closed, every key parsed, name matches its directory, unique, description inside the index window, no CRLF | `nix/tests.nix` |
-| `contract` | every catalog skill satisfies `library/contract.json`, through the same function the runtime guard calls | `nix/checks.nix` |
-| `tests` | the retained unit suite, on **Linux, macOS and Windows** | `.github/workflows/ci.yml` |
-| `live` | the real Hermes discovers every catalog skill and honours `environments:` | same |
-| `claim audit` | every mechanical claim in the prose is checked, not asserted | same |
-| `setup.sh e2e` | the initializer merges rather than clobbers, and `--check` exits 1 on drift | same, Linux and macOS |
+## Upstream skills
 
-The e2e gate stubs `hermes`, which is the only honest way to exercise the merge path: the script has
-to be lied to about the current config, and doing that against the live config would edit it. It is
-not on Windows because how a Windows runner's Git Bash executes an extensionless shebang file is
-unverified here, and an unverified assertion teaches people to ignore red.
-
-`scripts/verify-live.py` installs nothing; it asks the `hermes` on your PATH, and the `live` CI job
-installs Hermes to run it. It honours `environments:`, so a skill gated on `[s6]` is correctly absent
-everywhere else.
-
-### The contract, and the guard that enforces it
-
-[`library/contract.json`](library/contract.json) is the one home for what makes a skill valid: the
-required frontmatter, the index window, the category set. Three readers share it rather than restate
-it — `nix/tests.nix` (eval tier), `scripts/skill-contract.py` (this gate, and one file on demand),
-and `plugins/library-guard`, which enforces two of the rules where the writes happen instead of
-minutes later in another process:
-
-- a `SKILL.md` write is read back and validated, and the violation returns **inside the same tool
-  result** — the model corrects it while it still has the context;
-- a write into a skill listed in `.bundled_manifest` is refused, because `hermes update` rewrites
-  that directory and the divergence is silent until it bites.
-
-The guard fails open: a hook that can break a tool call is worse than a missing one. Its `DEFAULTS`
-mirror the contract for a wheel installed away from this tree, and
-`tests/unit/test_library_guard.py` fails when the two disagree — the mirror has an owner.
-
-```bash
-python scripts/skill-contract.py --all                              # the gate's own reading
-python scripts/skill-contract.py --check skills/devops/ephemeral-cleanup/SKILL.md
-```
+Some skills are snapshots of external sources, re-adapted for this library, and nothing updates them
+automatically. [docs/upstream.md](docs/upstream.md) pins the revisions, what was taken, what was
+rejected and why — read it before evaluating a candidate that has already been decided.
 
 ## Decisions
 
@@ -228,16 +185,14 @@ trade-off. An ADR is a paragraph, not a document.
 | | |
 |---|---|
 | [0001](docs/adr/0001-reference-not-symlink.md) | Reference the repo, never a copy or symlink |
-| [0002](docs/adr/0002-voice-in-soul-not-skill.md) | The voice lives in `SOUL.md`, not a skill |
+| [0002](docs/adr/0002-voice-in-soul-not-skill.md) | The voice lives in the system prompt, not a skill |
 | [0003](docs/adr/0003-the-council-skill-is-a-generated-copy.md) | The council skill is a generated copy |
 | [0004](docs/adr/0004-adopt-dsh-harness-rules.md) | Adopt four harness rules from DeepSeek Harness, reject its framework |
 | [0005](docs/adr/0005-pin-workflow-actions-to-commits.md) | Pin workflow actions and installs to commits |
 | [0006](docs/adr/0006-dsh-second-pass.md) | The second pass: bug classes, incident classes, request logging |
 | [0007](docs/adr/0007-dsh-third-pass.md) | The third pass: the codebase, the record, and what stayed prose |
 | [0008](docs/adr/0008-openspec-as-the-spec-container.md) | OpenSpec as the spec container, per repository |
-
-Everything else — the ownership classes, the setup contract, the layout — is a rule or a fact, and
-lives in `AGENTS.md` or here.
+| [0009](docs/adr/0009-generic-project.md) | A generic library: the gate is Python, the host is a label |
 
 ## Where this is going
 

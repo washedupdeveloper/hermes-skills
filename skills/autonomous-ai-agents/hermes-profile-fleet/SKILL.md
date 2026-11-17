@@ -6,6 +6,7 @@ author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 category: autonomous-ai-agents
+targets: [hermes]
 metadata:
   hermes:
     tags: [hermes, profiles, multi-agent, packaging, portability, installation, orchestration]

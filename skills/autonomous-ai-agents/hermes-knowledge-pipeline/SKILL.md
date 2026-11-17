@@ -6,6 +6,7 @@ author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 category: autonomous-ai-agents
+targets: [hermes]
 metadata:
   hermes:
     tags: [hermes-agent, knowledge-base, wiki, cron, automation, portability, obsidian, cross-platform]

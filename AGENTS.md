@@ -1,87 +1,73 @@
-# AGENTS.md — working in this repo
+# AGENTS.md — working in this repository
 
-The source of truth for locally-authored Hermes skills, mounted into Hermes through
-`skills.external_dirs`. `README.md` has the full contract; this is the operational short version.
+The source of truth for the skills this library ships. A host reads this tree by one of two routes:
+a mount it declares once (`external_dirs`, a symlinked skills directory), or a copy made by
+`./install.sh`. `README.md` has the full contract; this is the operational short version.
 
 ## Hard rules
 
-1. **Not the bundled set.** A name in `$HERMES_HOME/skills/.bundled_manifest` is Hermes's, refreshed
-   by `hermes update` — an edit here is overwritten there, and the divergence stays invisible until
-   it bites. No fixes, no rewrites, no audits of it; scope skill work to this repo's `skills/`.
-2. **Not the hub set.** Registry skills belong to their upstream and update with
-   `hermes skills update`.
-3. **No sync script.** Machines mount this repo; a copy-back makes it a mirror, and a mirror deletes
-   whatever the pushing machine happens to lack.
-4. **The mount is readable, not protected.** The background self-improvement review patches an
-   existing skill in place, wherever it is found, `external_dirs` included — so an unattended agent
-   can write here. The gate is git: such a write shows in `git status` / `git diff` and reverts with
-   `git checkout`. Run `git status` before committing anything you did not write.
-
-   `skills.create_dir` redirects *new* skills only, so it does not cover this. It is left unset, and
-   agent-created skills land in `~/.hermes/skills/` to be promoted by hand. `./setup.sh` applies
-   both settings.
-
+1. **Not what a host ships.** A skill directory named in a host's bundled manifest is that host's,
+   refreshed by its own updater — an edit here is overwritten there, and the divergence stays
+   invisible until it bites. Identify the class before touching a skill.
+2. **Not what a registry owns.** An installed skill belongs to its upstream and updates with the
+   registry's own command. Reference it (see `docs/upstream.md`); do not vendor it.
+3. **No sync script.** Hosts mount this repo or link it; nothing copies the library back. A
+   copy-back makes it a mirror, and a mirror deletes whatever the pushing machine happens to lack.
+4. **A mount is readable, not protected.** An unattended writer — a self-improvement review, another
+   agent — can patch an existing skill in place, wherever it is found. The gate is git: such a write
+   shows in `git status` / `git diff`. Run `git status` before committing anything you did not write,
+   and stage explicit paths rather than `git add -A`.
 5. **The contract is one file.** `library/contract.json` holds the required frontmatter, the index
-   window and the category set. `nix/tests.nix`, `scripts/skill-contract.py` and
-   `plugins/library-guard` read it instead of restating it. Change a rule there, never in three
-   places; the plugin's `DEFAULTS` mirror is asserted by `tests/unit/test_library_guard.py`, so a
-   half-change fails the gate.
+   window, the category set, the hosts and the external skills. `scripts/validate.py` reads it; no
+   other file restates it. Change a rule there, never in two places.
 
 ## Adding a skill
 
-- One directory per skill: `<category>/<skill-name>/SKILL.md`.
-- Frontmatter carries at least `name` and `description`. The first 57 characters of `description` are
-  all the model sees when choosing, so make them a self-contained trigger
+- One directory per skill: `skills/<category>/<name>/SKILL.md`, `<name>` equal to the directory.
+- Frontmatter carries at least `name` and `description`. The first 57 characters of `description`
+  are all an agent sees when choosing, so make them a self-contained trigger
   (`Use when <trigger>. <behaviour>.`).
+- A skill that only makes sense inside one host declares `targets: [<host>]` and gets a row in the
+  README's host-scoped table.
+- Support files live in `references/`, `scripts/`, `templates/`, `assets/` beside the skill, and are
+  cited by relative path from the skill's own directory — a pointer that climbs out of it dangles
+  wherever the skill is read on its own.
 
 ## Precedence trap
 
-A name that exists both in `$HERMES_HOME/skills/` and here resolves to the **local** copy, so edits
-here have no effect and nothing says so. Delete the local copy first. The chain is stated once, in
-[README.md](README.md#adding-or-changing-a-skill).
+A host that resolves a local skills directory before a mounted one will read the local copy
+silently: edits here then appear to do nothing. Keep names unique across the two, and delete a local
+copy when a skill moves in.
 
 ## Verify
 
 ```bash
-nix flake check                    # the gate: eval + run tiers
-python3 scripts/verify-live.py     # the real hermes loads every skill
-python3 scripts/claim-audit.py     # exit 1 on any false claim
+python3 scripts/validate.py            # every rule, over the whole tree
+python3 -m pytest tests/ -q            # the code the skills ship, and the gate's negative controls
+python3 scripts/claim-audit.py         # exit 1 on any claim in the prose that is FALSE
+nix flake check                        # optional: the same gate under a pinned toolchain
 ```
 
-`nix flake check` is the whole gate: what the tree *says* (`nix/tests.nix`, milliseconds) and
-*behaviour* (`nix/checks.nix` — the Python suite, the prose claims, `setup.sh` against a stub). A new
-check goes in `nix/tests.nix` unless it needs an interpreter. There is no build tier because there is
-no artifact: Hermes reads this tree in place.
+`python3 scripts/validate.py` is the gate. It needs nothing but a Python 3 standard library, which is
+the whole point of this repository's shape — a contributor on any OS runs the same command CI runs.
+Exit 1 names each violation with its file; exit 2 means the scan found no skills, which is a wrong
+directory, not a pass.
 
-`scripts/verify-live.py` asks the real `hermes` whether it discovers every catalog skill, and exits 2
-when `hermes` is absent, so a missing binary cannot be mistaken for a pass. It honours
-`environments:` — `hermes-s6-container-supervision` is *correctly* absent outside an s6 container.
+`nix flake check` runs `validate.py`, the Python suite, the prose audit and the formatter, then the
+eval-tier assertions about this repository's own CI (workflow pins, runner labels, the OpenSpec CLI
+pin). Those last checks need Nix; nothing about using the library does.
 
-`scripts/claim-audit.py` checks the mechanical claims in the prose — counts, links, the description
-ceiling, the setup script's behaviour — and classifies each `PROVEN` / `FALSE` / `UNPROVEN`. A claim
-this repo cannot settle is labelled, never asserted.
-
-`nix flake check` sees only **git-tracked** files: a reference file on disk but not `git add`ed is
-absent from the store copy, so the failure names a path that looks present. `git status` first,
-`git add` to fix.
+`nix flake check` sees only **git-tracked** files: a support file on disk but not `git add`ed is
+absent from the store copy, so a skill citing it fails as a dead reference while the file sits beside
+it. `git status` first, `git add` to fix.
 
 ## Specs (OpenSpec)
 
-A behaviour change starts in `openspec/changes/<name>/` — proposal, spec delta, tasks — not in code.
-`openspec list --specs` before proposing; `validate <name> --strict` before applying and again after
-archiving; `archive <name> --yes` when it lands. Procedure: the `openspec` skill. Pure refactors and
-dependency bumps set `skip_specs: true`.
-
-The CLI is not assumed to be on `PATH`: CI installs it per run, and both pin the same exact version —
-1.15.0, the one ADR 0008 was verified against. `@1` is a range that resolves to whatever 1.x is
-current, which is the mutable reference ADR 0005 rejects:
+`openspec/` holds the decision records this repository already made — a change's proposal, spec
+delta and tasks. A behaviour change to the gate or the layout starts there. The CLI is pinned exactly
+(1.15.0 in `nix/pins.nix` and the CI job) because a range resolves to whatever the range is now;
+`@1` is the mutable reference ADR-0005 rejects.
 
 ```bash
-nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 <verb>   # e.g. validate --all --strict
+nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 validate --all --strict
 ```
-
-Bumping it is a one-line change in every file `nix/pins.nix` lists under `openspecCliSites`, plus the
-CI job, which the gate finds by reading the workflows directory. That file is the one source: the gate
-fails, naming path and line, on a range, a bare major or a missing version — and fails if a file
-starts naming the package without being listed there, so a new adoption site is a failure rather than
-a silent copy. It also fails on a `-latest` runner, or on an installer it cannot read.

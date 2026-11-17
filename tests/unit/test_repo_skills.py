@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Contract tests for the skills this repo ships.
+"""One check that needs the shipped curation script, not the gate.
+
+The tree rules — dead references, fenced commands, `related_skills` — moved to
+`scripts/validate.py`, which owns them for every host. A second implementation here
+was a second answer to one question.
 
 Standalone — no pytest required:
 
@@ -54,119 +58,6 @@ def parse(p: pathlib.Path) -> tuple[dict, str]:
         if mm:
             fm[mm.group(1)] = mm.group(2).strip().strip('"')
     return fm, text[m.end() + 3:]
-
-
-def test_no_dead_references():
-    """A promised reference file that does not exist is a broken pointer.
-
-    Only POINTERS are checked — a path the reader is meant to follow. A path in
-    a prescriptive sentence ("Write the installer (`scripts/x.sh`)") names a file
-    to CREATE, not one that exists, so flagging it would be wrong. Same for a
-    placeholder (`references/<topic>.md`).
-
-    A pointer that climbs OUT of the skill directory is broken too, even when the
-    target exists in the repo: Hermes resolves a skill's paths relative to the
-    skill's own directory, so `../../scripts/x.py` works from a checkout and
-    dangles from anywhere the skill is read on its own.
-    """
-    write_verbs = re.compile(
-        r"\b(write|create|add|author|generate|scaffold|produce)\b", re.I)
-    # A path being TRANSFORMED is an illustration, not a pointer. `deterministic-quality-gates`
-    # teaches the `lstrip("./")` trap — "strips characters, so `../a.py` becomes `a.py`" — and
-    # the escaped path there names no file the skill expects to have. Without this the rule
-    # forces a correct example out of the text or the example makes the suite red.
-    illustration = re.compile(r"\b(becomes|turns into)\b|→|->")
-    bad = []
-    for p in catalog_files():
-        _, body = parse(p)
-        for line in body.splitlines():
-            for m in re.finditer(
-                    r"`((?:references|templates|assets|scripts)/[^`\s]+)`", line):
-                rel = m.group(1).rstrip(".")
-                if "<" in rel or ">" in rel:
-                    continue  # a placeholder, not a path
-                if write_verbs.search(line):
-                    continue  # prescriptive: the file does not exist yet
-                if not (p.parent / rel).exists():
-                    bad.append(f"{p.parent.name} -> {rel}")
-            for m in re.finditer(r"`(\.\./[^`\s]+)`", line):
-                rel = m.group(1)
-                # A placeholder is not a path — the same exemption the reference rule above
-                # already makes. `../…` in prose names nothing, and without this the sentence
-                # that documents the escape detector is itself flagged by it.
-                if any(ch in rel for ch in "<>…*"):
-                    continue
-                if write_verbs.search(line) or illustration.search(line):
-                    continue
-                bad.append(f"{p.parent.name} -> {m.group(1)} (escapes the skill dir)")
-    assert not bad, f"dead references: {bad}"
-
-
-def test_related_skills_resolve_in_repo():
-    names = {p.parent.name for p in catalog_files()}
-    bad = []
-    for p in catalog_files():
-        _, body = parse(p)
-        m = re.search(r"related_skills:\s*\[([^\]]*)\]", body)
-        if not m:
-            continue
-        for ref in (x.strip() for x in m.group(1).split(",")):
-            if ref and ref in names:
-                continue
-            # Bundled Hermes skills live outside this repo; only flag a name
-            # that looks like one of ours and is absent.
-            if ref.startswith(("reviewer-", "review-council")):
-                bad.append(f"{p.parent.name} -> {ref}")
-    assert not bad, f"unresolved in-repo related_skills: {bad}"
-
-
-def test_related_skills_frontmatter_resolves():
-    """`metadata.hermes.related_skills` must name skills that exist somewhere."""
-    names = {p.parent.name for p in catalog_files()}
-    bad = []
-    for p in catalog_files():
-        fm, _ = parse(p)
-        raw = fm.get("related_skills", "")
-        for ref in (x.strip() for x in raw.strip("[]").split(",") if x.strip()):
-            if ref not in names and not ref.startswith(
-                    ("hermes-", "council", "nixos", "test-", "systematic",
-                     "requesting", "simplify", "spike", "deterministic",
-                     "grounded", "wait", "claude", "codex", "opencode")):
-                bad.append(f"{p.parent.name} -> {ref}")
-    assert not bad, f"related_skills names nothing known: {bad}"
-
-
-def test_no_dead_paths_in_fenced_commands():
-    """A fenced command that runs a script this skill ships must find it.
-
-    `test_no_dead_references` reads inline spans only, and that is not where the
-    bug lived: a retired `scripts/install-bots.sh` sat in a fenced block and
-    survived three audits of this file. Only paths into a directory the skill
-    itself ships are checked — a `scripts/x.py` in a skill with no `scripts/`
-    belongs to some other repository, and cannot be verified from here.
-    """
-    write_verbs = re.compile(r"\b(write|create|add|author|generate|scaffold|produce)\b", re.I)
-    local = re.compile(r"\b((?:scripts|references|templates|assets)/[\w./-]+\.\w+)")
-    fence = re.compile(r"```[a-zA-Z]*\n(.*?)```", re.S)
-    bad = []
-    for p in sorted(SKILLS.rglob("*.md")):
-        if "__pycache__" in p.parts:
-            continue
-        d = p.parent if p.name == "SKILL.md" else next(
-            (a for a in p.parents if (a / "SKILL.md").is_file()), p.parent)
-        for block in fence.findall(p.read_text(encoding="utf-8", errors="replace")):
-            for raw in block.splitlines():
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if any(c in line for c in "<>$") or write_verbs.search(line):
-                    continue
-                for ref in local.findall(line):
-                    if not (d / ref.split("/", 1)[0]).is_dir():
-                        continue
-                    if not (d / ref).exists():
-                        bad.append(f"{p.relative_to(SKILLS)} -> {ref}")
-    assert not bad, f"dead paths in fenced commands: {bad}"
 
 
 def test_the_routing_bench_scores_only_what_the_prompt_shows():

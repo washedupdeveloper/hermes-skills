@@ -14,7 +14,7 @@ From a clean clone of `origin/main`:
 | Claim | Settled by |
 |---|---|
 | the tree has the shape the specs describe | `nix flake check` (eval tier, `nix/tests.nix`) |
-| every catalog skill loads in the real Hermes | `python3 scripts/verify-live.py` — 70 catalog skills, 69 on a host, 1 correctly hidden by `environments:` |
+| a host loads every catalog skill | the host's own skill list — the README names the command per host; the gate proves the tree, the host proves its loader |
 | every mechanical claim in the prose is true | `python3 scripts/claim-audit.py` — exit 0, 0 FALSE |
 | the specs validate | `openspec validate --all --strict` |
 | every path a spec names exists | `python3 -m pytest tests/unit/test_docs.py` |

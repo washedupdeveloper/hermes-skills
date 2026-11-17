@@ -1,5 +1,5 @@
 {
-  "schema": "skill-contract/v1",
+  "schema": "skill-contract/v2",
   "description_window": 57,
   "required_frontmatter": ["name", "description", "version", "author", "license", "platforms"],
   "categories": [
@@ -12,6 +12,19 @@
     "software-development"
   ],
   "support_dirs": ["assets", "references", "templates", "scripts", "examples"],
-  "gate_command": "nix flake check",
-  "_why": "One home for the values every enforcer reads: nix/tests.nix (eval tier), scripts/skill-contract.py (CLI and gate), plugins/library-guard (runtime). A value here that disagrees with the gate is a failure, not a preference."
+  "hosts": ["hermes", "claude", "codex", "opencode", "cursor", "gemini"],
+  "external_skills": [
+    "github",
+    "grounded-citations",
+    "hermes-agent",
+    "hermes-agent-skill-authoring",
+    "llm-wiki",
+    "obsidian",
+    "requesting-code-review",
+    "reviewer-security",
+    "systematic-debugging",
+    "test-driven-development"
+  ],
+  "gate_command": "python3 scripts/validate.py",
+  "_why": "One home for the values every enforcer reads: scripts/validate.py (the gate, standard library only) and nix/checks.nix (the optional wrapper). Nothing in this file is Hermes-specific; `hosts` names the agents a skill may declare itself scoped to, and `external_skills` the skills it may point at outside this repository."
 }

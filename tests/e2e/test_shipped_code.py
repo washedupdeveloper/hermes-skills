@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import os
 import pathlib
+
+import pytest
 import re
 import shutil
 import subprocess
@@ -81,11 +83,15 @@ def test_the_council_suite_passes_on_the_shipped_code():
     assert " passed" in tail, f"no pass count parsed:\n{tail}"
 
 
-def test_the_loader_accepts_every_shipped_skill():
-    """Hermes's own loader, not a regex: every catalog skill parses and is enabled."""
+def test_a_host_loader_accepts_every_shipped_skill():
+    """Optional evidence: only an installed host can prove its own loader.
+
+    A `return` here would be a pass that measured nothing — the rule this repository
+    applies to every other skip. The gate proves the tree; this proves one host reads it.
+    """
     hermes = shutil.which("hermes")
     if not hermes:
-        return
+        pytest.skip("no host binary on PATH; nothing to measure")
     r = subprocess.run([hermes, "skills", "list"], capture_output=True, text=True,
                        stdin=subprocess.DEVNULL, timeout=120)
     if r.returncode != 0:

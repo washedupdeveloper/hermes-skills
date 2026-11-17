@@ -6,6 +6,7 @@ author: Hermes Agent
 license: MIT
 platforms: [linux]
 category: devops
+targets: [hermes]
 environments: [s6]
 metadata:
   hermes:

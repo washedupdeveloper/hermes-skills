@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""The gate's own controls: every rule in `scripts/validate.py` must be seen failing.
+
+A check that has only ever passed is indistinguishable from one that never ran. Each
+test below builds the smallest tree that breaks one rule and asserts the gate names it.
+
+    python3 tests/unit/test_validate.py
+    python3 -m pytest tests/unit/test_validate.py -q
+"""
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent.parent
+SPEC = importlib.util.spec_from_file_location("validate", REPO / "scripts" / "validate.py")
+validate = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(validate)
+
+CONTRACT = {
+    "schema": "skill-contract/v2",
+    "description_window": 57,
+    "required_frontmatter": ["name", "description", "version", "author", "license", "platforms"],
+    "categories": ["alpha", "beta"],
+    "support_dirs": ["references", "templates", "assets", "scripts"],
+    "hosts": ["hermes"],
+    "external_skills": ["github"],
+}
+
+SKILL = """---
+name: {name}
+description: "{desc}"
+version: 1.0.0
+author: test
+license: MIT
+platforms: [linux]
+{extra}---
+
+# {name}
+
+Body.
+"""
+
+
+def frontmatter(name="probe", desc="Use when probing.", extra=""):
+    return SKILL.format(name=name, desc=desc, extra=extra)
+
+
+def fixture(tmp: Path, files: dict[str, str]) -> Path:
+    """A repo shaped like this one: contract, categories, skills, README."""
+    (tmp / "library").mkdir(parents=True, exist_ok=True)
+    (tmp / "library" / "contract.json").write_text(json.dumps(CONTRACT), encoding="utf-8")
+    for rel, text in files.items():
+        path = tmp / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+    return tmp
+
+
+def check(tmp: Path) -> list[str]:
+    return validate.validate(tmp).violations
+
+
+def one(tmp: Path, text: str, name="probe") -> list[str]:
+    (tmp / "library").mkdir(parents=True, exist_ok=True)
+    (tmp / "library" / "contract.json").write_text(json.dumps(CONTRACT), encoding="utf-8")
+    path = tmp / f"skills/alpha/{name}/SKILL.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # `newline=""`: the fixture must be able to hold CRLF, which is what it tests.
+    path.write_text(text, encoding="utf-8", newline="")
+    return validate.validate(tmp, one=path).violations
+
+
+# ── per-file rules ──────────────────────────────────────────────────────────
+
+def test_a_valid_skill_passes():
+    with tempfile.TemporaryDirectory() as d:
+        assert one(Path(d), frontmatter()) == []
+
+
+def test_a_missing_fence_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter().replace("---\n", "", 1))
+        assert any("does not start with a '---'" in v for v in out), out
+
+
+def test_an_unclosed_fence_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter().replace("\n---\n\n#", "\n\n#", 1))
+        assert any("never closed" in v for v in out), out
+
+
+def test_a_missing_field_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter().replace("license: MIT\n", ""))
+        assert any("missing `license`" in v for v in out), out
+
+
+def test_a_name_that_disagrees_with_its_directory_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter(name="other"))
+        assert any("does not match its directory" in v for v in out), out
+
+
+def test_the_window_boundary_is_inclusive():
+    """57 passes, 58 fails: the boundary itself, not just 'over it'."""
+    with tempfile.TemporaryDirectory() as d:
+        ok = "U" * 57
+        assert one(Path(d), frontmatter(desc=ok)) == []
+        out = one(Path(d), frontmatter(desc="U" * 58))
+        assert any("58 characters" in v for v in out), out
+
+
+def test_an_empty_description_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter(desc=""))
+        assert any("description` is empty" in v for v in out), out
+
+
+def test_a_frontmatter_line_the_parser_cannot_read_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter().replace("license: MIT", "license MIT"))
+        assert any("not parsed as `key: value`" in v for v in out), out
+
+
+def test_crlf_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter().replace("\n", "\r\n"))
+        assert any("CRLF" in v for v in out), out
+
+
+def test_a_host_prefixed_skill_must_declare_its_target():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter(name="hermes-thing"), name="hermes-thing")
+        assert any("host-scoped but declares no" in v for v in out), out
+        out = one(Path(d), frontmatter(name="hermes-thing", extra="targets: [hermes]\n"),
+                  name="hermes-thing")
+        assert out == [], out
+
+
+def test_an_unknown_target_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        out = one(Path(d), frontmatter(name="other-thing", extra="targets: [acme]\n"),
+                  name="other-thing")
+        assert any("not in the contract's hosts" in v for v in out), out
+
+
+# ── tree rules ──────────────────────────────────────────────────────────────
+
+def test_a_duplicate_name_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        root = fixture(Path(d), {
+            "skills/alpha/probe/SKILL.md": frontmatter(),
+            "skills/beta/probe/SKILL.md": frontmatter(),
+        })
+        assert any("duplicate skill name" in v for v in check(root))
+
+
+def test_a_directory_without_a_skill_md_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": frontmatter()})
+        (root / "skills/alpha/empty").mkdir()
+        assert any("holds no SKILL.md" in v for v in check(root))
+
+
+def test_a_category_outside_the_contract_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        root = fixture(Path(d), {"skills/gamma/probe/SKILL.md": frontmatter()})
+        assert any("not in library/contract.json" in v for v in check(root))
+
+
+def test_a_dead_reference_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        body = frontmatter() + "\nSee `references/missing.md` for depth.\n"
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body})
+        assert any("dead reference -> references/missing.md" in v for v in check(root))
+
+
+def test_a_prescriptive_path_is_not_a_dead_reference():
+    with tempfile.TemporaryDirectory() as d:
+        body = frontmatter() + "\nWrite the file (`references/new.md`) first.\n"
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body})
+        assert not any("dead reference" in v for v in check(root))
+
+
+def test_a_pointer_out_of_the_skill_directory_is_named():
+    with tempfile.TemporaryDirectory() as d:
+        body = frontmatter() + "\nThe detail is in `../other/references/x.md`.\n"
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body})
+        assert any("escapes the skill dir" in v for v in check(root))
+
+
+def test_a_related_skill_outside_the_repo_must_be_in_the_contract():
+    with tempfile.TemporaryDirectory() as d:
+        body = frontmatter().replace("metadata:", "metadata:")
+        body = body.replace("---\n\n#", "related_skills: [nowhere]\n---\n\n#", 1)
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body})
+        assert any("`nowhere`, which is neither here" in v for v in check(root))
+        body = body.replace("related_skills: [nowhere]", "related_skills: [github]")
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body})
+        assert not any("neither here" in v for v in check(root))
+
+
+def main() -> int:
+    tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
+    failed = 0
+    for name, fn in tests:
+        try:
+            fn()
+            print(f"  ok    {name}")
+        except AssertionError as exc:
+            failed += 1
+            print(f"  FAIL  {name}\n        {exc}")
+    print(f"\n  {len(tests) - failed}/{len(tests)} passed")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

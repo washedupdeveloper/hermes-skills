@@ -1,11 +1,9 @@
 name: ci
 
-# The gates. `gate` is authoritative: `nix flake check` evaluates the assertions and builds the
-# run-tier checks under one pinned toolchain, so every property has one owner and the other jobs
-# stay the no-Nix path rather than a second implementation. `tests` is the portability claim
-# executed on three OSes; `audit` fails on a FALSE claim in the prose; `setup` exercises the
-# initializer against a stub; `live` asks the real Hermes to load the tree; `mutants` proves each
-# gate rule fires; `cost` reports what each job took.
+# The gate is `python3 scripts/validate.py`: standard library only, so the same command a
+# contributor runs is the one CI runs, on every OS, with nothing to install. The `nix gate`
+# job is optional and marks the checks that need Nix (the formatter and this repository's
+# own eval-tier assertions). Nothing in this workflow is required to use the library.
 
 on:
   push:
@@ -14,8 +12,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Deny everything at the workflow level, then grant per job: `contents: read` is all any of them
-# needs, so a compromised action can read the tree and nothing else.
+# Deny everything at the workflow level, then grant per job: `contents: read` is all any of
+# them needs, so a compromised action can read the tree and nothing else.
 permissions: {}
 
 # A superseded push has no verdict worth waiting for. Cancelling it also bounds how many
@@ -25,71 +23,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The whole tree under one pinned toolchain: `nix flake check` evaluates the assertions and
-  # builds the run-tier checks, so a red gate names the same properties the jobs below enforce.
-  gate:
-    name: nix gate
-    runs-on: ubuntu-24.04
+  # The portable gate, on the operating systems the library claims to work on. This is the
+  # claim: any system, any environment, a Python standard library.
+  validate:
+    name: validate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      # composite action: no node runtime, so it is not part of the Node 20
-      # deprecation. v31 is the current major, pinned to the commit that tag
-      # pointed at — see the note in `tests` for why a tag is not enough.
-      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
-      - name: nix flake check
-        # A red X with no message is not a diagnosis. Run logs need a token to read; check
-        # annotations do not, so the failing tail is emitted as one. Without this, a gate
-        # failure on a runner is visible only to someone who can log in and read it.
+      - name: gate
+        shell: bash
+        # `RUNNER_OS`, not a matrix cell: a matrix built from `include` silently drops a
+        # job when one cell omits a key, which is this repository's own workflow rule.
         run: |
-          set -o pipefail
-          if nix flake check --keep-going 2>&1 | tee /tmp/gate.log; then
-            exit 0
-          fi
-          msg=$(tail -c 1800 /tmp/gate.log \
-                | sed -e 's/%/%25/g' -e 's/\r//g' \
-                | awk 'BEGIN{ORS=""} NR>1{printf "%%0A"} {print}')
-          echo "::error title=nix gate failed::${msg}"
-          exit 1
+          python3 scripts/validate.py || python scripts/validate.py
 
-  # The real product, loading the real tree. This is the only job that answers
-  # "does Hermes actually load these skills?" rather than "is the tree shaped
-  # right?" -- it installs Hermes and asks it, so a frontmatter field the real
-  # parser rejects fails here and nowhere else.
-  #
-  # It is a separate job rather than a flake check because the product is not a
-  # flake input of this repository, and pulling the whole agent into the gate
-  # would make every contributor's `nix flake check` fetch it.
-  live:
-    name: live hermes
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          persist-credentials: false
-      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
-        with:
-          python-version: "3.12"
-      - name: install hermes
-        run: |
-          # A rev, not a branch: `main` moves, so an unpinned install means this job
-          # tests a different product tomorrow without any change here. Bumping it is
-          # a one-line commit, and that is the point.
-          nix profile install github:NousResearch/hermes-agent/548091836760a67e331b8f5643be8e5c08fae1e6#minimal
-          # `nix profile install` lands in ~/.nix-profile/bin, which the nix
-          # action does not put on PATH.
-          echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
-      - name: every catalog skill loads in the real hermes
-        run: python scripts/verify-live.py
-
-  # The portability guarantee, executed: nothing installed but the hash-pinned
-  # pytest set, on a pinned image for each OS.
+  # The code the skills ship, executed. Also the negative controls that prove each gate
+  # rule fires: a check that only ever passes is indistinguishable from one that never ran.
   tests:
     name: tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -98,63 +55,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-26, windows-2025]
+        os: [ubuntu-24.04, macos-14, windows-2022]
     steps:
-      # checkout and setup-python must run on Node 24. Node 20 reached EOL in April
-      # 2026 and was removed from the runners on 2026-09-23, so v4/v5 (the Node-20
-      # majors) are wrong here.
-      #
-      # Pinned to a COMMIT, not a major. `@v7` is a mutable tag: whoever can move it
-      # runs code here with this workflow's token, and no change to this repository
-      # is needed. The comment above each pin names the version it was chosen for, so
-      # a reader can tell how stale it is; `nix flake check` fails if any `uses:` is
-      # not a 40-hex SHA, which is what keeps this from drifting back.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
-        with:
-          python-version: "3.12"
-      # Hash-pinned, not `pip install pytest`. An unpinned fetch resolves to whatever
-      # PyPI serves at run time and executes it in this job; `--require-hashes` refuses
-      # any artefact whose sha256 is not in the file, so a substituted release fails the
-      # job instead of running in it. `--upgrade pip` is dropped for the same reason:
-      # it is an unhashed download of the thing that does the verifying.
-      - name: install pytest
-        run: python -m pip install --require-hashes -r requirements-test.txt
-      # The suite writes junit.xml and the next step turns each failure into an annotation: job
-      # logs need admin rights, annotations on a public repository do not. The annotation step is
-      # the enforcing one, so the job still fails.
-      - name: run the suite
-        run: python -m pytest tests/ -q --junitxml=junit.xml
-        continue-on-error: true
-      - name: report failing tests as annotations
-        if: always()
-        shell: python
+      - name: pytest
+        shell: bash
         run: |
-          import pathlib, sys, xml.etree.ElementTree as ET
-          report = pathlib.Path("junit.xml")
-          if not report.is_file():
-              print("::error::junit.xml was not written — the suite did not run")
-              sys.exit(1)
-          bad = []
-          for case in ET.parse(report).getroot().iter("testcase"):
-              node = case.find("failure")
-              if node is None:
-                  node = case.find("error")
-              if node is None:
-                  continue
-              label = f"{case.get('classname', '')}::{case.get('name', '')}"
-              detail = (node.get("message") or "").replace("\n", " ")[:250]
-              print(f"::error title={label}::{detail}")
-              bad.append(label)
-          print(f"::notice::failing tests: {len(bad)}")
-          sys.exit(1 if bad else 0)
+          PY=python3
+          python3 --version >/dev/null 2>&1 || PY=python
+          "$PY" -m pip install --quiet pytest
+          "$PY" -m pytest tests/ -q -p no:cacheprovider
 
-  # The prose gate, on one OS. It reads the tree and executes `setup.sh --check`
-  # through subprocess, so a second platform would mostly repeat the same answer —
-  # and where `setup.sh` IS platform-sensitive, the e2e job below already covers
-  # macOS against a stub. One OS is enough here; macOS minutes count tenfold.
+  # Every mechanical claim in the prose, checked against the tree.
   audit:
     name: claim audit
     runs-on: ubuntu-24.04
@@ -164,98 +78,51 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
-        with:
-          python-version: "3.12"
-      - name: audit the claims in the prose
-        run: |
-          # Failures become annotations as well as log lines. Job logs need admin
-          # rights to download; annotations are served unauthenticated for a public
-          # repository, so an audit that goes red stays diagnosable without a token.
-          out=$(mktemp)
-          if python scripts/claim-audit.py >"$out" 2>&1; then
-            tail -n 3 "$out"
-          else
-            tail -n 25 "$out" | while IFS= read -r line; do
-              echo "::error title=claim audit::$line"
-            done
-            exit 1
-          fi
+      - run: python3 scripts/claim-audit.py
 
-  # Not adopted, both on cost: harden-runner, whose egress allowlist every new Nix cache or flake
-  # input breaks with a failure that reads as a network fault, and which needs
-  # `security-events: write`; and actions/cache over /nix/store, where a poisoned cache is
-  # arbitrary code in every later run.
-
-  # The initializer, against a stub. ubuntu and macOS only: the test builds an
-  # extensionless `hermes` stub and executes it through bash, and on a Windows
-  # runner that depends on how Git Bash's exec layer treats a shebang file with no
-  # extension. Unverified here, so it is not asserted — a job that fails for a
-  # reason unrelated to this repository teaches people to ignore red.
-  setup:
-    name: setup.sh e2e (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-26]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          persist-credentials: false
-      - name: exercise setup.sh against a stubbed hermes
-        run: |
-          # Annotated on failure: the log needs admin rights, the annotations do not.
-          out=$(mktemp)
-          if bash tests/e2e/test_setup.sh >"$out" 2>&1; then
-            tail -n 3 "$out"
-          else
-            tail -n 25 "$out" | while IFS= read -r line; do
-              echo "::error title=setup.sh e2e::$line"
-            done
-            exit 1
-          fi
-
-  # The gate's RULES, not the tree. An eval-tier assertion decides its outcome while the check
-  # is being evaluated, and its derivation carries no inputs, so `nix flake check` cannot tell a
-  # right tree from a wrong one. This job puts each forbidden state into the checkout and
-  # requires the gate to fail; a rule that cannot fire is a rule that measures nothing.
-  mutants:
-    name: gate mutants
+  # Optional: the maintainer checks that need Nix — the formatter, the eval-tier assertions,
+  # and the same validate.py under a pinned interpreter.
+  nix-gate:
+    name: nix gate (optional)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
-        with:
-          python-version: "3.12"
-      - name: every rule fails on the state it forbids
+      - name: nix flake check
+        # A red X with no message is not a diagnosis. Run logs need a token to read; check
+        # annotations do not, so the failing tail is emitted as one.
         run: |
-          # Annotated on failure: the log needs admin rights, the annotations do not.
-          out=$(mktemp)
-          if python3 tests/e2e/test_gate_mutants.py >"$out" 2>&1; then
-            tail -n 3 "$out"
-          else
-            tail -n 30 "$out" | while IFS= read -r line; do
-              echo "::error title=gate mutants::$line"
-            done
-            exit 1
+          set -o pipefail
+          if nix flake check --keep-going 2>&1 | tee /tmp/gate.log; then
+            exit 0
           fi
+          echo "::error::nix flake check failed; last lines below"
+          tail -40 /tmp/gate.log | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          exit 1
 
-  # What each job cost. Two macOS jobs were once cancelled at 15m01s, with nothing but a gap
-  # between two timestamps to show for them; this makes the next one a row in the summary. It
-  # reports, it never decides a verdict, and it runs even when everything before it failed.
+  # The spec tree this repository already carries, validated with the CLI it was written for.
+  openspec:
+    name: openspec
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - run: nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 validate --all --strict
+
+  # What each job took, so a gate nobody measures cannot quietly become slow.
   cost:
     name: cost
-    needs: [gate, live, tests, audit, setup, mutants, openspec]
     if: always()
+    needs: [validate, tests, audit, nix-gate, openspec]
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -264,27 +131,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - name: per-job cost
+      - name: table
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN: ${{ github.run_id }}
-        run: |
-          gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" > /tmp/jobs.json
-          python3 scripts/ci-cost.py /tmp/jobs.json >> "$GITHUB_STEP_SUMMARY"
-
-  # The specs are a gate input: a change that does not validate cannot land. The runner is an
-  # image and the CLI an exact version — `ubuntu-latest` and `@1` are the mutable references
-  # ADR 0005 keeps out.
-  openspec:
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          persist-credentials: false
-      - name: install the spec CLI
-        run: npm install -g --ignore-scripts @fission-ai/openspec@1.15.0
-      - name: the specs validate
-        run: openspec validate --all --strict
+          RUN_ID: ${{ github.run_id }}
+        run: python3 scripts/ci-cost.py | tee -a "$GITHUB_STEP_SUMMARY"

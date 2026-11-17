@@ -107,37 +107,24 @@ for doc in [R / "README.md", R / "AGENTS.md", R / "docs" / "upstream.md"]:
 claim("every relative doc link resolves",
       "PROVEN" if not bad_links else "FALSE", "; ".join(bad_links) or "all resolve")
 
-# ── the token cost the README states ─────────────────────────────────────────
-soul = pathlib.Path.home() / ".hermes" / "SOUL.md"
-if soul.is_file():
-    toks = len(soul.read_text(encoding="utf-8")) // 4
-    claim("README: SOUL fragment costs '~500 tokens'",
-          "PROVEN" if 450 <= toks <= 550 else "FALSE",
-          f"actual: {toks} tokens")
-
-# ── setup.sh claims, executed ────────────────────────────────────────────────
-# Named `proc`, not `p`: `p` is a Path in the three loops above, and rebinding it
-# made mypy blind on the block that decides PROVEN vs UNPROVEN here (7 errors).
-proc = subprocess.run([str(R / "setup.sh"), "--check"], capture_output=True, text=True,
-                      timeout=120)
-# exit 1 is the documented DRIFT code, but it is also what the script returns when
-# `hermes` is not on PATH — which is the normal state of a fresh CI runner. Reporting
-# that as PROVEN would be a claim passing for a reason it did not establish, so the
-# message decides which case this is.
-_out = ((proc.stderr or "") + (proc.stdout or "")).strip()
-_reason = _out.splitlines()[-1] if _out else "(no output)"
-if proc.returncode == 0:
-    _verdict, _detail = "PROVEN", "exit=0 — in sync"
-elif proc.returncode == 1 and "not on PATH" in _reason:
-    _verdict = "UNPROVEN"
-    _detail = f"exit=1, but for a different reason: {_reason}"
-elif proc.returncode == 1:
-    _verdict, _detail = "PROVEN", f"exit=1 — drift: {_reason}"
-else:
-    _verdict, _detail = "FALSE", f"exit={proc.returncode}: {_reason}"
-claim("README: '--check ... exit 1 on drift' (and 0 in sync)", _verdict, _detail)
-claim("README: 'setup.sh resolves its own location'",
-      "PROVEN" if "BASH_SOURCE" in (R / "setup.sh").read_text() else "FALSE")
+# ── the installer the README documents ───────────────────────────────────────
+installer = R / "install.sh"
+# Bytes, not `read_text`: a shebang claim is about the first bytes of the file, and a
+# variable shared with the prose loops above is not the file it claims to describe.
+_shebang = installer.read_bytes() if installer.is_file() else b""
+claim("README: `./install.sh <dir>` is the installer",
+      "PROVEN" if installer.is_file() else "FALSE", f"{installer.relative_to(R)}")
+claim("install.sh resolves its own location",
+      "PROVEN" if b'dirname -- "$0"' in _shebang else "FALSE")
+_first, _ = (_shebang.split(b"\n", 1) + [b""])[:2] if _shebang else (b"", b"")
+# `nix/checks.nix` runs `patchShebangs`, which rewrites `#!/bin/sh` to a store path, so
+# the claim is about the interpreter being `sh` and not `bash` — true before and after.
+_interp = _first[2:].rsplit(b"/", 1)[-1] if _first.startswith(b"#!") else b""
+# The *basename* of the interpreter, because a patched shebang points into the bash
+# store path while still running `sh`.
+claim("install.sh is POSIX sh, not bash",
+      "PROVEN" if _interp == b"sh" else "FALSE",
+      _first.decode("utf-8", "replace") or "no shebang")
 
 # ── the vendored council skill against its source ────────────────────────────
 # skills/autonomous-ai-agents/council/ ships a COPY of the council's scripts, and a

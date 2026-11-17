@@ -1,7 +1,10 @@
 # Run tier: what needs an interpreter. The eval tier is `nix/tests.nix`.
 #
-# There is no build tier: Hermes reads `external_dirs` in place, so nothing is shipped.
-# End-to-end is `scripts/verify-live.py`, which needs the real binary — a CI job, not a flake check.
+# Every rule about the skills themselves lives in `scripts/validate.py`, which runs on
+# any machine with a Python 3 standard library. This file adds the checks a maintainer
+# wants on top of it — the Python suite, the prose claim audit, the formatter — and the
+# eval-tier assertions about this repository's own CI. Nothing here is required to use
+# the library: `python3 scripts/validate.py` is the gate for that.
 {
   lib,
   pkgs,
@@ -23,28 +26,32 @@ let
 
   python = pkgs.python3.withPackages (ps: [ ps.pytest ]);
 
-  # Writable copy: the store is read-only, and pytest and the audit write caches.
-  # `__pycache__` is stripped so stale bytecode cannot be what makes a test pass.
-  # `patchShebangs` is load-bearing: no `/usr/bin/env` in the sandbox, so `claim-audit.py`
-  # exec'ing `setup.sh` died with a FileNotFoundError naming the script, not the interpreter.
-  # The `sed` reaches the heredoc stub `hermes` in `tests/e2e/test_setup.sh` (its shebang is
-  # not line 1); patched here only — the repo's test still runs on a real machine.
+  # Writable copy: the store is read-only, and pytest writes caches. `__pycache__` is
+  # stripped so stale bytecode cannot be what makes a test pass.
   srcWritable = pkgs.runCommand "hermes-skills-src" { } ''
     cp -r ${src} $out
     chmod -R u+w $out
     patchShebangs $out
-    sed -i -E "s|^#![[:space:]]*/usr/bin/env[[:space:]]+bash\$|#!${pkgs.bash}/bin/bash|" \
-      $out/tests/e2e/test_setup.sh
     find $out -name __pycache__ -type d -prune -exec rm -rf {} +
   '';
 in
 # Eval tier first: milliseconds, so a tree-shape mistake fails before anything is built.
 (lib.mapAttrs mkEvalCheck evalGroups)
 // {
-  # --- run tier -------------------------------------------------------------
-  # The Python suite: the prose claims (a real regex engine) and the `../` escape rule,
-  # which cannot be eval because it needs the write-verb heuristic to avoid flagging a
-  # path a skill tells the reader to CREATE.
+  # The library's own gate, exactly the command a non-Nix user runs.
+  validate =
+    pkgs.runCommand "check-validate"
+      {
+        nativeBuildInputs = [ python ];
+      }
+      ''
+        cd ${srcWritable}
+        python3 scripts/validate.py
+        touch $out
+      '';
+
+  # The Python suite: shipped code under test, and the negative controls that prove the
+  # gate's rules fire.
   tests =
     pkgs.runCommand "check-tests"
       {
@@ -55,8 +62,8 @@ in
       }
       ''
         cd ${srcWritable}
-        # `no:cacheprovider`: the tree is a read-only store path, and pytest's
-        # cache would only produce a permission warning.
+        # `no:cacheprovider`: the tree is a store copy, and pytest's cache would only
+        # produce a permission warning.
         python -m pytest tests/ -q -p no:cacheprovider
         touch $out
       '';
@@ -75,19 +82,6 @@ in
       ''
         cd ${srcWritable}
         python scripts/claim-audit.py
-        touch $out
-      '';
-
-  # The contract over the whole tree, through the same function the runtime guard calls: the hook
-  # and the gate cannot disagree about what a valid skill is, because there is one implementation.
-  contract =
-    pkgs.runCommand "check-contract"
-      {
-        nativeBuildInputs = [ python ];
-      }
-      ''
-        cd ${src}
-        python scripts/skill-contract.py --all
         touch $out
       '';
 
@@ -110,7 +104,7 @@ in
         fi
         mapfile -t files < <(find . -name '*.nix' -not -path "$exempt" | sort)
         # Fail closed: a scan over nothing passes, and would look identical to a clean tree.
-        if [ "''${#files[@]}" -lt 10 ]; then
+        if [ "''${#files[@]}" -lt 5 ]; then
           echo "only ''${#files[@]} Nix files found; the scan is not reading the tree" >&2
           exit 1
         fi
@@ -118,23 +112,6 @@ in
           echo "the files above are not formatter-clean; run: nixfmt <path>" >&2
           exit 1
         fi
-        touch $out
-      '';
-
-  # `setup.sh` against a stubbed `hermes`: the merge path needs a fake current config, and
-  # using the real one would edit it. The stub is the SCRIPT's dependency, not the product —
-  # `scripts/verify-live.py` is the check that uses the real binary.
-  setup-e2e =
-    pkgs.runCommand "check-setup-e2e"
-      {
-        nativeBuildInputs = [
-          pkgs.bash
-          pkgs.coreutils
-        ];
-      }
-      ''
-        cd ${srcWritable}
-        bash tests/e2e/test_setup.sh
         touch $out
       '';
 }

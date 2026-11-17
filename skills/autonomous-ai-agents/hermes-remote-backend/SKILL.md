@@ -6,6 +6,7 @@ author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 category: autonomous-ai-agents
+targets: [hermes]
 metadata:
   hermes:
     tags: [hermes, serve, backend, remote, wsl, desktop, gateway, websocket]

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Every factual claim in the docs is checked against the repo, or it is a bug.
+"""The documentation pointers: an ADR in the table, a spec path, a doc path.
+
+The counts, the layout tree and the upstream ledger moved to `scripts/validate.py`
+when the gate became portable — one implementation, one owner. What stays here needs a
+regex engine over the docs themselves.
 
     python3 tests/unit/test_docs.py
 
@@ -15,9 +19,11 @@ import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 SKILLS = REPO / "skills"
+SPECS = REPO / "openspec" / "specs"
+SPEC_PATH = re.compile(r"`((?:skills|docs|tests|scripts)/[A-Za-z0-9_./-]+)`")
+LAYOUT_ROW = re.compile(r"[\u251c\u2514]\u2500\u2500 ([a-z0-9-]+)/")
 SUPPORT = ("references", "templates", "assets", "scripts")
 DOCS = [REPO / n for n in ("README.md", "AGENTS.md", "docs/upstream.md")]
-DOCS += sorted((REPO / "soul").glob("*.md"))
 DOCS = [d for d in DOCS if d.is_file()]
 
 WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -44,34 +50,6 @@ def _windows():
     return out
 
 
-def test_the_headline_counts_are_true():
-    """'N SKILL.md across M skills — K load on Windows' must equal reality."""
-    pat = re.compile(
-        r"(\d+)\s+`SKILL\.md`\s+across\s+(\d+)\s+skills\s*[—-]\s*(\d+)\s+load on Windows")
-    want = (len(_all()), len(_catalog()), len(_windows()))
-    bad = []
-    for d in DOCS:
-        for m in pat.finditer(d.read_text(encoding="utf-8")):
-            got = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
-            if got != want:
-                bad.append(f"{d.name}: claims {got}, actual {want}")
-    assert not bad, bad
-
-
-def test_the_rubric_count_is_true():
-    """'Six of the N are the council's reviewer rubrics'."""
-    n = len(list(SKILLS.rglob("assets/rubrics/*/SKILL.md")))
-    pat = re.compile(r"(\w+)\s+of the\s+(\d+)\s+are the council's reviewer rubrics")
-    bad = []
-    for d in DOCS:
-        for m in pat.finditer(d.read_text(encoding="utf-8")):
-            claimed, total = WORDS.get(m.group(1).lower()), int(m.group(2))
-            if claimed != n or total != len(_all()):
-                bad.append(f"{d.name}: claims {claimed}/{total}, "
-                           f"actual {n}/{len(_all())}")
-    assert not bad, bad
-
-
 def test_every_repo_path_named_in_the_docs_exists():
     """A backticked repo path is a promise. UPSTREAM.md is exempt: its
     'Upstream path' column names paths in the UPSTREAM repo, not here."""
@@ -87,74 +65,11 @@ def test_every_repo_path_named_in_the_docs_exists():
     assert not bad, bad
 
 
-def test_upstream_ledger_matches_reality():
-    """'Taken' skills must exist here; 'rejected' ones must not.
-
-    Both are claims, and they are opposites — a rejected skill that later gets
-    added would silently contradict the ledger that explains why it was not.
-    """
-    up = REPO / "docs" / "upstream.md"
-    if not up.is_file():
-        return
-    names = {p.parent.name for p in _catalog()}
-    taken = not_taken = False
-    bad = []
-    for line in up.read_text(encoding="utf-8").splitlines():
-        if line.startswith("#"):
-            low = line.lower()
-            if "not taken" in low:
-                taken, not_taken = False, True
-            elif line.startswith("## "):
-                taken, not_taken = True, False
-            continue
-        if not line.startswith("|"):
-            continue
-        m = re.match(r"\|\s*`([a-z0-9-]+)`\s*\|", line)
-        if not m:
-            continue
-        n = m.group(1)
-        if not_taken and n in names:
-            bad.append(f"rejected `{n}` is present in the repo")
-        elif taken and not not_taken and n not in names:
-            bad.append(f"taken `{n}` is missing")
-    assert not bad, bad
-
-
-# ── the layout the README declares ───────────────────────────────────────────
-# The `skill-library` spec's "known category" clause needs a referent, and the README
-# layout tree is where a reader looks for it. Parsing that tree keeps one owner for the
-# fact: a list written here would be a second copy of what the README already states,
-# and this repo has already paid for that shape once.
-# re.M is load-bearing: without it findall matches only at offset 0, so a
-# seven-row tree parses as one and the comparison passes on a single category.
-LAYOUT_ROW = re.compile(r"^[\u251c\u2514]\u2500\u2500 ([a-z0-9][a-z0-9-]*)/", re.M)
-
-
 def _declared_categories():
     text = (REPO / "README.md").read_text(encoding="utf-8")
     block = re.search(r"^```\nskills/\n(.*?)^```", text, re.S | re.M)
     assert block, "README has no `skills/` layout block"
     return set(LAYOUT_ROW.findall(block.group(1)))
-
-
-def test_the_declared_layout_matches_the_filesystem():
-    """Undeclared on disk, or declared and absent, are both failures.
-
-    The empty-parse guard is load-bearing: a reformatted tree must fail rather than
-    pass by comparing an empty set with an empty set.
-    """
-    declared = _declared_categories()
-    assert declared, "no category rows parsed out of the README layout tree"
-    on_disk = {p.name for p in SKILLS.iterdir() if p.is_dir()}
-    assert declared == on_disk, (
-        f"undeclared on disk: {sorted(on_disk - declared)}; "
-        f"declared but absent: {sorted(declared - on_disk)}")
-
-
-# ── a spec names only paths that exist ───────────────────────────────────────
-SPECS = REPO / "openspec" / "specs"
-SPEC_PATH = re.compile(
-    r"`((?:skills|soul|docs|tests|scripts|nix|openspec)/[A-Za-z0-9_./-]+)`")
 
 
 def test_every_repo_path_named_in_a_spec_exists():

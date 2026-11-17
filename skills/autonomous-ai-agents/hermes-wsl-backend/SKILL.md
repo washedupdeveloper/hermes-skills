@@ -6,6 +6,7 @@ author: Storm, Hermes Agent
 license: MIT
 platforms: [linux, windows]
 category: autonomous-ai-agents
+targets: [hermes]
 metadata:
   hermes:
     tags: [hermes, wsl, wsl2, backend, serve, gateway, systemd, desktop, remote]
