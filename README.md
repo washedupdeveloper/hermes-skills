@@ -75,7 +75,7 @@ Hermes that is `/reload-skills` in the CLI or a restart of the app.
 
 ```
 skills/
-├── autonomous-ai-agents/ council  hermes-bot-authoring  hermes-file-editing
+├── autonomous-ai-agents/ hermes-bot-authoring  hermes-file-editing
 │                         hermes-kanban-orchestration  hermes-knowledge-pipeline
 │                         hermes-process-operations  hermes-profile-fleet
 │                         hermes-project-handoff  hermes-remote-backend
@@ -103,12 +103,8 @@ skills/
                           writing-for-agents  zoom-out
 ```
 
-76 `SKILL.md` across 70 skills — 69 load on Windows; `hermes-s6-container-supervision` declares
+69 `SKILL.md` across 69 skills — 68 load on Windows; `hermes-s6-container-supervision` declares
 `platforms: [linux]` and is correctly skipped there.
-
-Six of the 76 are the council's reviewer rubrics (`council/assets/rubrics/reviewer-*/SKILL.md`).
-They carry frontmatter, but `assets/` is a support directory, so they are not catalog skills: they
-travel with the council, and its orchestrator reads them.
 
 ## Host-scoped skills
 
@@ -193,6 +189,7 @@ trade-off. An ADR is a paragraph, not a document.
 | [0007](docs/adr/0007-dsh-third-pass.md) | The third pass: the codebase, the record, and what stayed prose |
 | [0008](docs/adr/0008-openspec-as-the-spec-container.md) | OpenSpec as the spec container, per repository |
 | [0009](docs/adr/0009-generic-project.md) | A generic library: the gate is Python, the host is a label |
+| [0010](docs/adr/0010-council-leaves-the-library.md) | The council leaves the library until its rewrite can deploy itself |
 
 ## Where this is going
 

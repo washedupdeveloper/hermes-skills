@@ -42,15 +42,12 @@ def skill_files() -> list[pathlib.Path]:
 readme = (R / "README.md").read_text(encoding="utf-8")
 total = len(list(SK.rglob("SKILL.md")))
 catalog = len(skill_files())
-rubrics = len(list(SK.rglob("assets/rubrics/*/SKILL.md")))
 
 m = re.search(r"^(\d+) `SKILL\.md` across (\d+) skills", readme, re.M)
 stated = (int(m.group(1)), int(m.group(2))) if m else None
 claim(f"README: 'N SKILL.md across N skills' — stated {stated}",
       "PROVEN" if stated == (total, catalog) else "FALSE",
       f"actual: {total} SKILL.md across {catalog} catalog skills")
-claim("README: 'Six of the N are the council's reviewer rubrics'",
-      "PROVEN" if rubrics == 6 else "FALSE", f"actual: {rubrics}")
 
 not_win = [p for p in skill_files()
            if not re.search(r"^platforms:.*windows", p.read_text(encoding="utf-8"),
@@ -125,27 +122,6 @@ _interp = _first[2:].rsplit(b"/", 1)[-1] if _first.startswith(b"#!") else b""
 claim("install.sh is POSIX sh, not bash",
       "PROVEN" if _interp == b"sh" else "FALSE",
       _first.decode("utf-8", "replace") or "no shebang")
-
-# ── the vendored council skill against its source ────────────────────────────
-# skills/autonomous-ai-agents/council/ ships a COPY of the council's scripts, and a
-# copy drifts — it already has: two files differ from their source and one
-# (sync_to_skill.py, the tool that regenerates the copy) is absent entirely. Compare
-# them whenever the sibling checkout is present. Resolved from this repo's own
-# location, never a hardcoded machine path.
-vendored = SK / "autonomous-ai-agents" / "council" / "scripts"
-source = R.parent / "review-council" / "scripts"
-if not vendored.is_dir():
-    claim("the vendored council scripts match their source", "UNPROVEN", "no vendored copy")
-elif not source.is_dir():
-    claim("the vendored council scripts match their source", "UNPROVEN",
-          f"no sibling checkout at {source}")
-else:
-    drift = [p.name for p in sorted(vendored.glob("*.py"))
-             if (source / p.name).is_file() and p.read_bytes() != (source / p.name).read_bytes()]
-    absent = [p.name for p in sorted(vendored.glob("*.py")) if not (source / p.name).is_file()]
-    claim("the vendored council scripts match their source",
-          "PROVEN" if not (drift or absent) else "FALSE",
-          f"differ: {drift or 'none'}; no source: {absent or 'none'}")
 
 # ── unprovable from here ────────────────────────────────────────────────────
 # Empty on purpose, and worth explaining rather than leaving bare. Three claims lived here:

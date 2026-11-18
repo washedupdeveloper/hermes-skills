@@ -22,7 +22,6 @@ import tempfile
 
 SKILLS = pathlib.Path(__file__).resolve().parent.parent.parent / "skills"
 KB = SKILLS / "autonomous-ai-agents/hermes-knowledge-pipeline"
-COUNCIL = SKILLS / "autonomous-ai-agents/council"
 
 
 def _run(script: pathlib.Path, cwd: pathlib.Path, timeout: int = 300):
@@ -68,53 +67,6 @@ def test_the_self_test_check_is_not_vacuous():
         except AssertionError:
             return
         raise AssertionError("a deliberately broken script passed the check")
-
-
-def _uncollectable(pytest: str, council: pathlib.Path) -> tuple[list[str], list[str]]:
-    """Split the suite's collection errors into (missing module, anything else).
-
-    The deployment ships the council's scripts, not its project: a test that imports
-    `reviewc` — the CLI surface that stays in the source repo — cannot run here, and
-    `--ignore` is the honest way to say so. A collection error for any other reason
-    (a syntax error, a broken fixture) is a real defect, returned separately so the
-    assertion can fail on it. Ignoring by module name is deliberately strict: nothing
-    is skipped that the deployment could have run.
-    """
-    r = subprocess.run([pytest, "--collect-only", "-q", "-rE", "-p", "no:cacheprovider", "tests"],
-                       cwd=council, capture_output=True, text=True,
-                       stdin=subprocess.DEVNULL, timeout=180)
-    output = (r.stdout or "") + (r.stderr or "")
-    missing: list[str] = []
-    other: list[str] = []
-    # Each collection error prints its own block — the test module's path, the traceback and
-    # the reason — while the `-rE` summary repeats only the path, with no reason at all. So
-    # read the blocks: split on the one line that opens each of them.
-    for chunk in output.split("ImportError while importing test module '")[1:]:
-        path, _, body = chunk.partition("'")
-        rel = pathlib.Path(path).relative_to(council).as_posix()
-        if "No module named" in body:
-            missing.append(rel)
-        else:
-            reason = next((ln.strip() for ln in body.splitlines() if ln.strip().startswith("E ")),
-                          "collection failed for another reason")
-            other.append(f"{rel}: {reason}")
-    return sorted(set(missing)), other
-
-
-def test_the_council_suite_passes_on_the_shipped_code():
-    """The council ships 500+ assertions over its own scripts; run them, not a grep."""
-    pytest = shutil.which("pytest")
-    if not pytest:
-        return  # no runner in this environment; the check below still applies elsewhere
-    missing, other = _uncollectable(pytest, COUNCIL)
-    assert not other, "the shipped suite does not collect:\n" + "\n".join(other)
-    ignore = [f"--ignore={entry.split(':')[0]}" for entry in missing]
-    r = subprocess.run([pytest, "tests", "-q", "--no-header", "-p", "no:cacheprovider", *ignore],
-                       cwd=COUNCIL, capture_output=True, text=True,
-                       stdin=subprocess.DEVNULL, timeout=420)
-    tail = (r.stdout or "")[-600:]
-    assert r.returncode == 0, f"council suite failed (ignored {missing}):\n{tail}\n{(r.stderr or '')[-400:]}"
-    assert " passed" in tail, f"no pass count parsed:\n{tail}"
 
 
 def test_a_host_loader_accepts_every_shipped_skill():

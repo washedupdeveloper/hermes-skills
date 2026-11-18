@@ -85,8 +85,7 @@ in
         touch $out
       '';
 
-  # The formatter, enforced. One file is exempt and its presence is asserted: the golden target's
-  # bytes ARE the fixture a golden diff compares, so reformatting it would change what it measures.
+  # The formatter, enforced, over every Nix file in the tree.
   formatting =
     pkgs.runCommand "check-formatting"
       {
@@ -97,12 +96,7 @@ in
       }
       ''
         cd ${src}
-        exempt='./skills/autonomous-ai-agents/council/tests/golden/target/modules/base.nix'
-        if [ ! -f "$exempt" ]; then
-          echo "the exempt golden fixture is missing: $exempt" >&2
-          exit 1
-        fi
-        mapfile -t files < <(find . -name '*.nix' -not -path "$exempt" | sort)
+        mapfile -t files < <(find . -name '*.nix' | sort)
         # Fail closed: a scan over nothing passes, and would look identical to a clean tree.
         if [ "''${#files[@]}" -lt 5 ]; then
           echo "only ''${#files[@]} Nix files found; the scan is not reading the tree" >&2

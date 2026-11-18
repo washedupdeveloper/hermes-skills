@@ -120,7 +120,7 @@ are the trees it vendors under `.repos/`. Read at commit
 | `contribution-triage`, `test-t3-app`, `test-t3-mobile` | T3 Code's own contribution eligibility policy and app-test recipes; both depend on its GitHub App and its monorepo. |
 | `audit`, `pr-queue`, `prepare-release`, `release-blog`, `release-overnight` | Provider-suite loops bound to `alchemy` accounts and infrastructure. |
 | `alchemy-domain`, `alchemy-provider`, `harden` | Provider-specific. The one portable rule from `harden` — two consecutive full runs plus a leak census — is in `test-reliability.md`. |
-| `changesets`, `dependency-maintenance`, `jsdocs` (the checker), `package-development`, `migration-guidance`, `ai-docs`, `effect-development`, `test-development`, `bundle-analysis`, `vendored-assets` | Effects, TypeScript and pnpm toolchain. Dependency rotation here is a Nix pin the gate already checks, and this repo's one generated copy is the council skill, whose rule is [ADR-0003](adr/0003-the-council-skill-is-a-generated-copy.md). |
+| `changesets`, `dependency-maintenance`, `jsdocs` (the checker), `package-development`, `migration-guidance`, `ai-docs`, `effect-development`, `test-development`, `bundle-analysis`, `vendored-assets` | Effects, TypeScript and pnpm toolchain. Dependency rotation here is a Nix pin the gate already checks. |
 | `performance-analysis` | A single unpaired run is not evidence — already the rule in `verify-and-stop/references/controlled-comparison.md`. |
 
 ## sst/opencode

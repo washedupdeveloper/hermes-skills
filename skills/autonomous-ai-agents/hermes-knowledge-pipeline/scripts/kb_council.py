@@ -38,7 +38,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import kb_reindex as kb  # noqa: E402
 
-RUN_DIR_NAME = ".review-council"
+# The rewrite keeps its state at `<repo>/.council/runs/<id>/`; the CLI before it wrote
+# `<repo>/.review-council/<id>/`. Both are searched, because the binary installed on a
+# machine today may still be the earlier one while this library targets the rewrite.
+STATE_DIRS = ((".council", "runs"), (".review-council", None))
 DIMENSIONS = ("security", "correctness", "readability", "architecture", "performance")
 SEVERITY_ORDER = ("critical", "high", "medium", "low", "info")
 
@@ -51,11 +54,23 @@ def load_json(path: Path) -> dict | None:
 
 
 def find_runs(project: Path) -> list[Path]:
-    base = project / RUN_DIR_NAME
-    if not base.is_dir():
-        return []
-    runs = [d for d in sorted(base.iterdir()) if d.is_dir()]
-    return [r for r in runs if (r / "outcome.json").is_file() or any(r.glob("round-*"))]
+    """Every run this ingester can read: it needs `outcome.json` or `round-*` rounds.
+
+    A run under `.council/runs/` is only returned if it carries those, which today it
+    does not — the rewrite writes `verdict.json` instead. That mapping is a separate
+    job; naming the artefact here keeps the gap visible instead of silently empty.
+    """
+    found: list[Path] = []
+    for state_dir, inner in STATE_DIRS:
+        base = project / state_dir
+        if inner:
+            base = base / inner
+        if not base.is_dir():
+            continue
+        for run in sorted(base.iterdir()):
+            if run.is_dir() and ((run / "outcome.json").is_file() or any(run.glob("round-*"))):
+                found.append(run)
+    return found
 
 
 def latest_round(run_root: Path) -> Path | None:
@@ -116,7 +131,7 @@ def build_page(project: Path, run_root: Path, vault: Path) -> tuple[str, str]:
     try:
         rel_run = run_root.relative_to(project).as_posix()
     except ValueError:
-        rel_run = f"{RUN_DIR_NAME}/{run_id}"
+        rel_run = f"{run_root.parent.name}/{run_id}"
     rel_next = f"{rel_run}/next-steps.md"
 
     verdict = str(outcome.get("outcome") or "unknown")
@@ -223,7 +238,8 @@ def main() -> int:
 
     runs = find_runs(project)
     if not runs:
-        print(f"kb_council: no council runs under {project / RUN_DIR_NAME}", file=sys.stderr)
+        print(f"kb_council: no council runs under {project}/.council/runs or "
+              f"{project}/.review-council", file=sys.stderr)
         return 1
     if not a.all:
         runs = runs[-1:]

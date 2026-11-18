@@ -1,5 +1,10 @@
 # The council skill is a generated copy, not a reference
 
+**Withdrawn by [ADR-0010](0010-council-leaves-the-library.md).** The copy described here
+has left the library, because its generator is the legacy repository and the rewrite that
+replaces it cannot deploy a skill yet. The reasoning below still holds for any artifact
+that is generated elsewhere and published here.
+
 `skills/autonomous-ai-agents/council/` is a **copy** of the council, produced by
 `council setup skill` — which writes to whatever `skills.external_dirs` resolves to,
 and on the author's machine that is this repository. It reads as a contradiction of
