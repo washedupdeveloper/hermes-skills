@@ -45,7 +45,7 @@ against**.
 Enumerate it **from the tool, never from memory**: an output's name is not derivable from
 its purpose. `packages.default` is whatever the author aliased it to — in one flake the
 *toolchain*, not the product — and the CLI's name need not match the package's
-(`apps.council` beside `packages.review-council`). Query the surface (`nix flake show
+(`apps.<tool>` beside `packages.<tool>`). Query the surface (`nix flake show
 --json` for a flake, `--help` for a CLI) and write down what comes back. A name you
 assumed is a name you will document wrong, and the wrong name costs every consumer a
 failed build.

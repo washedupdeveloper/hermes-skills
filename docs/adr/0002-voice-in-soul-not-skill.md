@@ -14,8 +14,8 @@ therefore almost never apply.
 `caveman` is kept as the **on-demand long form** of the same voice — the condensed
 contract in `SOUL.md`, the full rules and worked examples in the skill.
 
-Three consumers, one contract, because a council profile is its own `HERMES_HOME`:
-the global agent (`$HERMES_HOME/SOUL.md`), the council reviewer and the council
+Three consumers, one contract, because a reviewer profile is its own `HERMES_HOME`:
+the global agent (`$HERMES_HOME/SOUL.md`), the reviewer and the
 orchestrator (each ships its own under `bots/<member>/SOUL.md`). A global `SOUL.md`
-does **not** reach a council bot, which is why the voice is version-controlled in
+does **not** reach a reviewer bot, which is why the voice is version-controlled in
 both repos rather than only applied to the machine.

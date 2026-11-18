@@ -61,8 +61,8 @@ interpreter that resolves from *inside* the tree. `du -sh` beside it is the size
 
 Grep the extracted `*/layer.tar` listings, never the merged view. `dockerTools` `contents`
 places a store path under `/nix/store/...`, while the friendly `/opt/<name>` is a **symlink
-entry** (`./opt/review-council`) whose target the listing does not expand. A check for
-`opt/review-council/scripts/<file>` therefore returns zero on an image that ships it, and
+entry** (`./opt/<tool>`) whose target the listing does not expand. A check for
+`opt/<tool>/scripts/<file>` therefore returns zero on an image that ships it, and
 reads exactly like a missing file. Search for the basename and read the path that comes
 back; count the layers from `manifest.json` to know whether the scan covered the image.
 

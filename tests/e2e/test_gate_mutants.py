@@ -3,6 +3,8 @@
 
     python3 tests/e2e/test_gate_mutants.py
 
+**Integration test**: it drives the Nix evaluator, which no unit test can reach.
+
 An eval-tier check decides its outcome at evaluation time, so `nix build` cannot tell a right
 tree from a wrong one — a failing assertion throws while the derivation is being evaluated, and
 the derivation is a constant. This therefore runs `nix eval` on `checks.workflows`, which is

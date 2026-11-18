@@ -22,7 +22,7 @@ appear only when another program drives it.
 
 ## When to Use
 
-- A harness renders a prompt and shells out to `hermes` (the council, an ablation
+- A harness renders a prompt and shells out to `hermes` (a review harness, an ablation
   runner, a benchmark, a batch job).
 - **You are about to launch any long-running script in the background** — not only one that
   spawns an agent. The `127` (written the same turn as the launch), `143` (killed with the

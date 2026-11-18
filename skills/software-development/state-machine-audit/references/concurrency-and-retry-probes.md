@@ -10,7 +10,7 @@ a deliberately slow stub so both processes reach the guard.
 
 ```sh
 # terminal A/B, or two background jobs with a wait
-council review -C "$repo" --base HEAD --samples 1 \
+<tool> review -C "$repo" --base HEAD --samples 1 \
   --reviewer "$slow_stub" --no-sandbox --no-stream \
   --no-ephemeral --run-id race
 ```

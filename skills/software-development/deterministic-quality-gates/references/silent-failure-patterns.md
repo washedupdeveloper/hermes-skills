@@ -129,7 +129,7 @@ aborts. A recipe tested only on its happy path cannot show this.
 ## `lstrip("./")` strips a character set, not a prefix
 
 `str(path).lstrip("./")` removes any leading run of `.` and `/` characters, so `.env`
-becomes `env`, `.review-council/x/council.log` becomes `review-council/x/council.log`, and
+becomes `env`, `.tool/x/tool.log` becomes `tool/x/tool.log`, and
 `.github/workflows/ci.yml` becomes `github/workflows/ci.yml` — a path that exists nowhere,
 cited as the location of a real finding. Nothing errors: the string is valid, it just names
 a different file. Use `while text.startswith("./"): text = text[2:]`, and route every call

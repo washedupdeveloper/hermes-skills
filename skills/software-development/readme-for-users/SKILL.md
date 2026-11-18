@@ -88,7 +88,7 @@ tool without reading the source or its internal design notes.
   documented. Read the tests before compressing; keep all option strings, even
   if they live in a compact table or code block.
 - **A source checkout is not an installed tool.** `nix develop` may provide
-  pytest and linters but no `council`/`app` binary. Show the wheel/image/build
+  pytest and linters but no CLI binary. Show the wheel/image/build
   install path separately from maintainer commands.
 - **Stale status docs are worse than no status docs.** A handoff claiming an old
   commit, count or checkout path teaches a false current state; re-measure it or

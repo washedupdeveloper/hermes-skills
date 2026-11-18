@@ -535,7 +535,7 @@ owning skill has it whole *before* removing the duplicate, or the rule is lost.
   evidence.** "Unreferenced" has to be re-derived against the *tracked* tree for the
   exact identifier, then each hit read: a 29 MB corpus directory was nearly kept
   because a handoff note recorded that committed run reports cited it, and every hit
-  was the ordinary word — `council calibrate --build-eval /tmp/ladder` names a graded
+  was the ordinary word — `<tool> calibrate --build-eval /tmp/ladder` names a graded
   eval ladder built at runtime, not that directory. A note from a previous session is
   a claim to check, not a finding.
 - **Regenerable is deletable; shared bookkeeping is not.** Caches (`__pycache__`,
@@ -567,9 +567,9 @@ content** — and say plainly that the missing depth is a real gap worth writing
   whose escape rule does not will flag the very sentence that documents the exemption, and the
   tempting repair is to delete a correct example: give both loops the same placeholder test instead.
 - **A cross-skill pointer written as a path is itself a dead reference.** Paths resolve
-  against the *naming* skill's own directory, so `council/scripts/install_bots.py` cited from
+  against the *naming* skill's own directory, so `<tool>/scripts/install_bots.py` cited from
   another skill names a path that does not exist under it — and repairing one dead reference
-  this way creates the next. Write `install_bots.py` in `council`: skill plus filename, never a
+  this way creates the next. Write `install_bots.py` in `<tool>`: skill plus filename, never a
   relative path.
 - **Declaring a suite absent from a one-level glob.** `ls tests/*.py` returns nothing when the
   tests live in `tests/unit/`, and the next step is a hand-built harness that proves less than

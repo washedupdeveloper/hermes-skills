@@ -25,7 +25,7 @@ Filters nest as `and:` / `or:` / `not:` over a list of nested groups or statemen
 filters:
   and:
     - file.inFolder("work")
-    - 'topic == "council"'
+    - 'topic == "release"'
     - file.hasProperty("run_id")
 ```
 

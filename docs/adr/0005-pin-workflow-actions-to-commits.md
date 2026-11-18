@@ -17,7 +17,7 @@ That is GitHub-hosted, so no third-party action is added. The comment beside eac
 the staleness visible; `nix flake check` keeps the pin from drifting back, because the rule
 is a property of the source file rather than a matter of review.
 
-**Rejected: pinning the major, which is what `review-council`'s `docs/CI.md` recorded as
+**Rejected: pinning the major, which is what one project's `docs/CI.md` recorded as
 the trade-off.** That reasoning assumed the tag's owner is trusted to only ever move it
 forward to a compatible release. A tag is not a promise the reader can verify, and the
 failure is silent and total: no diff, no review, arbitrary code with a token. The

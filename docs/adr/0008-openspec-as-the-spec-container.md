@@ -27,7 +27,7 @@ template for each artifact, and `validate --strict` as a structural check.
    format is not restated anywhere.
 5. `skip_specs: true` covers refactors, typo fixes and dependency bumps.
 
-phoenix, this repository and review-council were initialised with one seeded capability each.
+phoenix and this repository were initialised with one seeded capability each.
 
 ## Evidence
 
@@ -57,7 +57,7 @@ not the absolute score.
 - A spec narrows behavior to its scenarios. An unstated path is not implemented, and the
   implementation still looks complete. The `openspec` skill now requires a scenario for every
   branch that can return before the guarded call.
-- `validate --strict` checks shape, not coverage or truth. The council is the check on the
+- `validate --strict` checks shape, not coverage or truth. An independent review is the check on the
   spec's coverage, not only on the code's quality.
 - Ceremony is about 874 tokens and four files per change. The unit is one change per task or
   branch; several commits tick tasks in the same change.

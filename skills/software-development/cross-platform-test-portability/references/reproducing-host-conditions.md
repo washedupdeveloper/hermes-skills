@@ -176,7 +176,7 @@ only it moves the failure to the next CI run:
 $ python scripts/platform-sweep.py <repo>
 scanned 50 files under <repo>/{tests,scripts,bots,skills}
 --- resolve-vs-raw  (62)
-  tests/test_council_loop.py:1536  # Path(td).resolve() would be a different string...
+  tests/test_loop.py:1536  # Path(td).resolve() would be a different string...
 --- temp-path  (25)
   tests/test_config.py:152  path = cfg_mod.config_path(hermes_home="/tmp/some-home")
 ```

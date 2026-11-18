@@ -22,7 +22,7 @@ still moves the store path — and any `--check` that decides drift by comparing
 deployed tree against **the store path** then reports drift while the deployed content is
 byte-identical.
 
-Measured: after a documentation-only edit, `council setup skill --check` reported drift,
+Measured: after a documentation-only edit, a check against the deployed copy reported drift,
 the re-sync changed **no file**, and the check then reported "in sync". The store path had
 moved; nothing had drifted.
 

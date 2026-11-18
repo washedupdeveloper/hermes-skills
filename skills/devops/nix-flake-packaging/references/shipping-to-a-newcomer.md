@@ -189,7 +189,7 @@ An installer that completes part of a setup and stops has to say what is left, i
 its own closing output, or the user meets the remainder later as an error that
 looks like a bug. Measured: the profile installer created both agent profiles and
 never mentioned that credentials are stored **per profile** and are not shared, so
-the council could not reach a provider and the failure surfaced as a provider
+the reviewer could not reach a provider and the failure surfaced as a provider
 error with nothing pointing at the skipped step.
 
 The general rule: when a tool does the automatable half of a setup, print the

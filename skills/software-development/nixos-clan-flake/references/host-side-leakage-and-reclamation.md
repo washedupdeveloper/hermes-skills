@@ -85,11 +85,11 @@ the same anchor.
 
 ```bash
 # WRONG — greedy .* anchors on the LAST occurrence of the name
-find "$A" -type f -exec sha256sum {} \; | sed 's|.*review-council/||'
+find "$A" -type f -exec sha256sum {} \; | sed 's|.*<tool>/||'
 find "$B" -type f -exec sha256sum {} \; | sed 's|.*tarverify/||'
 
 # RIGHT — strip each path to a common anchor
-find "$A" -type f -exec sha256sum {} \; | sed 's| .*review-council/| |'
+find "$A" -type f -exec sha256sum {} \; | sed 's| .*<tool>/| |'
 ```
 
 `s|.*name/||` is greedy, so two trees whose paths contain the same directory name at

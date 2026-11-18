@@ -19,7 +19,7 @@ Write review comments terse and actionable. One line per finding. Location, prob
 fix. No throat-clearing.
 
 This is the output format for findings that another agent or the harness will read —
-the council's reviewer-to-harness payload. Verbose prose in a findings file is paid
+a reviewer-to-harness payload. Verbose prose in a findings file is paid
 for on every read.
 
 ## Format

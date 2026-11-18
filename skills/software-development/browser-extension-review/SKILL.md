@@ -26,7 +26,7 @@ under MV3 (the worker is recycled); the message rules are identical for both.
 
 - A background script, service worker, or extension package is handed over for review —
   from a user, a PR, or another agent's output.
-- A reviewer round (the council, a specialist profile) is about to grade extension code and
+- A reviewer round (a specialist profile) is about to grade extension code and
   needs the lifecycle and message-boundary checks the five rubrics do not carry.
 - Not for server-side hardening of a web application — that is `web-app-security`.
 

@@ -1,4 +1,6 @@
-"""Functional tests for code the skills actually ship.
+"""Integration tests: they execute the code the skills ship, not a copy of it.
+
+Functional tests for code the skills actually ship.
 
 The unit tests beside this file are contracts: a path exists, a doc states a
 true count, a frontmatter field parses. None of them executes the code a skill

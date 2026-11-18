@@ -171,7 +171,7 @@ skill; `Read`/`Glob`/`Grep` replaced by `read_file`/`search_files`.
 |---|---|
 | `caveman-evidence-review`, `-setup`, `-discover`, `-manage`, `-optimize`, `-stats`, `-learn`, `-help` | Bound to the Caveman Cloud CLI and its MCP tools. Nothing here calls it. |
 | `megacave` | Classical Chinese register; not a token win for English bots. |
-| `lean-build` | Feature building. The council reviews and fixes; it does not build product slices. |
+| `lean-build` | Feature building. An independent review finds and fixes; it does not build product slices. |
 | `investigate-first` | `systematic-debugging` owns establishing a mechanism before editing. |
 | `safe-refactor` | `simplify-code` is the cleanup path; nothing here restructures for its own sake. |
 | `migration` | No skill here performs schema, data or protocol migrations. |
@@ -183,18 +183,18 @@ flags and the falsifiable check.
 
 | Skill | Upstream path | What was worth taking |
 |---|---|---|
-| `web-app-security` | `security-and-hardening` (MIT) | Web security had no owner here: the council's `reviewer-security` rubric is Nix-scoped, with no XSS, CORS, sessions, SSRF or PII surface. |
+| `web-app-security` | `security-and-hardening` (MIT) | Web security had no owner here: the review rubrics in use were Nix-scoped, with no XSS, CORS, sessions, SSRF or PII surface. |
 
 No revision is pinned: the file was condensed by hand rather than copied, and the parts that matter
 (OWASP categories, the SSRF and destructive-path rules) are stable upstream. Re-read it before
-extending. It is loaded on demand — the council names it in the reviewer's skill list, so a Nix-only
+extending. It is loaded on demand — a reviewer profile names it in its skill list, so a Nix-only
 review never pays for it.
 
 ### Not taken
 
 | Rejected | Already owned by |
 |---|---|
-| `code-review-and-quality` | the council — its five axes are the council's five dimensions |
+| `code-review-and-quality` | a five-axis review — the axes are already the standard dimensions |
 | `code-simplification` | `simplify-code` (both carry Chesterton's Fence) |
 | `context-engineering` | `writing-for-agents` |
 | `documentation-and-adrs` | `domain-modeling`, which owns the three-test ADR rule |

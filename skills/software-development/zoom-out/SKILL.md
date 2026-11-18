@@ -50,7 +50,7 @@ with a map when the detail is exactly what you need.
 A short map, in this shape:
 
 ```text
-entry:    council gate <run-dir>            (cli.py:gate)
+entry:    <tool> gate <run-dir>            (cli.py:gate)
   → score_reviews.evaluate(run_dir)         (the verdict)
       → apply_proofs(blocking, adjudication) (proofs.json)
       → claim_cap(records)                   (severity caps)

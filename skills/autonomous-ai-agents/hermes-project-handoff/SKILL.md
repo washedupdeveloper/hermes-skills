@@ -91,7 +91,7 @@ install script), and that each profile archive lists `SOUL.md`, `profile.yaml`, 
 
 ```bash
 git clone repo.bundle <dir> && cd <dir>
-python3 scripts/council.py setup bots           # or: hermes profile import profiles/<name>.tar.gz
+hermes profile import profiles/<name>.tar.gz
 hermes profile list                             # expect the bots
 hermes -p <bot> tools list                      # capability set intact
 ```

@@ -33,7 +33,7 @@ Two ways this voice is on, and they differ:
   "stop caveman" or "normal mode". Unsure if still on? It is. Confirm the switch-off
   in one line.
 
-A profile is its own `HERMES_HOME`, so a global `SOUL.md` does **not** reach a council
+A profile is its own `HERMES_HOME`, so a global `SOUL.md` does **not** reach a reviewer
 bot — each member ships its own `SOUL.md`, copied in by its installer.
 
 `/ultracave` is the maximum-compression variant: follow that skill instead. Loading

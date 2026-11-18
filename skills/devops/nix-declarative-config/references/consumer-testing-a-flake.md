@@ -39,7 +39,7 @@ Use the store path it printed, or drop the flag.
 
 An output's name is not derivable from its purpose. `packages.default` is whatever the
 author aliased it to — in one flake the *toolchain*, not the product — and the app's name
-need not match the package's (`apps.council` beside `packages.review-council`). Query:
+need not match the package's (`apps.<tool>` beside `packages.<tool>`). Query:
 
 ```console
 nix flake show --json | jq -r '.packages."<system>" | keys[]'
