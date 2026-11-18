@@ -49,7 +49,11 @@ def main() -> int:
                     help="target directory; defaults to the page's `type`")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("root", nargs="?")
-    a = ap.parse_args()
+    # `page --superseded-by x --reason y ROOT`: plain `parse_args` assigns the
+    # positionals from the first contiguous group, so which patch level of 3.12 is
+    # running decides whether ROOT is accepted. Intermixed parsing removes the
+    # ambiguity instead of relying on the caller's argument order.
+    a = ap.parse_intermixed_args()
 
     root = Path(a.root).expanduser() if a.root else kb.resolve_root()
     if not root.is_dir():
