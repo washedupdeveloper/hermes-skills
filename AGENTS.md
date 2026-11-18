@@ -55,9 +55,10 @@ Exit 1 names each violation with its file; exit 2 means the scan found no skills
 directory, not a pass.
 
 `ci-local.sh` runs the workflow's jobs as the commands they are, and names the ones no single
-machine can run: the macOS leg of the matrix, the Windows leg unless you are on Windows, and
-`cost`, which reads a GitHub run id. `nix develop` provides the interpreter, pytest, actionlint
-and nixfmt it needs.
+machine can run: the Windows leg unless you are on Windows, and `cost`, which reads a GitHub
+run id. The hosted matrix is Linux and Windows only — macOS runners are not on this account's
+plan, and GitHub cancels those jobs in a second with nothing run — so a macOS leg has to be run
+by hand on a Mac. `nix develop` provides the interpreter, pytest, actionlint and nixfmt.
 
 `nix flake check` runs `validate.py`, the Python suite, the prose audit and the formatter, then the
 eval-tier assertions about this repository's own CI (workflow pins, runner labels, the OpenSpec CLI

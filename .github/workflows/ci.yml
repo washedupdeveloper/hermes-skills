@@ -32,8 +32,12 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # macOS is not in the list until this account has macOS runners: GitHub cancels
+      # those jobs within a second, with no runner assigned and no step run, so the run
+      # reports `cancelled` without having tested anything. Add macos-14 back to both
+      # matrices when it does; the code is standard library and claimed portable either way.
       matrix:
-        os: [ubuntu-24.04, macos-14, windows-2022]
+        os: [ubuntu-24.04, windows-2022]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -54,8 +58,12 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # macOS is not in the list until this account has macOS runners: GitHub cancels
+      # those jobs within a second, with no runner assigned and no step run, so the run
+      # reports `cancelled` without having tested anything. Add macos-14 back to both
+      # matrices when it does; the code is standard library and claimed portable either way.
       matrix:
-        os: [ubuntu-24.04, macos-14, windows-2022]
+        os: [ubuntu-24.04, windows-2022]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
