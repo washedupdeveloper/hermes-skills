@@ -268,7 +268,10 @@ def check_fenced_commands(repo: Path, result: Result) -> None:
                 for ref in re.findall(r"\b((?:scripts|references|templates|assets)/[\w./-]+\.\w+)", line):
                     if not (skill_dir / ref.split("/", 1)[0]).is_dir():
                         continue
-                    if not (skill_dir / ref).exists():
+                    # A skill that documents this repository cites paths from its root
+                    # (`python3 scripts/validate.py`); a skill that ships its own helper
+                    # cites its own. The path is dead only when it exists at neither.
+                    if not (skill_dir / ref).exists() and not (repo / ref).exists():
                         result.fail(path.relative_to(repo), f"dead path in a fenced command -> {ref}")
 
 
@@ -313,10 +316,6 @@ def readme_counts(repo: Path, skills: list[Path], contract: dict, result: Result
     elif (int(m[1]), int(m[2]), int(m[3])) != (total, len(skills), windows):
         result.fail("README.md", f"headline states {(m[1], m[2], m[3])}, tree has "
                                  f"{(total, len(skills), windows)}")
-
-    m = re.search(r"^Six of the (\d+) are the council's reviewer rubrics", text, re.M)
-    if m and int(m[1]) != total:
-        result.fail("README.md", f"rubric sentence states {m[1]} SKILL.md, tree has {total}")
 
 
 def check_layout(repo: Path, skills: list[Path, ], contract: dict, result: Result) -> None:

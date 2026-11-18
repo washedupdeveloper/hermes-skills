@@ -106,7 +106,7 @@ def test_every_adr_in_the_directory_is_in_the_readme_table():
     adr_dir = REPO / "docs" / "adr"
     rows = ADR_ROW.findall((REPO / "README.md").read_text(encoding="utf-8"))
     assert rows, "no ADR rows parsed out of the README table"
-    # The row's link carries the whole stem (0003-the-council-skill-is-a-generated-copy),
+    # The row's link carries the whole stem (0009-generic-project),
     # so prefixing the number again builds a name that matches no file.
     listed = {slug for _num, slug in rows}
     filed = {p.stem for p in adr_dir.glob("*.md")}

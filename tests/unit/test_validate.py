@@ -190,6 +190,31 @@ def test_a_directory_without_a_skill_md_is_named():
         assert any("holds no SKILL.md" in v for v in check(root))
 
 
+def test_a_fenced_command_may_name_a_repo_script():
+    """A skill documenting this repository cites a path from the repo root.
+
+    `python3 scripts/validate.py` is a true instruction inside a skill that documents
+    this library; resolving it only against the skill directory would forbid a skill
+    from describing the tool it belongs to.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        body = frontmatter() + "\n```bash\npython3 scripts/validate.py\n```\n"
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body,
+                                 "skills/alpha/probe/scripts/helper.py": "# own helper\n",
+                                 "scripts/validate.py": "# the gate\n"})
+        assert not any("dead path in a fenced command" in v for v in check(root)), check(root)
+
+
+def test_a_fenced_command_naming_nothing_still_fails():
+    """The control for the control: a path that exists nowhere must still be named."""
+    with tempfile.TemporaryDirectory() as d:
+        body = frontmatter() + "\n```bash\npython3 scripts/gone.py\n```\n"
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body,
+                                 "skills/alpha/probe/scripts/helper.py": "# own helper\n",
+                                 "scripts/validate.py": "# the gate\n"})
+        assert any("dead path in a fenced command" in v for v in check(root)), check(root)
+
+
 def test_a_category_outside_the_contract_is_named():
     with tempfile.TemporaryDirectory() as d:
         root = fixture(Path(d), {"skills/gamma/probe/SKILL.md": frontmatter()})

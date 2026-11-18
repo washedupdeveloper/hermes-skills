@@ -154,7 +154,7 @@ _INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 def yaml_scalar(value) -> str:
     """This value as a string that parses back as exactly this value.
 
-    Naive interpolation is how `title: council: infra` reaches the disk: a `: `
+    Naive interpolation is how `title: panel: infra` reaches the disk: a `: `
     inside an unquoted scalar is a YAML syntax error, so a page whose title happens to
     contain a colon becomes an unparseable file - and frontmatter is what every
     downstream reader, including Bases, trusts. Quote only what must be quoted, so
