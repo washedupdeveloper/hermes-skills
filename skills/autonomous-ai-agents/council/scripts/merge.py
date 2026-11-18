@@ -26,6 +26,8 @@ def _loop():
     global _LOOP
     if _LOOP is None:
         spec = importlib.util.spec_from_file_location("council_loop", LOOP_PATH)
+        if spec is None or spec.loader is None:
+            raise ImportError("cannot load council_loop.py")
         module = importlib.util.module_from_spec(spec)
         sys.modules["council_loop"] = module
         spec.loader.exec_module(module)
@@ -66,6 +68,18 @@ def read_probes(round_dir: Path) -> List[Dict[str, Any]]:
     return data if isinstance(data, list) else []
 
 
+def merge_round(round_dir: Path) -> Dict[str, Any]:
+    """Bucket a round's samples into the per-dimension files the gate reads.
+
+    Raises ValueError when there is nothing to assemble, so a caller can tell "no samples" from
+    "merged zero findings" — the difference between a round that never ran and a clean one.
+    """
+    paths = sample_paths(round_dir)
+    if not paths:
+        raise ValueError(f"no generalist-*.json in {round_dir}")
+    return _loop().merge_generalist_samples(paths, round_dir, read_probes(round_dir))
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="merge",
@@ -87,8 +101,7 @@ def main(argv: Optional[List[str]] = None) -> int:
               file=sys.stderr)
         return 2
 
-    loop = _loop()
-    counts = loop.merge_generalist_samples(paths, round_dir, read_probes(round_dir))
+    counts = merge_round(round_dir)
 
     if args.json:
         print(json.dumps(counts, indent=2))

@@ -436,3 +436,21 @@ if __name__ == "__main__":
                 failures += 1
                 print(f"FAIL {name}: {exc}")
     raise SystemExit(1 if failures else 0)
+
+
+def test_the_ladder_lets_the_run_scale_choose_the_threshold(tmp_path, monkeypatch):
+    """Same defect as `pr`: the ladder forced the deterministic threshold onto every run."""
+    seen = {}
+
+    class Stub:
+        STACK_TOOLS = {}
+
+        @staticmethod
+        def evaluate(run_dir, threshold, **_kwargs):
+            seen["threshold"] = threshold
+            return {"status": "satisfied", "threshold": 87.33, "aggregate": 100.0}
+
+    monkeypatch.setattr(claims, "_load", lambda name: Stub)
+    (tmp_path / "meta.json").write_text(json.dumps({"require_proof": True}), encoding="utf-8")
+    claims._gate(tmp_path, [])
+    assert seen["threshold"] is None, "the ladder must let the run's own scale decide"

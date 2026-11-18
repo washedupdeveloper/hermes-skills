@@ -113,7 +113,9 @@ def target_sha(run_dir: Path) -> Optional[str]:
 def verdict(run_dir: Path) -> Dict[str, Any]:
     """The gate's own result for this run. Not a re-derivation of it."""
     score = load("score_reviews", HERE / "score_reviews.py")
-    return score.evaluate(run_dir, score.calibrated_threshold())
+    # `None` lets `evaluate` resolve the threshold for the run's OWN scale. Passing the
+    # deterministic 80.0 here made a claims run publish a threshold the gate never used.
+    return score.evaluate(run_dir, None)
 
 
 def _location(finding: Dict[str, Any]) -> str:
@@ -136,9 +138,17 @@ def _table(result: Dict[str, Any]) -> List[str]:
 
 
 def _findings_block(result: Dict[str, Any], limit: int = 20) -> Tuple[List[str], int]:
-    """Open blocking findings, worst first, and how many were left out."""
-    blocking = sorted(result.get("blocking") or [],
-                      key=lambda f: SEVERITY_ORDER.get(str(f.get("severity")), 9))
+    """Everything stopping the merge, worst first, and how many were left out.
+
+    With proofs enforced, a blocking claim no proof refuted is reported in `unresolved` rather than
+    `blocking` — it is not a confirmed defect, and it still stops the merge. A comment that says
+    "2 blocking claims" and then lists none is worse than one that says nothing.
+    """
+    def order(finding: Dict[str, Any]) -> int:
+        return SEVERITY_ORDER.get(str(finding.get("severity")), 9)
+
+    blocking = sorted(result.get("blocking") or [], key=order)
+    unsettled = sorted(result.get("unresolved") or [], key=order)
     lines: List[str] = []
     for finding in blocking[:limit]:
         severity = str(finding.get("severity") or "?").upper()
@@ -146,7 +156,15 @@ def _findings_block(result: Dict[str, Any], limit: int = 20) -> Tuple[List[str],
         check = str(finding.get("falsifiable_check") or "").strip()
         if check:
             lines.append(f"  - check: `{check}`")
-    return lines, max(0, len(blocking) - limit)
+    for finding in unsettled[: max(0, limit - len(blocking))]:
+        severity = str(finding.get("severity") or "?").upper()
+        state = str(finding.get("_adjudication") or "unsettled")
+        lines.append(f"- **{severity}** ({state}) {_location(finding)} — "
+                     f"{finding.get('claim') or ''}")
+        reason = str(finding.get("_reason") or "").strip()
+        lines.append(f"  - not settled: {reason}" if reason
+                     else "  - not settled: no proof reproduced for this claim")
+    return lines, max(0, len(blocking) + len(unsettled) - limit)
 
 
 def _change_line(run_dir: Path) -> str:
@@ -210,12 +228,21 @@ def body_for(result: Dict[str, Any], run_dir: Path, pr: int) -> str:
     lines = [
         head,
         "",
-        f"aggregate **{result['aggregate']:.2f}** / threshold {result['threshold']:g} — "
+        f"aggregate **{result['aggregate']:.2f}** / threshold {result['threshold']:g} "
+        f"({result.get('score_source') or 'reviewer'} scale) — "
         f"{result.get('reason') or ''}",
         "",
-        *_table(result),
-        "",
     ]
+    if result.get("calibrated_for_scale") is False:
+        # A number on a scale nobody calibrated reads like a verdict and is not one. Say so above
+        # the table, not in a footnote: the reader's first question is "does this mean anything".
+        lines += [
+            f"> The score is computed from **{result.get('score_source')}** and the threshold was "
+            f"calibrated on **{result.get('calibration_scale')}**. The number is reported; it is not "
+            f"comparable until `council calibrate` derives a threshold for this scale.",
+            "",
+        ]
+    lines += [*_table(result), ""]
 
     findings, omitted = _findings_block(result)
     if findings:

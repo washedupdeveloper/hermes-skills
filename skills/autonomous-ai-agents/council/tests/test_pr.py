@@ -422,3 +422,22 @@ def test_the_api_base_is_a_boundary():
     # And the CLI reports a usage error rather than a traceback.
     assert pr.main([str(GOLDEN), "--repo", "o/n", "--pr", "1",
                     "--api", "file:///etc/hostname"]) == 2
+
+
+def test_pr_lets_the_run_scale_choose_the_threshold(tmp_path, monkeypatch):
+    """`pr` passed `calibrated_threshold()` — the deterministic 80.0 — into the gate.
+
+    A claims-scored run was therefore published with a threshold the gate never used,
+    so the review body and the gate could disagree about the same run directory.
+    """
+    seen = {}
+
+    class Stub:
+        @staticmethod
+        def evaluate(run_dir, threshold, **_kwargs):
+            seen["threshold"] = threshold
+            return {"status": "satisfied", "threshold": 87.33, "aggregate": 100.0}
+
+    monkeypatch.setattr(pr, "load", lambda name, path: Stub)
+    pr.verdict(tmp_path)
+    assert seen["threshold"] is None, "pr must let the run's own scale resolve the threshold"

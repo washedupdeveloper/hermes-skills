@@ -148,8 +148,72 @@ def seed_defects(root: Path, count: int, rng: random.Random,
     return written
 
 
+def _source_files(root: Path) -> List[Path]:
+    """The base's own Python files, in a stable order — the files a defect is written into."""
+    return sorted(p for p in root.rglob("*.py") if "seeded_" not in p.name)
+
+
+#: In-place defects, cycled deterministically. Each appends to a file the base already has, so the
+#: rungs differ ONLY in defects: same number of files, same stacks, same tool coverage. The
+#: file-adding ladder could not separate for exactly this reason — measured, `det` rose 6.8–13.7
+#: points between level 0 and level 16 simply because sixteen more files existed to analyse.
+IN_PLACE_KINDS = ("secret", "eval", "complexity", "syntax")
+IN_PLACE_SEVERITY = {"secret": "critical", "eval": "critical",
+                     "complexity": "medium", "syntax": "high"}
+
+
+def _in_place_text(kind: str, index: int) -> str:
+    if kind == "secret":
+        # A synthetic key, well-formed on purpose: the corpus measures whether a committed
+        # credential is found, so the planted string has to be shaped like one. It is not a live
+        # credential and authorises nothing.
+        return ('\n\nLEGACY_API_KEY_%d = "sk_live_51H8xQ2eZvKYlo2C%04dQqWwEeRrTt"\n'
+                % (index, 9000 + index))
+    if kind == "eval":
+        return ("\n\ndef parse_payload_%d(payload):\n    return eval(payload)\n" % index)
+    if kind == "syntax":
+        return "\n\ndef broken_%d(:\n    return 1\n" % index
+    body = "".join("    if value == %d:\n        return %d\n" % (j, j) for j in range(12))
+    return "\n\ndef classify_%d(value):\n%s    return -1\n" % (index, body)
+
+
+def inserted_span(kind: str) -> int:
+    """How many lines the in-place seed for `kind` occupies, read from the text it plants.
+
+    Measured: the eval seed writes `def parse_payload_1(payload):` and `return eval(payload)` on
+    two lines; the manifest recorded only the first, so a reviewer citing the eval line at 20
+    scored as having missed a defect seeded at 19. One home for the span — the template itself —
+    so the record and the planted text cannot disagree.
+    """
+    text = _in_place_text(kind, 0)
+    leading = len(text) - len(text.lstrip("\n"))
+    return max(1, text.count("\n") - leading)
+
+
+def seed_in_place(root: Path, count: int, rng: random.Random) -> List[Dict[str, Any]]:
+    """Insert *count* defects into the base's existing files; return their locations.
+
+    Deterministic for a given rng, and every location is recorded by construction so the corpus
+    can say whether the reviewer found the planted defect rather than whether it found *something*.
+    """
+    targets = _source_files(root)
+    if not targets:
+        raise ValueError(f"no Python files to seed in {root}")
+    defects: List[Dict[str, Any]] = []
+    for index in range(count):
+        path = targets[index % len(targets)]
+        kind = IN_PLACE_KINDS[index % len(IN_PLACE_KINDS)]
+        original = path.read_text(encoding="utf-8")
+        line = original.count("\n") + 3
+        path.write_text(original + _in_place_text(kind, index), encoding="utf-8", newline="\n")
+        defects.append({"path": str(path.relative_to(root)), "line": line,
+                        "line_end": line + inserted_span(kind) - 1, "kind": kind,
+                        "severity": IN_PLACE_SEVERITY[kind]})
+    return defects
+
+
 def build_eval_ladder(base: Path, dest: Path, levels: Tuple[int, ...],
-                      seed: int = 20261006) -> List[Dict[str, Any]]:
+                      seed: int = 20261006, in_place: bool = False) -> List[Dict[str, Any]]:
     """Materialise *base* at several defect levels, as a labeled eval set.
 
     Level 0 is the known-good control — the base copied untouched. Each higher
@@ -168,7 +232,12 @@ def build_eval_ladder(base: Path, dest: Path, levels: Tuple[int, ...],
                                           "result", "result-*", "node_modules"),
         )
         rng = random.Random(seed + level)
-        written = seed_defects(target, level, rng) if level else []
+        if not level:
+            written: List[Any] = []
+        elif in_place:
+            written = seed_in_place(target, level, rng)
+        else:
+            written = seed_defects(target, level, rng)
         manifest.append({
             "level": level,
             "path": str(target),
@@ -338,6 +407,9 @@ def recalibrate(measured: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, Any
     sweep = sweep_threshold(points)
     return {
         "method": "research/deterministic-quality-tooling.md §7",
+        # Which scoring regime these numbers describe. The gate refuses to compare a threshold
+        # against a run whose aggregate is on a different scale (score_reviews.certification).
+        "scale": "deterministic",
         "halflife_k": k,
         "d_star": d_star,
         "points": points,
@@ -367,6 +439,9 @@ def calibrate(good: Path, bad: Path, seed: int = 20261006) -> Dict[str, Any]:
     ]
     return {
         "method": "research/deterministic-quality-tooling.md §7",
+        # Which scoring regime these numbers describe. The gate refuses to compare a threshold
+        # against a run whose aggregate is on a different scale (score_reviews.certification).
+        "scale": "deterministic",
         "seed": seed,
         "baselines": {"good": str(good), "bad": str(bad)},
         "halflife_k": 1.2,
@@ -419,6 +494,9 @@ def calibrate_many(good: List[Path], bad: Path, seed: int = 20261006) -> Dict[st
 
     return {
         "method": "research/deterministic-quality-tooling.md §7",
+        # Which scoring regime these numbers describe. The gate refuses to compare a threshold
+        # against a run whose aggregate is on a different scale (score_reviews.certification).
+        "scale": "deterministic",
         "seed": seed,
         "baselines": {"good": [str(p) for p in good], "bad": str(bad)},
         "halflife_k": 1.2,
@@ -477,6 +555,9 @@ def calibrate_ladder(ladder: List[Dict[str, Any]], k: float = 1.2) -> Dict[str, 
     sweep = sweep_threshold(points)
     return {
         "method": "research/deterministic-quality-tooling.md §7",
+        # Which scoring regime these numbers describe. The gate refuses to compare a threshold
+        # against a run whose aggregate is on a different scale (score_reviews.certification).
+        "scale": "deterministic",
         "halflife_k": k,
         "d_star": d_star,
         "points": points,
@@ -528,7 +609,9 @@ def _scorer() -> Any:
 def profile_of(round_dir: Path, threshold: float) -> Dict[str, float]:
     """The per-dimension scores the gate produces for a round directory."""
     scorer = _scorer()
-    result = scorer.evaluate(round_dir, threshold)
+    # The threshold is derived from the SCORE, and the calibration corpus predates proofs.
+    # Enforcing here would sweep a number that depends on whether an unrelated check ran.
+    result = scorer.evaluate(round_dir, threshold, require_proof=False)
     return {d["dimension"]: float(d["score"]) for d in result["per_dimension"]}
 
 
@@ -593,6 +676,150 @@ def weight_sensitivity(scores: Dict[str, float], threshold: float,
     }
 
 
+#: A threshold derived from fewer runs per class than this is a guess with a decimal point.
+MIN_PER_CLASS = 3
+
+
+class CorpusError(ValueError):
+    """The corpus cannot support a threshold. The message says what to do about it."""
+
+
+def derive_from_runs(manifest: Dict[str, Any], *, min_per_class: int = MIN_PER_CLASS,
+                     allow_provisional: bool = False, min_detection: float = 0.5,
+                     exclude_levels: Tuple[int, ...] = ()) -> Dict[str, Any]:
+    """Derive a claims-scale threshold from a *collected* corpus (see scripts/corpus.py).
+
+    Every refusal here is a case where a number could be produced and should not be: rungs that
+    were never run, two scoring scales pooled together, a bad rung the reviewer failed to detect
+    (that is a reviewer failure, and scoring it as clean would teach the threshold the wrong
+    lesson), too few runs to see variance, and classes that do not separate.
+    """
+    rungs = manifest.get("rungs") or []
+    if not rungs:
+        raise CorpusError("the corpus has no rungs")
+    if exclude_levels:
+        kept = [r for r in rungs if r["level"] not in exclude_levels]
+        if not kept:
+            raise CorpusError(f"excluding {list(exclude_levels)} leaves no rungs")
+        rungs = kept
+
+    unrun = [r.get("id") or r["level"] for r in rungs
+             if r.get("run") is None or r.get("score") is None]
+    if unrun:
+        raise CorpusError(
+            f"rung(s) {unrun} have no scored run — review them, then "
+            f"`council calibrate --collect-corpus <manifest> --runs <dir>`. A threshold built from "
+            f"the rungs that happen to be done is a threshold fitted to whatever finished first")
+
+    sources = {r.get("score_source") for r in rungs}
+    if sources != {"claims"}:
+        raise CorpusError(
+            f"mixed scoring scales in one corpus: {sorted(str(s) for s in sources)} — a claims "
+            f"threshold cannot be derived from aggregates on another scale")
+
+    undetected = [r.get("id") or r["level"] for r in rungs
+                  if r.get("defects_seeded") and not r.get("detected")]
+    if undetected:
+        raise CorpusError(
+            f"the reviewer proved none of the seeded defects on rung(s) {undetected}. That is a "
+            f"finding about the reviewer, not about the threshold: on the claims scale an "
+            f"undetected defect scores clean, so including it would teach the threshold that a "
+            f"defective repo passes. Fix the detection, or exclude the rung deliberately.")
+
+    # Partial detection is the subtler version of the same problem: caps apply only to claims
+    # that were CONFIRMED, so a rung where most defects were missed keeps its score high. Measured
+    # on the first in-place corpus: level 4 (4/4 detected) scored 57.20 and level 16 (2/16) 60.51 —
+    # missing twelve defects was worth three points.
+    weak = [(r.get("id") or r["level"], int(r.get("detected") or 0), int(r["defects_seeded"]))
+            for r in rungs
+            if r.get("defects_seeded")
+            and (r.get("detected") or 0) / r["defects_seeded"] < min_detection]
+    if weak:
+        detail = ", ".join(f"{ident}: {found}/{seeded}" for ident, found, seeded in weak)
+        raise CorpusError(
+            f"detection below {min_detection:.0%} on {detail} — a rung the reviewer barely "
+            f"detected scores high precisely because only confirmed claims can be capped, so it "
+            f"would reward missing defects. Raise the detection, exclude the rung deliberately "
+            f"with --exclude-level, or lower --min-detection knowingly.")
+
+    good = [r for r in rungs if r.get("label") == "good"]
+    bad = [r for r in rungs if r.get("label") != "good"]
+    if not good or not bad:
+        raise CorpusError(f"need both classes; have {len(good)} good and {len(bad)} bad")
+
+    provisional = len(good) < min_per_class or len(bad) < min_per_class
+    if provisional and not allow_provisional:
+        raise CorpusError(
+            f"need {min_per_class} runs per class to see variance; have {len(good)} good and "
+            f"{len(bad)} bad. Repeat the rungs, or pass --allow-provisional to record a number "
+            f"that is fitted to a single draw")
+
+    worst_good = min(r["score"] for r in good)
+    best_bad = max(r["score"] for r in bad)
+    if best_bad >= worst_good:
+        raise CorpusError(
+            f"the classes do not separate: the best bad run scores {best_bad:.2f} and the worst "
+            f"good run {worst_good:.2f}. No threshold can be both precise and complete — the "
+            f"score does not carry the signal, so the next move is the scorer, not the cutoff")
+
+    # Separation is not enough: the gap has to be wider than the noise inside a rung, or the cutoff
+    # is a coincidence of which draws happened to be taken. The noise measure is the spread of
+    # REPEATS ON ONE RUNG — not the spread of the class, which also contains the genuine difference
+    # between one seeded defect and four. Measured on the nine-run corpus: margin 3.87 against
+    # level 1's own spread of 11.71 (three runs that confirmed 1, 1 and 4 defects).
+    def _spread(scores: List[float]) -> float:
+        return max(scores) - min(scores) if len(scores) > 1 else 0.0
+
+    by_rung: Dict[int, List[float]] = {}
+    for rung in good + bad:
+        by_rung.setdefault(int(rung["level"]), []).append(float(rung["score"]))
+    widest_level, widest = max(((level, _spread(scores)) for level, scores in by_rung.items()),
+                               key=lambda pair: pair[1])
+    margin = worst_good - best_bad
+    if widest > 0 and margin <= widest:
+        low, high = min(by_rung[widest_level]), max(by_rung[widest_level])
+        raise CorpusError(
+            f"the margin ({margin:.2f}) is smaller than the repeat spread on level {widest_level} "
+            f"({widest:.2f}: {low:.2f}–{high:.2f} across {len(by_rung[widest_level])} runs of the "
+            f"same tree). The classes separate on these draws, but not by more than one rung varies "
+            f"against itself, so the cutoff could not survive another draw. Add repeats to narrow "
+            f"the spread, or fix the source of the variance, before calibrating")
+
+    points = [{"label": r["label"], "level": r["level"], "score": r["score"],
+               "detected": r.get("detected"), "seeded": r.get("defects_seeded")}
+              for r in rungs]
+    chosen = choose_threshold(points)
+    if not chosen:
+        raise CorpusError("the sweep found no threshold, which should be unreachable once the "
+                          "classes separate — treat it as a bug in choose_threshold")
+
+    return {
+        "method": "research/deterministic-quality-tooling.md §7, applied to adjudicated runs",
+        "scale": "claims",
+        "threshold": chosen["threshold"],
+        "recommended_threshold": chosen,
+        "points": points,
+        "n": {"good": len(good), "bad": len(bad)},
+        "min_per_class": min_per_class,
+        "provisional": provisional,
+        "provenance": {
+            "corpus": manifest.get("base"),
+            # The manifest that produced the number, so the derivation can be repeated rather than
+            # taken on faith. `corpus` is the base tree; this is the file naming the six rungs.
+            "manifest": manifest.get("manifest"),
+            "seed": manifest.get("seed"),
+            "rungs": [r["level"] for r in rungs],
+            "excluded": sorted(exclude_levels),
+            "min_detection": min_detection,
+            "detected": {str(r["level"]): [r.get("detected"), r.get("defects_seeded")]
+                         for r in rungs if r.get("defects_seeded")},
+            "note": ("PROVISIONAL: fewer than %d runs per class, so this is one draw of a "
+                     "stochastic reviewer, not a distribution" % min_per_class) if provisional
+                    else "a corpus threshold with repeats per rung",
+        },
+    }
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="calibrate.py",
@@ -620,7 +847,143 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--sensitivity", metavar="ROUND_DIR",
                         help="Measure how far the aggregate moves when one alpha_t "
                              "weight does, for the round directory given")
+    parser.add_argument("--from-runs", metavar="CORPUS",
+                        help="Derive the claims-scale threshold from a corpus manifest "
+                             "(council corpus plan/collect)")
+    parser.add_argument("--min-per-class", type=int, default=MIN_PER_CLASS,
+                        help=f"Runs per class below which the result is provisional "
+                             f"(default {MIN_PER_CLASS})")
+    parser.add_argument("--allow-provisional", action="store_true",
+                        help="Write a threshold from too few runs anyway; recorded as "
+                             "provisional in the manifest")
+    parser.add_argument("--min-detection", type=float, default=0.5,
+                        help="Refuse a rung where the reviewer found fewer than this fraction of "
+                             "the seeded defects (default 0.50). Missing defects keeps a rung's "
+                             "score high, so such a rung cannot calibrate a threshold")
+    parser.add_argument("--exclude-level", type=int, action="append", default=[],
+                        metavar="N", help="Deliberately leave rung N out of the derivation; "
+                                          "recorded in the manifest's provenance")
+    parser.add_argument("--plan-corpus", metavar="DEST",
+                        help="Build the graded ladder and its corpus manifest at DEST")
+    parser.add_argument("--in-place", action="store_true",
+                        help="seed defects into the base's EXISTING files, so every rung has the "
+                             "same file count, stacks and tool coverage — without this the ladder "
+                             "varies size and defects together and cannot separate")
+    parser.add_argument("--repeats", type=int, default=1,
+                        help="Run each rung this many times (level-<N>-run-<k>). A single draw of "
+                             "a stochastic reviewer is a point, not a distribution")
+    parser.add_argument("--agreement", metavar="MANIFEST",
+                        help="Report how reproducible the passes are: which locations every pass "
+                             "found, which one pass found, where severity flipped, and which "
+                             "seeded defects no pass reported")
+    parser.add_argument("--verdicts", metavar="MANIFEST",
+                        help="Report the verdict each rung reached and whether clean and "
+                             "defective rungs are separated by it")
+    parser.add_argument("--sample-corpus", metavar="MANIFEST",
+                        help="Run the reviewer on every rung of MANIFEST, retrying a failed run "
+                             "and recording each attempt so an outage cannot look like 'not run'")
+    parser.add_argument("--retries", type=int, default=3,
+                        help="Attempts per rung under --sample-corpus (default 3)")
+    parser.add_argument("--collect-corpus", metavar="MANIFEST",
+                        help="Score every rung of MANIFEST that has a run under --runs")
+    parser.add_argument("--runs", metavar="DIR",
+                        help="Where each rung's run directory lives (level-<N>/)")
     args = parser.parse_args(argv)
+
+    if args.plan_corpus:
+        if not args.base:
+            print("calibrate: --plan-corpus needs --base", file=sys.stderr)
+            return 2
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import corpus  # noqa: PLC0415 - the corpus helpers are only needed here
+        document = corpus.plan(Path(args.base), Path(args.plan_corpus),
+                               tuple(args.levels.split(",")), args.seed,
+                               in_place=args.in_place, repeats=args.repeats)
+        print(corpus.summary(document))
+        print(f"\nwrote {Path(args.plan_corpus) / 'corpus.json'}")
+        manifest = Path(args.plan_corpus) / "corpus.json"
+        print(f"sample every rung: council calibrate --sample-corpus {manifest} --runs <dir>")
+        print(f"then score them:   council calibrate --collect-corpus {manifest} --runs <dir>")
+        return 0
+
+    if args.agreement:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import corpus  # noqa: PLC0415
+        report = corpus.agreement(corpus.read(Path(args.agreement)))
+        print(corpus.format_agreement(report))
+        if args.out:
+            Path(args.out).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8",
+                                      newline="\n")
+        return 0
+
+    if args.verdicts:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import corpus  # noqa: PLC0415
+        report = corpus.verdicts(corpus.read(Path(args.verdicts)))
+        print(corpus.format_verdicts(report))
+        if args.out:
+            Path(args.out).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8",
+                                      newline="\n")
+        return 0 if report["separates"] else 1
+
+    if args.sample_corpus:
+        if not args.runs:
+            print("calibrate: --sample-corpus needs --runs", file=sys.stderr)
+            return 2
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import corpus  # noqa: PLC0415
+        sampled = corpus.sample_corpus(Path(args.sample_corpus), Path(args.runs),
+                                       retries=args.retries)
+        for rung in sampled["rungs"]:
+            state = rung.get("note") or "sampled"
+            print(f"  {rung['id']:20s} {state}")
+        return 0
+
+    if args.collect_corpus:
+        if not args.runs:
+            print("calibrate: --collect-corpus needs --runs", file=sys.stderr)
+            return 2
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import corpus  # noqa: PLC0415
+        document = corpus.collect(Path(args.collect_corpus), Path(args.runs))
+        print(corpus.summary(document))
+        return 0
+
+    if args.from_runs:
+        doc = _read_manifest(args.from_runs)
+        if doc is None:
+            return 2
+        try:
+            result = derive_from_runs(doc, min_per_class=args.min_per_class,
+                                      allow_provisional=args.allow_provisional,
+                                      min_detection=args.min_detection,
+                                      exclude_levels=tuple(args.exclude_level))
+        except CorpusError as exc:
+            print(f"calibrate: {exc}", file=sys.stderr)
+            return 2
+        if args.out:
+            destination = Path(args.out)
+        else:
+            # The installed framework is a read-only store path, so the module-relative
+            # default can only fail there: `OSError: [Errno 30] Read-only file system`.
+            # The calibration belongs to the project whose corpus was derived, so a
+            # checkout wins over the module's own directory — searched upwards, because
+            # `council calibrate` is usually run from a subdirectory of the repo.
+            checkout = None
+            for candidate in (Path.cwd(), *Path.cwd().parents):
+                if (candidate / "scripts" / "council.py").is_file():
+                    checkout = candidate / "scripts"
+                    break
+            destination = (checkout / "calibration.claims.json" if checkout is not None
+                           else _scorer().calibration_path("claims"))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8",
+                               newline="\n")
+        flag = " (PROVISIONAL)" if result["provisional"] else ""
+        print(f"threshold {result['threshold']:.4f}{flag} from "
+              f"{result['n']['good']} good / {result['n']['bad']} bad run(s)")
+        print(f"wrote {destination}")
+        return 0
 
     if args.sensitivity:
         round_dir = Path(args.sensitivity).expanduser().resolve()

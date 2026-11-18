@@ -9,11 +9,13 @@ commits that followed it.
 Three verbs:
 
     council version show                    what version is this tree
-    council version check [--tag vX.Y.Z]    exit 1 on any inconsistency
+    council version check [--tag vX.Y.Z] [--tags]
+                                            exit 1 on any inconsistency
     council version bump {major|minor|patch} move [Unreleased] to a dated release
 
-`check` never touches the network or git: CI passes the pushed tag with `--tag`, and
-the nix check runs it without one, so the same code guards both. `bump` edits two
+`check` touches neither the network nor git unless asked: CI passes the pushed tag with
+`--tag`, `--tags` reads a local checkout's tags, and the nix check runs it with neither in a
+store copy that has no `.git` — so the same code guards both. `bump` edits two
 files and prints the tag command instead of running it — tagging is publishing, and
 publishing is a decision.
 
@@ -25,6 +27,7 @@ import argparse
 import datetime as _dt
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import List, NamedTuple, Optional, Tuple
@@ -240,6 +243,33 @@ def find_root(explicit: Optional[str] = None) -> Path:
         "or pass --repo <path>.")
 
 
+def local_tag_problems(root: Path, version: str) -> List[str]:
+    """Tags in a local checkout that do not carry this version.
+
+    Opt-in (`check --tags`), because `check` is hermetic by design: CI passes the pushed tag with
+    `--tag` rather than reading a repository, and the nix check runs in a store copy with no `.git`
+    at all. This exists because the failure it catches is silent — pyproject, CHANGELOG and the
+    plan all agreed at 1.8.3 while the newest tag was v1.8.1, and nothing noticed.
+
+    A tree with no `.git` is not drift: absence of tags is not evidence of a missing tag.
+    """
+    if not (root / ".git").exists():
+        return []
+    try:
+        listing = subprocess.run(["git", "-C", str(root), "tag", "--sort=-v:refname"],
+                                 capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if listing.returncode != 0:
+        return []
+    tags = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
+    if f"v{version}" in tags or version in tags:
+        return []
+    newest = tags[0] if tags else "(none)"
+    return [f"version {version} has no tag; the newest tag is {newest} — "
+            f"`git tag -a v{version} -m \"v{version}\"` releases it"]
+
+
 def cmd_show(args: argparse.Namespace) -> int:
     print(read_pyproject_version(find_root(args.repo) / "pyproject.toml"))
     return 0
@@ -250,6 +280,8 @@ def cmd_check(args: argparse.Namespace) -> int:
     problems = check(tag=args.tag,
                      path_changelog=root / "CHANGELOG.md",
                      path_pyproject=root / "pyproject.toml")
+    if getattr(args, "tags", False):
+        problems += local_tag_problems(root, read_pyproject_version(root / "pyproject.toml"))
     if problems:
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
@@ -391,6 +423,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                          help="the repository (default: here, then upwards)")
     check_p.add_argument("--tag", metavar="vX.Y.Z",
                          help="also require this tag to match (CI passes the pushed tag)")
+    check_p.add_argument("--tags", action="store_true",
+                         help="also require a local git tag for this version. Off by default: "
+                              "`check` is hermetic, and a store copy has no tags to read")
     check_p.set_defaults(func=cmd_check)
 
     bump = sub.add_parser("bump", help="move [Unreleased] to a dated release")

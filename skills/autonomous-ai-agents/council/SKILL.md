@@ -27,6 +27,14 @@ their rubrics remain.
 Everything ships inside this skill; every location resolves from its own directory —
 no absolute paths.
 
+**Two CLI generations.** The verb-and-flag sections below describe the v1 engine
+(`--mode`, `--threshold`, an aggregate score). A v2 checkout answers `review`, `ci`,
+`pr`, `baseline`, `init`, `doctor`, has no score, and speaks `PASS` / `FAIL` /
+`INCOMPLETE` with exit `0` / `1` / `2` (`3` = could not start, which writes no run).
+If `council --help` lists those verbs, take the flags from `council review --help` and
+keep the *procedures* below — detach the run, poll it, verify every finding — which
+are the durable part.
+
 **This skill is a DEPLOYMENT of the `review-council` repository, not a copy.**
 `scripts/` is synced by `council setup skill` from `skills/council/SKILL.md` and
 `scripts/`; an edit here is overwritten by the next sync, and an edit to the repo
@@ -205,6 +213,53 @@ findings were actionable. A finding is a claim about the code, not a fact — th
 for turning claims into fixes or evidence-backed rejections is **Acting on findings**,
 below.
 
+## A repository you did not write
+
+The instrument reviews a *change*. To review a repository that has none, give it a
+synthetic root commit as the base:
+
+```bash
+EMPTY=$(git -C <repo> commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 -m base)
+council review -C <repo> --base "$EMPTY" --include 'src/**' \
+  --context-depth 0 --max-prompt-bytes 130000 --idle-timeout 900 --no-ephemeral
+```
+
+- **`--base` must be a commit.** The empty-tree *hash* is a tree object and is refused
+  as "not a revision"; `commit-tree` wraps it in a commit that `git diff` accepts, and
+  every scoped file then reads as an addition.
+- **`--context-depth 0`** for whole-file additions: the diff already carries the file,
+  so the enclosing-function context adds bytes and no information.
+- **Give it the repository's own rules.** `council.toml` can map a path glob to the
+  document that governs it (`[[rules]]` with `glob = 'src/**'` and
+  `doc = 'docs/ARCHITECTURE.md'`). Each matching document reaches the prompt once, capped
+  at 20,000 bytes and marked when cut, and `verdict.json` records what governed the
+  change. Without it the reviewer judges the diff against its memory of what the
+  repository wants. Budget for it: one 20 KB document leaves a 32 KiB default almost no
+  room for the diff, so raise `--max-prompt-bytes` or expect windows.
+- **v2 is ephemeral by default.** The run directory is removed after the verdict, so
+  "read the verdict from the run dir" only works with `--no-ephemeral` (writes
+  `.council/runs/<id>/`) or `--keep DIR` (copies it out first). A default run that left no
+  directory behind did not fail — it cleaned up, and the evidence is gone unless you
+  asked for it.
+- **Raise `--idle-timeout`** (900). The stock 120 s kills any prompt over roughly 30 KB
+  as "stream went silent", which is recorded as a unit with no evidence — honest, and
+  useless. Relaunch rather than re-reading the prompt.
+- **Do not reach for `--allow-large-prompt` to fit a big scope.** It stops slicing and
+  sends the whole change as one prompt, which is the failure it looks like a fix for.
+- **A whole added file is one hunk**, so a file larger than the budget cannot be
+  reviewed at any depth — unless you ask for windows. `--window-large-files` splits such
+  a hunk by bytes into units that each fit (`changes.slice_hunk` re-emits the header, so
+  the diff's line numbers survive), `--max-windows` (default 200) caps the run, and every
+  window is reviewed at depth 0. It is off by default because the cost is one sample per
+  window: a 38k-line file is 62 windows at the stock 32 KiB budget and 6 at 320,000. The
+  refusal states the window count and the samples it implies before it refuses — quote
+  that number instead of excluding the file.
+- **Budget in hours.** A 30–120 KB unit takes minutes per sample under auto-sampling
+  (1 clean, 2 to confirm, 3 to break a tie), so five files is tens of minutes. Run
+  `--plan` before committing to a scope.
+- **A unit's `sample-*.json` appears when that unit's sampling finishes**, and
+  `verdict.json` at the end. An empty run directory means "in progress", not "failed".
+
 ## Acting on findings
 
 The loop's job is to convert claims into either a verified fix or a rejection with
@@ -214,6 +269,45 @@ evidence. An edit made because the council said so is not a fix.
    carries, or read the call path it names. The usual survivors are an unreachable branch
    (a caller already guarantees the invariant), pre-existing behaviour the diff did not
    touch, and a genuine gap described as a crash.
+
+   What the proof kind actually settles, measured on a 777k-line repository:
+
+   - **`present` is a quotation, not a defect.** It proves the line says what the
+     finding quotes; it cannot prove the line is wrong. A security or correctness claim
+     resting on `present` alone is unproven until you read the mechanism — the only
+     `high` finding one run reported as proven was false on reading.
+   - **`proof_strength` makes that machine-readable.** `executed` means the proof that
+     held ran something (`command`, `repro`); `static` means it quoted (`present`,
+     `absent`, `json`, `diff`). The verdict's `reason` names blocking findings proven by
+     quotation only, and `--require-executed-proofs` refuses to let one block. Read
+     `static` as "the line exists", never as "the code misbehaves"; reach for the strict
+     flag when a merge turns on a behavioural claim.
+   - **`absent` is repository-wide.** An unrelated hit refutes a module-level claim, and
+     a mention in a doc refutes a code-level one. When a refutation's detail names a
+     file that is not the subject, the claim was mis-scoped, not disproved.
+   - **False positives cluster on invariants that live in another file** — a reserved
+     name, a loopback check, a constant defined next door. The reviewer sees one file of
+     a mechanism that may span two, so any claim it makes about a missing guard is a
+     guess until you find the other half.
+
+   **Report the instrument's precision as a number, not as a list.** On one 777k-line
+   repository nine rounds produced 169 findings: six real defects, roughly eight true but
+   minor or documented, three false at the system level, one overstated severity — about a
+   30% defect yield, zero fabrications, and every false positive on an invariant that
+   lived in another file. A reader handed 169 findings and a `FAIL` cannot see that rate; a
+   reader handed the rate can judge the next run. State both directions: what the
+   instrument caught that a file-level read missed, and what it claimed that the code
+   refuted.
+
+   **A `refuted` finding whose detail quotes the matching line is ambiguous.** When the
+   detail prints only the cited line's text, the report does not say whether the quoted
+   text failed to match or the claim was wrong, and the two mean opposite things. (A
+   current run prints both the actual and the expected text; a report that prints one is
+   older.) Open the file: if the text matches and the claim is still false, the proof was
+   too weak for the claim — an instrument gap to report, not a finding to dismiss as
+   refuted. A quote that differs from the file only in leading indentation now holds —
+   indentation is stripped on both sides and nothing else is normalised — so a genuine
+   mismatch still refuses.
 2. **Reject in the commit, not in silence.** A wrong finding is information: say what was
    claimed, what the reproduction returned, and why no edit followed. A silently dropped
    finding returns next round from a different sample.
@@ -317,6 +411,11 @@ entry and every crossing path needs the `/mnt/c/...` form.
   `setsid nohup "$PY" council.py review … > "$LOG" 2>&1 < /dev/null &` and return
   immediately; the round then survives turn end without `persist_on_release`. Keep WSL
   itself alive (a lingering user unit is enough).
+- **`nix develop -c` does not survive `setsid`.** The wrapper loses its log and the child
+  never appears, so the "background" run silently does nothing. Resolve the devshell
+  interpreter once — `nix develop -c python -c 'import sys; print(sys.executable)'` — and
+  launch that path directly. Add `-u`: a redirected Python block-buffers, so a long
+  mutation or calibration run shows nothing until it ends.
 - **Poll, do not wait.** A second script prints `pgrep -af 'council.py|hermes -p council'`,
   tails the log, and lists `round-1/`. Completion is the `OUTCOME:` block plus the sample
   files, never a foreground timeout.
@@ -533,6 +632,12 @@ describing the run as a failure.
 aggregate, per-dimension `llm`/`det`/`beta`/`score`, open blocking findings, and
 detected stacks.
 
+For a v2 run, `verdict.json` states `format: 1` and is staged then renamed into place, so
+a reader never sees a half-written document and a consumer should refuse a format it does
+not know rather than guess. `scope_ignored` names at most 200 dropped paths and
+`scope_ignored_omitted` counts the rest — never report "reviewed everything" from a run
+whose verdict carries that field.
+
 **Ids are not global.** The merged `GEN-000N` ids restart per dimension, so
 `security/GEN-0001` and `correctness/GEN-0001` are different claims; a parse keyed by id
 alone merges unrelated findings. Cluster by claim text (or by claimed lines) inside a
@@ -605,3 +710,95 @@ verbs: they exist in a checkout and the devshell, not in the shipped app or the 
 From a checkout, `REVIEW_COUNCIL_AUDIENCE=dev` exposes the dev surface — `version`,
 `calibrate`, `golden`, `ablate`, `corpus`. Without it the CLI answers `not a verb, and no
 such path`, which reads like a missing module rather than a hidden verb.
+
+## Changing the tool itself
+
+- **Base on the ref the user names; when none is named, find the real tip first.**
+  "Base it on `<branch>` so it merges" is a merge decision, not a technical one: take the
+  named ref even when a side branch is ahead of it, and never re-base onto the tip you
+  think is newer. With no name given, run `git worktree list` and `git branch -vv` before
+  branching — in-flight work often sits on a side branch, and basing on the nominal one
+  re-derives a refactor already done, or conflicts with it.
+- **Porting between bases re-homes the hunks; a clean `cherry-pick` is only the start.**
+  The module that owns a hook differs between branches — a digest call in `prepare.py` on
+  one lives in `run.py` on the other, a constant in `vocabulary.py` versus `schema.py` —
+  and the pick reports exactly those as modify/delete conflicts. Move each hunk to the
+  module that owns it on the target, delete the modules that do not exist there, then
+  prove the port without a model: call the preparation function directly and assert the
+  digest moves when the profile's configuration changes. Say which module each hook landed
+  in, and warn about the double definition if two branches declare the same constant — a
+  later merge keeps both lists and the assert then reads whichever one `proofs.py` imports.
+- **Landing it is a second operation, and the target may have moved while you worked.**
+  Re-read the refs at merge time —
+  `git for-each-ref --format='%(refname:short) %(objectname:short) %(committerdate:iso)'`
+  plus `git worktree list` — because a concurrent session commits to the same repository and
+  the branch you based on can be behind the one you were asked to land on. Then
+  `git merge --ff-only <feature>` from the target's own checkout: the history here is linear,
+  so a merge commit is noise and a fast-forward is the claim that the feature is a
+  descendant. Re-run the gate **in the target checkout** afterwards, not in the feature
+  worktree — that is what catches a merge into the wrong branch. Remove the worktree before
+  deleting the branch (`git branch -d` refuses with "used by worktree"), and never push: the
+  remote is the user's.
+- **The gate is seven commands, and a commit that claims green has run all of them:**
+  `nix develop -c python -m pytest -q -p no:cacheprovider` ·
+  `nix develop -c ./bin/council-verify` · `nix develop -c python tools/mutation_check.py` ·
+  `nix develop -c mypy src` · `nix develop -c pyright` ·
+  `nix develop -c ruff check --select F,E9 src tests tools` ·
+  `nix flake check --keep-going`.
+  The flake re-runs pytest, the claims, the mutations, mypy, pyright, ruff and the wheel
+  inside its own sandboxes, so it is the authority; the devshell commands are for iterating
+  without paying a build each time. A command added to `flake.nix` and the devshell belongs
+  in this list too — a checklist that misses one lets a commit claim green on six of seven.
+- **`nix flake check` builds from the git tree, so a new file must be staged first.**
+  An untracked test is invisible to the flake source, and the claim that runs it fails with
+  `exit 4: ERROR: file or directory not found: tests/<new>.py` — which reads like a wrong
+  claim and is a staging problem. `git add` the new files, then read the exit line under
+  the claim name before doubting the claim.
+- **Copy files in from a Windows mount with the mode fixed.** `cp` from `/mnt/c` lands as
+  `100755`, and a committed text file that is executable is a defect the next reader sees.
+  Check `git ls-files -s | awk '$1=="100755"'` and `chmod 644` before committing; only
+  `bin/`, `scripts/*.sh` and `tools/*.sh` are legitimately executable.
+- **The long gates need an unbuffered interpreter and their own log.** Resolve the devshell
+  python once (`nix develop -c python -c 'import sys; print(sys.executable)'`) and launch
+  that path with `-u` under `setsid nohup`: `nix develop -c` does not survive `setsid`, and
+  a redirected Python block-buffers the progress you are polling for.
+- **A new claim needs three linked things**: the test, the `[[claim]]` entry naming that
+  test's node id, and — when it declares a `falsifier` — a `Mutation` of that name that
+  actually breaks *that* claim. `mutation_check` checks both directions and fails on
+  `did not break it` and on `is not a mutation`. Regenerate `docs/CLAIMS.md` with
+  `council-verify --write docs/CLAIMS.md`; the flake check fails when it drifts.
+  A claim's `check` must name **one** test node id: the checker takes the first match out
+  of the command string, so a claim covering two tests silently grades only the first and
+  its falsifier reads `did not break it` — split it into two claims. And a mutation's
+  `old` must be a complete syntactic unit: replacing the first line of a two-line
+  statement leaves a syntax error that trips every test (so the mutation reports as
+  caught) while its falsifier reports `falsifies no claim`; anchor the whole statement.
+- **A feature milestone is not closed by a green suite.** Follow
+  `references/milestone-closure.md`: audit the decision record's acceptance rows, add the
+  CLI-boundary test, one claim per single test node, a mutation naming the exact call site,
+  an indexed `docs/M<n>.md` record, a regenerated `docs/CLAIMS.md`, and freshly measured
+  counts. Tests without the claim/mutation/record are an implementation, not a milestone.
+- **A borrowed feature must pass a scope test before it is implemented.** Name the
+  review, evidence, reproducibility or gate-cost contract it strengthens, and record
+  adopted, deferred and rejected candidates in `docs/FEATURES.md`; reject anything that
+  turns the reviewer into an author, chat product, workspace, plugin runtime or automatic
+  merger.
+- **A new proof kind is six linked edits**, and the package asserts the first two:
+  the name in `vocabulary.PROOF_KINDS`; an executor in `proofs.EXECUTORS` (the module's own
+  `assert set(EXECUTORS) == set(PROOF_KINDS)` fails on drift); the shared `_attempt` path
+  when the kind starts a process, so the allowlist, overlay and the three refusals are not
+  re-invented per kind; a row in the shipped prompt's kind table plus one rule saying when
+  to choose it; a `[[claim]]` and test per behaviour; and a `Mutation` per declared
+  falsifier. `PROOF_KINDS` is part of `CONTRACT`, which is part of the instrument digest, so
+  adding a kind changes every digest — deliberate, and worth a changelog line so two runs
+  across the change are not compared as one instrument.
+- **An ADR's acceptance table is a claim about test node ids.** `docs/M*.md` cite
+  `tests/test_*.py::test_…` in their acceptance rows, so renaming or deleting a test
+  falsifies the record silently and a reader trusts a gate that no longer exists. Grep
+  `docs/` for the node id before renaming, and fix the row in the same commit that renames
+  it.
+- **A new effectful module must be named in `tests/test_architecture.py:ADAPTERS`**, or
+  the architecture gate fails it — that gate parses imports and calls, so a module that
+  merely looks pure still fails.
+- **Every shipped text file ends with a newline**, `LICENSE` included; `tests/test_files.py`
+  enforces it and the failure names the file.

@@ -432,7 +432,7 @@ def build(run_dir: Path, result: Optional[Dict[str, Any]] = None) -> Dict[str, A
     }
     # `merge_ready` is not its own evidence: it is the conjunction.
     checks["merge_ready"] = (
-        checks["ci_observed"][0] and bool(fresh) and fresh.get("status") == "satisfied",
+        checks["ci_observed"][0] and fresh is not None and fresh.get("status") == "satisfied",
         BLOCK_REASONS["merge_ready"],
         [],
     )
@@ -505,7 +505,16 @@ def _gate(score_dir: Path, stacks: List[str]) -> Optional[Dict[str, Any]]:
     """
     try:
         score = _load("score_reviews")
-        return score.evaluate(score_dir, score.calibrated_threshold(), stacks=stacks or None)
+        # The enforcement mode is a property of the RUN, recorded in meta.json by the harness, so the
+        # ladder recomputes with the mode the run actually used instead of assuming the default.
+        require_proof = False
+        try:
+            meta = json.loads((score_dir / "meta.json").read_text(encoding="utf-8"))
+            require_proof = bool(meta.get("require_proof"))
+        except (OSError, json.JSONDecodeError):
+            pass
+        return score.evaluate(score_dir, None, stacks=stacks or None,
+                              require_proof=require_proof)
     except Exception as exc:  # noqa: BLE001 - a ladder must render even when the gate cannot
         return {"status": "error", "reason": f"the deterministic gate could not run: "
                                              f"{type(exc).__name__}: {exc}", "aggregate": None}
@@ -527,6 +536,8 @@ def _load(name: str):
 
     path = Path(__file__).resolve().parent / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"_claims_{name}", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {name} from {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)

@@ -50,9 +50,14 @@ def _write_run(tmp_path: Path, scores: dict, blocking: bool = False) -> Path:
 def _gate(run: Path, *extra: str) -> subprocess.CompletedProcess:
     # score_reviews.py refuses to run without REVIEW_COUNCIL_DISPATCHED; this helper
     # spawns it as a program, which is exactly what the guard is about.
+    #
+    # `--allow-unproven` is explicit here: every test in this file is about the SCORE and
+    # the gate's arithmetic. Certification (a blocking finding that must be refuted by a
+    # proof before it stops blocking) has its own file, tests/test_gate_proofs.py, and the
+    # default in both places is enforcement.
     env = dict(os.environ, REVIEW_COUNCIL_DISPATCHED="1")
     return subprocess.run(
-        [sys.executable, str(GATE), str(run), *extra],
+        [sys.executable, str(GATE), str(run), "--allow-unproven", *extra],
         capture_output=True, text=True, env=env,
     )
 
@@ -796,3 +801,77 @@ def test_a_checkout_under_a_skipped_name_still_counts(tmp_path):
     assert "nix" in mod.detect_stacks(root), "absolute path parts leaked into the skip check"
     shares = mod.stack_shares(root)
     assert shares and shares.get("nix") == 1.0, shares
+
+
+def test_threshold_from_scale_reads_every_shipped_shape():
+    """`calibration.json` nests the value; a corpus derivation writes a number."""
+    mod = _gate_mod()
+    assert mod.threshold_from_scale({"threshold": 69.175}) == 69.175
+    assert mod.threshold_from_scale({"threshold": {"recommended": 87.1}}) == 87.1
+    assert mod.threshold_from_scale({"recommended_threshold": {"threshold": 55.5}}) == 55.5
+    assert mod.threshold_from_scale(None) is None
+    assert mod.threshold_from_scale({}) is None
+    assert mod.threshold_from_scale({"threshold": "high"}) is None
+
+
+def test_a_claims_run_is_enforced_against_the_claims_threshold(tmp_path, monkeypatch):
+    """The scale decides the number.
+
+    The CLI used to resolve the threshold with `calibrated_threshold()` — the
+    deterministic manifest — and pass it into `evaluate`, so a derived
+    `calibration.claims.json` was loaded, reported as `calibrated`, and never
+    enforced: a claims run was judged against 80.0.
+    """
+    mod = _gate_mod()
+    run = _write_run(tmp_path, {"security": 70, "correctness": 70, "readability": 70,
+                                "architecture": 70, "performance": 70})
+    (run / "proofs.json").write_text(
+        json.dumps({"schema_version": 1, "round": "round-1", "findings": [], "summary": {}}),
+        encoding="utf-8")
+    monkeypatch.setattr(mod, "load_scale_calibration",
+                        lambda scale: {"scale": "claims", "threshold": 69.175})
+    monkeypatch.setattr(mod, "calibrated_threshold", lambda: 80.0)
+    result = mod.evaluate(run, None)
+    assert result.get("score_source") == "claims", result.get("score_source")
+    assert result["threshold"] == 69.175, result["threshold"]
+
+
+def test_a_claims_run_below_the_threshold_is_unsatisfied(tmp_path, monkeypatch):
+    """A claims run under the calibrated number is certified when nothing blocks.
+
+    The history here is worth keeping: the gate once printed `satisfied: aggregate 84.5 >= 87.33`
+    while the inequality was never tested, then a later edit tested it. Both are the same mistake —
+    on this scale a number decided. Measured: six passes over one identical tree moved the
+    aggregate by 15 points, so a cutoff inside that band decides by luck. The verdict is the
+    blocking set; "better or worse than before" is `compare`'s job, against a named baseline.
+    """
+    mod = _gate_mod()
+    run = _write_run(tmp_path, {"security": 70, "correctness": 70, "readability": 70,
+                                "architecture": 70, "performance": 70})
+    # A confirmed MEDIUM caps its dimension at 85 and is not blocking, so the run lands under
+    # the threshold with a clean blocking set.
+    (run / "proofs.json").write_text(
+        json.dumps({"schema_version": 1, "round": "round-1", "summary": {},
+                    "findings": [{"id": "SEC-1", "dimension": "security", "severity": "medium",
+                                  "state": "confirmed",
+                                  "location": {"path": "a.py", "line_range": "1"}}]}),
+        encoding="utf-8")
+    monkeypatch.setattr(mod, "load_scale_calibration",
+                        lambda scale: {"scale": "claims", "threshold": 99.0})
+    monkeypatch.setattr(mod, "calibrated_threshold", lambda: 80.0)
+    result = mod.evaluate(run, None)
+    assert result["score_source"] == "claims"
+    assert result["certification_basis"] == "claims"
+    assert result["aggregate"] < 99.0, result["aggregate"]
+    assert result["status"] == "satisfied", result
+    assert result["certification"] == "certified", result["reason"]
+    assert "threshold" not in result["reason"], result["reason"]
+
+
+def test_an_explicit_threshold_still_wins_over_the_scale(tmp_path):
+    """A caller can still force a number; the scale only supplies the default."""
+    mod = _gate_mod()
+    run = _write_run(tmp_path, {"security": 95, "correctness": 95, "readability": 95,
+                                "architecture": 95, "performance": 95})
+    result = mod.evaluate(run, 50.0)
+    assert result["threshold"] == 50.0

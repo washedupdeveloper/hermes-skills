@@ -1,0 +1,84 @@
+{
+  "schema_version": 2,
+  "note": "Severity is a property of WHAT WAS DETECTED, not of the reviewer's opinion of it. Two kinds of evidence, and they differ in authority. A rule that NAMES the defect class (`exact` — a credential literal, a SyntaxError) fixes severity outright: the class is not a matter of taste. A rule that only knows WHICH TOOL RAN (`floor`) can raise a reviewer's label and never lower it, because a lint proof attached to a serious claim must not downgrade the claim. Both directions are measured, not assumed: without `exact`, one syntax error came back critical in two passes and high in the third, on the same line; without `floor`, a critical claim proven by a lint command was downgraded to low.",
+  "rules": [
+    {
+      "id": "credential-literal",
+      "excerpt_matches": "sk_live_[0-9A-Za-z]{8,}",
+      "severity": "critical",
+      "authority": "exact",
+      "why": "The cited line contains a live-key literal, so the credential is in the tree whether or not gitleaks ran. Measured: without this rule a text-based proof of the same key kept the reviewer's `medium` while the tool-based proofs were `critical`."
+    },
+    {
+      "id": "does-not-parse-literal",
+      "excerpt_matches": "SyntaxError|invalid-syntax",
+      "severity": "high",
+      "authority": "exact",
+      "why": "Measured: a syntax error was proved through a linter and came back critical in two passes and high in the third, on the same line. Once a SyntaxError is cited the class is unambiguous, so it is fixed at high — the value the compile rule already assigns."
+    },
+    {
+      "id": "credential",
+      "tool": "gitleaks",
+      "severity": "critical",
+      "authority": "floor",
+      "why": "A committed credential is an access grant. The tool knows a secret was found, not which kind, so this raises rather than settles."
+    },
+    {
+      "id": "code-execution",
+      "tool": "bandit",
+      "rules": ["B102", "B307", "B602", "B603", "B604", "B605", "B606", "B607", "B609"],
+      "severity": "high",
+      "authority": "floor",
+      "why": "eval/exec/shell execution of data is remote code execution by construction; it is high rather than critical because exploitability still depends on what reaches the sink."
+    },
+    {
+      "id": "does-not-parse",
+      "tool": "compile",
+      "severity": "high",
+      "authority": "floor",
+      "why": "Code that does not parse cannot run at all. It is not critical because it fails loudly rather than silently."
+    },
+    {
+      "id": "type-error",
+      "tool": "mypy",
+      "severity": "medium",
+      "authority": "floor",
+      "why": "A type error is a real defect that still compiles in Python, so it ships and misbehaves later."
+    },
+    {
+      "id": "failing-test",
+      "tool": "pytest",
+      "severity": "medium",
+      "authority": "floor",
+      "why": "A failing test is evidence of broken behaviour, but the test itself can be wrong, so it is not raised to high on the tool's word alone."
+    },
+    {
+      "id": "lint-python",
+      "tool": "ruff",
+      "severity": "low",
+      "authority": "floor",
+      "why": "Lint findings are style and idiom; they do not by themselves change behaviour. A linter quoting a SyntaxError is caught by `does-not-parse-literal`, which is exact."
+    },
+    {
+      "id": "lint-nix",
+      "tool": "statix",
+      "severity": "low",
+      "authority": "floor",
+      "why": "Nix lint findings are idiom and anti-pattern warnings; the evaluator still accepts them."
+    },
+    {
+      "id": "dead-nix",
+      "tool": "deadnix",
+      "severity": "low",
+      "authority": "floor",
+      "why": "An unused binding is dead code, not a defect in behaviour."
+    },
+    {
+      "id": "shell",
+      "tool": "shellcheck",
+      "severity": "medium",
+      "authority": "floor",
+      "why": "Shellcheck's findings are often unquoted expansions and swallowed errors, which change behaviour under real input."
+    }
+  ]
+}

@@ -148,6 +148,15 @@ in
             touch $out
           '';
 
+          # Type-check the maintainer surface with the same language server the
+          # editor uses. The suite proves behavior; pyright proves the type shape
+          # of dev/, reviewc/ and scripts/ before a runtime Optional surprises us.
+          pyright = pkgs.runCommand "check-pyright" { nativeBuildInputs = [ pkgs.pyright ]; } ''
+            cd ${src}
+            pyright
+            touch $out
+          '';
+
           # The version policy as a gate (docs/VERSIONING.md): pyproject and the
           # newest CHANGELOG release must agree, releases descend, `[Unreleased]`
           # first. No git in the sandbox, so the tag half is CI's (`--tag`).
@@ -326,7 +335,7 @@ in
                     done < dev-scripts.txt
 
                     # 2. the data files the modules resolve relative to themselves
-                    for f in calibration.json eval-baseline.json score_reviews.py probes.py toolchain.py hermes_home.py hermes.py; do
+                    for f in calibration.json calibration.claims.json eval-baseline.json score_reviews.py probes.py toolchain.py hermes_home.py hermes.py; do
                       test -f ${fw}/scripts/$f || { echo "shipped tree is missing scripts/$f" >&2; exit 1; }
                     done
 

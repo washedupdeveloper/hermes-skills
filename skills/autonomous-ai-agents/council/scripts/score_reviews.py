@@ -369,6 +369,25 @@ _CALIBRATION: Optional[Dict[str, Any]] = None
 _CALIBRATION_LOADED = False
 
 
+def calibration_path(scale: str) -> Path:
+    """Where the threshold for one scoring scale lives.
+
+    Two scales coexist: `deterministic` (what calibrate.py has always measured) and `claims`
+    (aggregates capped by proven defects). One file would let a corpus run overwrite the threshold
+    the other scale still depends on.
+    """
+    if scale == "deterministic":
+        return CALIBRATION_PATH
+    return HERE / f"calibration.{scale}.json"
+
+
+def load_scale_calibration(scale: str) -> Optional[Dict[str, Any]]:
+    """The manifest for one scale, or None when no threshold was derived for it."""
+    if scale == "deterministic":
+        return load_calibration()
+    return load_calibration(calibration_path(scale))
+
+
 def load_calibration(path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
     """Load the calibration manifest, or None when the repo is uncalibrated."""
     global _CALIBRATION, _CALIBRATION_LOADED
@@ -644,7 +663,11 @@ def deterministic_score(review: Dict[str, Any], dimension: str,
     # 100-line file with 5 findings like a 10,000-line repo with 5.
     open_findings = weighted_open_findings(review.get("findings"))
     if size_kloc > 0:
-        density_score = hill_density(open_findings / size_kloc)
+        # The same floor the claims term uses, for the same reason: without it a 56-line tree
+        # scores WORSE than a 16-defect tree for the same findings, because density divides by a
+        # size so small that everything saturates. Measured on the in-place corpus: flooring here
+        # moved the good/bad margin from +7.81 to +20.41.
+        density_score = hill_density(open_findings / max(size_kloc, MIN_KLOC))
     else:
         density_score = hill_curve(float(open_findings))
     det = weighted_geometric_mean([(det, 0.7), (density_score, 0.3)]) if signals else density_score
@@ -652,19 +675,91 @@ def deterministic_score(review: Dict[str, Any], dimension: str,
     return det, beta, missing
 
 
+#: Below this, a findings DENSITY is meaningless: one medium finding in a 56-line file is "denser"
+#: than ten in a 10k-line repository, so every score collapses into the same band. Measured on the
+#: first corpus: four rungs spanning 0 to 16 seeded defects all scored 39–44, and the 16-defect rung
+#: outscored the clean one. The floor does not change a real repository's arithmetic — it only
+#: stops a tiny tree from being scored as if every line were defective.
+MIN_KLOC = 1.0
+
+#: What a *proven* defect does to its dimension's number, by severity.
+#:
+#: The blend alone cannot carry this. On a fully-probed run every dimension has β = 1.00, so
+#: `score = det` and the claims term is multiplied by zero — measured on a real round: security
+#: det 71.75 with a confirmed committed credential, unchanged by either scoring mode. A cap is the
+#: same mechanism the gate already uses for observed runtime failure, and it cannot be diluted by
+#: a tool that happened to be quiet.
+CLAIM_CAPS = {"critical": 30.0, "high": 60.0, "medium": 85.0}
+
+
+def claim_cap(records: List[Dict[str, Any]]) -> Optional[float]:
+    """The hardest cap implied by the *confirmed* claims in one dimension, or None.
+
+    Uses `severity_scored`, not `severity`: a severity the evidence does not corroborate is held at
+    `high` by adjudication, so an asserted `critical` cannot set the ceiling on its own word. Old
+    records without the field fall back to `severity`.
+    """
+
+    def scored(record: Dict[str, Any]) -> str:
+        return str(record.get("severity_scored") or record.get("severity"))
+
+    caps = [CLAIM_CAPS[scored(record)] for record in records
+            if record.get("state") == "confirmed" and scored(record) in CLAIM_CAPS]
+    return min(caps) if caps else None
+
+
+def claims_score(records: List[Dict[str, Any]], size_kloc: float) -> float:
+    """A dimension's score from the claims that were PROVEN, and only those.
+
+    This is the M-E change: the number no longer comes from the reviewer's opinion of its own
+    dimension, but from the severity-weighted density of the defects it proved. A dimension with
+    nothing proven scores 100 — not because it was called clean, but because nothing was shown
+    wrong in it. `unsettled` claims deliberately do not lower the score: they are not known
+    defects, and they block certification through their own route.
+
+    Same severity weights and same Hill curve as the deterministic half, on purpose: two numbers
+    on different scales inside one blend would be unreadable.
+    """
+    confirmed = [{"severity": record.get("severity"), "status": "open"}
+                 for record in records if record.get("state") == "confirmed"]
+    weighted = weighted_open_findings(confirmed)
+    if size_kloc > 0:
+        return hill_density(weighted / max(size_kloc, MIN_KLOC))
+    return hill_curve(weighted)
+
+
 def score_dimension(review: Dict[str, Any], dimension: str,
                     stacks: Optional[List[str]] = None,
-                    size_kloc: float = 0.0) -> Dict[str, Any]:
-    """score[c] = beta*det + (1-beta)*llm (FRAMEWORK §6)."""
-    llm = float(review.get("score") or 0.0)
+                    size_kloc: float = 0.0,
+                    adjudication: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """score[c] = beta*det + (1-beta)*llm (FRAMEWORK §6).
+
+    *adjudication* replaces the reviewer's `score` with the claims-derived number when the round
+    was adjudicated. The substitution is recorded per dimension, because a reader comparing two
+    runs has to know which scale each number is on.
+    """
+    if adjudication is None:
+        llm = float(review.get("score") or 0.0)
+        source = "reviewer"
+        mine: List[Dict[str, Any]] = []
+    else:
+        mine = [record for record in (adjudication.get("findings") or [])
+                if record.get("dimension") == dimension]
+        llm = claims_score(mine, size_kloc)
+        source = "claims"
     det, beta, missing = deterministic_score(review, dimension, stacks, size_kloc)
     score = beta * det + (1.0 - beta) * llm
+    cap = claim_cap(mine) if adjudication is not None else None
+    if cap is not None and score > cap:
+        score = cap
     return {
         "dimension": dimension,
         "llm": round(llm, 2),
         "det": round(det, 2),
         "beta": round(beta, 4),
         "score": round(score, 2),
+        "source": source,
+        "cap": cap,
         "tools_missing": missing,
     }
 
@@ -820,9 +915,175 @@ def verdict_summary(aggregate: float, threshold: float,
                        "aggregate >= threshold and no blocking findings")
 
 
-def evaluate(run_dir: Path, threshold: float, allow_partial: bool = False,
+ADJUDICATED = frozenset({"confirmed", "refuted", "unsettled", "unrunnable"})
+
+
+def load_proofs(run_dir: Path) -> Optional[Dict[str, Any]]:
+    """The round's adjudication, or None when nothing was adjudicated.
+
+    None and an empty report mean different things: "nobody ran the checks" versus "the checks ran
+    and there was nothing to check". Only the second can open a gate.
+    """
+    path = run_dir / "proofs.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _adjudication_index(payload: Dict[str, Any]) -> Dict[Any, Dict[str, Any]]:
+    index: Dict[Any, Dict[str, Any]] = {}
+    for record in payload.get("findings") or []:
+        if not isinstance(record, dict):
+            continue
+        if record.get("id"):
+            index[str(record["id"])] = record
+        location = record.get("location") or {}
+        index[(record.get("dimension"), str(location.get("path")), str(location.get("line_range")))] = record
+    return index
+
+
+def apply_proofs(blocking: List[Dict[str, Any]],
+                 payload: Optional[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Split blocking findings into (still blocking) and (unsettled) using the adjudication.
+
+    Only `refuted` clears a finding. `confirmed` still blocks — it is a real defect. Anything else,
+    including a finding the adjudication never saw, is unresolved and blocks for the other reason:
+    nobody settled it. Returning all of them as unresolved when there is no report is deliberate;
+    an enforcement mode that silently passes because the report is missing would be a back door.
+    """
+    if payload is None:
+        return [], [{**finding, "_adjudication": "missing"} for finding in blocking]
+    index = _adjudication_index(payload)
+    still_blocking: List[Dict[str, Any]] = []
+    unresolved: List[Dict[str, Any]] = []
+    for finding in blocking:
+        location = finding.get("location") or {}
+        record = (index.get(str(finding.get("id")))
+                  or index.get((finding.get("dimension"), str(location.get("path")),
+                                str(location.get("line_range")))))
+        state = (record or {}).get("state")
+        if state == "refuted":
+            continue
+        if state == "confirmed":
+            still_blocking.append({**finding, "_adjudication": state,
+                                   "_reason": (record or {}).get("reason")})
+            continue
+        unresolved.append({**finding, "_adjudication": state or "missing",
+                           "_reason": (record or {}).get("reason")})
+    return still_blocking, unresolved
+
+
+def certification(satisfied: bool, blocking: List[Dict[str, Any]],
+                  unresolved: List[Dict[str, Any]], *, calibrated: bool = True,
+                  coverage_gap: bool = False) -> str:
+    """The verdict's state, named.
+
+    `unsatisfied` means a real defect or a score short of the bar — something to fix.
+    `unprovable` means nothing was found that is *proven* wrong, and something blocking could not be
+    settled — or nothing was settled at all where the toolchain saw something. `uncalibrated` means
+    the number itself cannot be compared to the threshold. Those are four different answers and a
+    caller must be able to tell them apart without parsing prose.
+    """
+    if blocking:
+        return "unsatisfied"
+    if unresolved or coverage_gap:
+        return "unprovable"
+    if not calibrated:
+        return "uncalibrated"
+    return "certified" if satisfied else "unsatisfied"
+
+
+def probe_defect_count(run_dir: Path) -> int:
+    """How many defects the probes observed — the ones that could have blocked.
+
+    A finding counts when it is `medium`, `high` or `critical`, or when it names no severity at
+    all: an unlabelled probe finding is not evidence that the reviewer was entitled to ignore it,
+    so it stays conservative. `low` findings do not count, because they cannot block on their own,
+    and counting them made a clean tree uncertifiable whenever the reviewer correctly stayed
+    silent. Measured: three clean rungs of one corpus, one silent reviewer, and `deadnix: unused
+    lambda` plus "no AGENTS.md" — both `low` — turned a correct run into `unprovable` and cost the
+    corpus a rung. `medium` does count: a bandit medium or a complexity ratio ≥ 2 is a defect a
+    silent reviewer missed, and excluding it would reopen the hole this rule exists to close.
+    """
+    path = Path(run_dir) / "probes.json"
+    if not path.exists():
+        return 0
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(payload, list):
+        return 0
+    total = 0
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        for finding in entry.get("findings") or []:
+            severity = str((finding or {}).get("severity") or "").strip().lower() \
+                if isinstance(finding, dict) else ""
+            if severity in ("", "medium", "high", "critical"):
+                total += 1
+    return total
+
+
+def coverage_gap(run_dir: Path, adjudication: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The blind-reviewer hole, as a rule.
+
+    Claims scoring moves only when the reviewer proves something. A reviewer that reports nothing
+    therefore scores 100 on a defective repository, and nothing blocks, because there is no claim to
+    block on. So: if the probes observed a defect and the adjudication settled *no* claim at all
+    (neither confirmed nor refuted), return why. The run is `unprovable` — nobody looked, and the
+    toolchain says there was something to look at.
+    """
+    observed = probe_defect_count(run_dir)
+    if not observed:
+        return None
+    records = (adjudication or {}).get("findings") or []
+    settled = [r for r in records if r.get("state") in ("confirmed", "refuted")]
+    if settled:
+        return None
+    return (f"the probes observed {observed} defect(s) and the reviewer settled no claim about any "
+            f"of them — a run that proves nothing cannot be certified against a run that found "
+            f"something")
+
+
+def threshold_from_scale(payload: Optional[Dict[str, Any]]) -> Optional[float]:
+    """The threshold a scale's manifest recommends, in either shipped shape.
+
+    `calibration.json` nests it as `threshold.recommended`; a corpus derivation writes
+    `threshold` as a number and repeats it under `recommended_threshold`. Reading only one
+    shape is how a derived threshold ends up loaded, reported as calibrated, and never
+    enforced.
+    """
+    if not payload:
+        return None
+    block = payload.get("threshold")
+    if isinstance(block, dict):
+        for key in ("recommended", "threshold"):
+            value = block.get(key)
+            if value is not None:
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return None
+        return None
+    if isinstance(block, (int, float)):
+        return float(block)
+    recommended = payload.get("recommended_threshold")
+    if isinstance(recommended, dict) and recommended.get("threshold") is not None:
+        try:
+            return float(recommended["threshold"])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def evaluate(run_dir: Path, threshold: Optional[float] = None,
+             allow_partial: bool = False,
              stacks: Optional[List[str]] = None,
-             repo: Optional[Path] = None) -> Dict[str, Any]:
+             repo: Optional[Path] = None, require_proof: bool = True) -> Dict[str, Any]:
     """Load every reviewer file and compute the full hybrid verdict.
 
     A council is only a council if every dimension reported. A partial run is an
@@ -864,8 +1125,32 @@ def evaluate(run_dir: Path, threshold: float, allow_partial: bool = False,
     # §3: measure the target's size so the findings term can be a density.
     size_kloc = kloc(repo) if repo else 0.0
 
-    per_dimension = [score_dimension(reviews[d], d, stacks, size_kloc)
+    # Adjudication drives BOTH the score and the certification when enforcement is on:
+    # `claims` means the number comes from proven defects; the reviewer's own score is only used
+    # when the caller opted out (reproducing an old score) or nothing was adjudicated.
+    adjudication = load_proofs(run_dir)
+    use_claims = bool(require_proof and adjudication is not None)
+    per_dimension = [score_dimension(reviews[d], d, stacks, size_kloc,
+                                     adjudication=adjudication if use_claims else None)
                      for d in WEIGHTS if d in reviews]
+    score_source = "claims" if use_claims else "reviewer"
+    # What the aggregate is on. `claims` runs can sit below det (the cap), so a threshold derived
+    # from densities does not describe them; `deterministic` is what calibrate.py measures.
+    required_scale = "claims" if use_claims else "deterministic"
+    scale_payload = load_scale_calibration(required_scale)
+    calibrated_for_scale = scale_payload is not None
+    calibration_scale = (str((scale_payload or {}).get("scale") or required_scale)
+                         if calibrated_for_scale else "missing")
+
+    # The threshold must come from the scale the score is on. Resolving it in the CLI
+    # always read the deterministic manifest, so a claims run was enforced against a
+    # number derived from densities: the file existed, was reported as calibrated, and
+    # was never applied.
+    if threshold is None:
+        resolved = threshold_from_scale(scale_payload)
+        # `or` would treat a legitimate 0.0 as absent and fall back to the deterministic 80.0 —
+        # the exact cross-scale leak this resolution exists to stop.
+        threshold = resolved if resolved is not None else calibrated_threshold()
 
     # Renormalize over the dimensions present, so a partial run is not diluted toward
     # zero by the absent ones.
@@ -873,10 +1158,66 @@ def evaluate(run_dir: Path, threshold: float, allow_partial: bool = False,
     aggregate = renormalized_aggregate(present, per_dimension)
 
     blocking = open_blocking(reviews)
+    unresolved: List[Dict[str, Any]] = []
+    if require_proof:
+        blocking, unresolved = apply_proofs(blocking, adjudication)
     satisfied, reason = verdict_summary(aggregate, threshold, blocking)
+    if unresolved:
+        # An unsettled blocking claim is not a pass. It is not a failure either: `certification`
+        # names the difference, and the reason has to survive being read on its own.
+        note = f"{len(unresolved)} blocking claim(s) could not be settled (see proofs.json)"
+        clean_before = not blocking and aggregate >= threshold
+        satisfied = False
+        reason = note if clean_before else f"{reason}; {note}"
+    # The blind-reviewer hole: claims scoring rewards proving nothing, so a run that settles no
+    # claim while the probes saw defects is unprovable, not clean.
+    gap = coverage_gap(run_dir, adjudication) if use_claims else None
+    if gap:
+        satisfied = False
+        reason = gap if (not blocking and not unresolved) else f"{reason}; {gap}"
+    if use_claims:
+        # Point 2, made permanent: on this scale the verdict is the blocking set. No threshold is
+        # consulted and none is printed. The earlier code printed `aggregate X >= Y` while never
+        # testing it, and a later edit tested it — both are the same mistake with different signs:
+        # either way a number decides. The measured reason is upstream of this: six passes over one
+        # identical tree moved the aggregate by 15 points, so any cutoff inside that band decides by
+        # luck. "Is this better than before" is answered by `compare`, against a named baseline,
+        # from evidence that is cited.
+        satisfied = not blocking and not unresolved and not gap
+        parts = []
+        if blocking:
+            parts.append(f"{len(blocking)} confirmed claim(s) of high or critical severity")
+        if unresolved:
+            parts.append(f"{len(unresolved)} blocking claim(s) could not be settled")
+        if gap:
+            parts.append("the probes saw a defect and nothing was settled")
+        reason = ("; ".join(parts) if parts else
+                  "no confirmed claim of high or critical severity, and nothing blocking is "
+                  "unsettled")
+    elif not calibrated_for_scale and not blocking and not unresolved and not gap:
+        # The number is real but it is not comparable: claims-scored runs are on a different scale
+        # from the threshold this repository derived. Refusing to certify is the honest answer;
+        # the alternative is a verdict that looks calibrated and is not.
+        satisfied = False
+        reason = (f"the score is on the `{score_source}` scale and the threshold was calibrated on "
+                  f"`{calibration_scale}` — compare nothing until `council calibrate` derives a "
+                  f"threshold for the claims scale")
 
     return {
         "status": "satisfied" if satisfied else "not_satisfied",
+        "certification": certification(satisfied, blocking, unresolved,
+                                       # A claims verdict rests on the blocking set, which needs no
+                                       # threshold. `uncalibrated` belongs to the deterministic
+                                       # scale, where the number IS the verdict.
+                                       calibrated=True if use_claims else calibrated_for_scale,
+                                       coverage_gap=bool(gap)),
+        "coverage_gap": gap,
+        "score_source": score_source,
+        "certification_basis": "claims" if use_claims else "threshold",
+        "calibration_scale": calibration_scale,
+        "calibrated_for_scale": calibrated_for_scale,
+        "enforced": bool(require_proof),
+        "unresolved": unresolved,
         "reason": reason,
         "aggregate": round(aggregate, 2),
         "threshold": threshold,
@@ -1107,8 +1448,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "because it needs no run directory you would have to "
                              "know.")
     parser.add_argument("--threshold", type=float, default=None,
-                        help="Pass threshold (default: the calibrated value from "
-                             "scripts/calibration.json)")
+                        help="Pass threshold (default: the value calibrated for the run's own "
+                             "scale — scripts/calibration.claims.json for a claims-scored run, "
+                             "else scripts/calibration.json)")
     parser.add_argument("--json", action="store_true", help="Emit the full result as JSON on stdout")
     parser.add_argument("--tail-chars", type=int, default=3000,
                         help="Cap the continuation prompt (default 3000, matches goals.py)")
@@ -1120,8 +1462,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--stacks", default=None,
                         help="Comma-separated stacks to force (e.g. 'nix,python'), overriding detection")
     parser.add_argument("--quiet", action="store_true", help="Suppress the continuation prompt")
+    parser.add_argument("--allow-unproven", action="store_true",
+                        help="DO NOT require a proof for a blocking finding — the pre-proof rule. "
+                             "Default is enforcement: a blocking claim counts only once its proof "
+                             "was refuted, and anything unsettled makes the run unprovable "
+                             "(docs/ADJUDICATION.md). Use this to reproduce an old score, not to "
+                             "certify a merge.")
     args = parser.parse_args(argv)
-    threshold: float = args.threshold if args.threshold is not None else calibrated_threshold()
+    threshold: Optional[float] = args.threshold
 
     if args.latest:
         # Runs at EVERY turn boundary, so it must stay cheap and never guess: no run yet
@@ -1154,6 +1502,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         result = evaluate(run_dir, threshold, allow_partial=args.allow_partial,
+                          require_proof=not args.allow_unproven,
                           stacks=forced, repo=repo)
     except Exception as exc:  # never crash the loop; a gate error is a failed gate
         print(f"score_reviews: evaluation error: {exc}", file=sys.stderr)
@@ -1170,7 +1519,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if result["status"] == "satisfied":
         if not args.json and not args.quiet:
-            print(f"satisfied: aggregate {result['aggregate']} >= {result['threshold']:g}, no open high/critical")
+            if result.get("threshold") is None:
+                print("satisfied: no open high/critical and nothing blocking unsettled "
+                      "(no claims threshold is calibrated, so the number is not compared)")
+            else:
+                print(f"satisfied: aggregate {result['aggregate']} >= {result['threshold']:g}, "
+                      f"no open high/critical")
         return 0
     return 1
 

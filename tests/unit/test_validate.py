@@ -64,6 +64,30 @@ def check(tmp: Path) -> list[str]:
     return validate.validate(tmp).violations
 
 
+def test_a_glob_is_not_a_pointer(tmp=None):
+    """`scripts/*.sh` names a class of files; it cannot be dereferenced, so it is not cited.
+
+    Documentation has to be able to say "the shell scripts here are executable" without
+    the gate demanding a file called `*.sh`.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        body = frontmatter() + "\n`bin/`, `scripts/*.sh` and `tools/*.sh` are legitimately executable.\n"
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body})
+        assert not any("dead reference" in v for v in check(root)), check(root)
+
+
+def test_a_missing_pointer_is_still_caught(tmp=None):
+    """The control for the control: a concrete path that does not exist must still fail.
+
+    Without this, `test_a_glob_is_not_a_pointer` would pass just as well if the whole
+    pointer rule had stopped firing.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        body = frontmatter() + "\nRead `scripts/nope.py` before starting.\n"
+        root = fixture(Path(d), {"skills/alpha/probe/SKILL.md": body})
+        assert any("dead reference -> scripts/nope.py" in v for v in check(root)), check(root)
+
+
 def one(tmp: Path, text: str, name="probe") -> list[str]:
     (tmp / "library").mkdir(parents=True, exist_ok=True)
     (tmp / "library" / "contract.json").write_text(json.dumps(CONTRACT), encoding="utf-8")

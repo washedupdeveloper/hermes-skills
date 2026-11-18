@@ -7,11 +7,14 @@ Exit codes: 0 satisfied, 1 escalated, 2 error. See docs/FRAMEWORK.md.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -176,7 +179,12 @@ Shape (no prose around it, no code fence):
       "status": "open",
       "location": {{"path": "relative/path", "line_range": "12"}},
       "claim": "what is wrong, and why it matters",
-      "falsifiable_check": "the command or observation that would settle it"
+      "falsifiable_check": "the command or observation that would settle it",
+      "proof": {{
+        "kind": "absent|present|command|json|diff|dom|http",
+        "params": {{"...": "see PROOF below"}},
+        "control": {{"kind": "same or another kind", "params": {{"...": "..."}}}}
+      }}
     }}
   ],
   "tools_run": [
@@ -189,6 +197,51 @@ tersely: `claim` is ONE sentence (what is wrong, why it matters), no hedging, no
 restating the diff; `falsifiable_check` is the exact command that settles it. Never
 drop a negation, path, symbol, number, or rule id — those are the payload. Security
 and irreversible findings are the exception: explain those in full.
+
+PROOF — every high or critical finding MUST carry a `proof` the orchestrator RUNS, and
+a control that must FAIL where your claim is false. `council proofs --list` prints the
+kinds; in short:
+
+  absent   {{"pattern": "<regex>", "include": ["**"], "exclude": ["def.py"]}}
+           supported when NO file outside `exclude` matches. For an unused symbol,
+           exclude the file that defines it — otherwise your own definition refutes you.
+  present  {{"path": "p.py", "line": 12, "text": "<what that line says>"}}
+  command  {{"argv": ["gitleaks", "detect", "--no-git", "--source", ".", "--redact"],
+            "expect": {{"exit": "nonzero"}}}}
+           `expect.exit` is "zero", "nonzero", or an integer. `argv` is a LIST — no shell
+           strings, no pipes. Prefer the pinned analyzers by bare name: bandit, ruff,
+           gitleaks, mypy, pytest, semgrep, osv-scanner, shellcheck, statix, deadnix.
+  json     {{"path": "package.json", "pointer": "/dependencies/foo", "equals": "1.0.0"}}
+  diff     {{"path": "p.py", "line": 12, "mode": "added"}}   the line is part of this change
+  dom      {{"selector": "#app", "expect": "present"}}        runtime, when a page is under review
+  http     {{"url": "http://127.0.0.1:8000/health", "expect_status": 200}}
+
+`control` is REQUIRED for high and critical: the same check, with the SAME `expect`,
+pointed at something where your claim is false. Keep `expect` identical to the proof's
+and change only what it looks at — then the control must FAIL, which is what proves your
+check can tell the two apart.
+
+  claim "secrets in this repo"     proof:   gitleaks --source .          expect nonzero  -> passes
+                                   control: gitleaks --source clean/     expect nonzero  -> FAILS
+  claim "symbol X is unused"       proof:   absent pattern "X\\("  exclude [def.py]      -> passes
+                                   control: absent pattern "X\\("  include [def.py]      -> FAILS
+  claim "the test suite breaks"    proof:   pytest -q                   expect nonzero  -> passes
+                                   control: pytest -q  (on the base)      expect nonzero  -> FAILS
+
+A proof must be able to OBSERVE what you claim. An `absent` proof that excludes a file says
+nothing about that file — it says something about the others. If the finding is about a file's
+structure (complexity, nesting, duplication), prove it with a command that measures it, e.g.
+`ruff check --select C901 <file>` with `expect.exit: nonzero`. Adjudication rejects a proof whose
+include/exclude range does not cover the claimed file and records the claim as unsettled, so a
+structural claim proved by absence elsewhere will not count.
+
+If your control passes too, it proves nothing: the report calls it unsettled and a high or
+critical finding in that state cannot certify a merge. `argv[0]` runs with the repository
+as its working directory, so use `.` and relative paths — never an absolute `/repo/...`.
+
+A finding with no `proof` is not dropped: it is recorded as UNSETTLED, and an unsettled
+high or critical finding cannot certify a merge. `falsifiable_check` stays as the
+human-readable form of the same sentence — write both, and make them agree.
 
 Replace each score with your 0-100 judgement for that dimension. A dimension in
 which you found nothing scores 100. Do not pad the findings list: an unreported
@@ -504,7 +557,8 @@ def run_hermes(binary: str, repo: Path, prompt: str, timeout: int, log: Path,
             cwd=str(repo),
         )
     except subprocess.TimeoutExpired as exc:
-        out = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+        out: str = (exc.stdout.decode("utf-8", "replace")
+                    if isinstance(exc.stdout, bytes) else str(exc.stdout or ""))
         with log.open("a", encoding="utf-8") as fh:
             fh.write(out + f"\n[timeout after {timeout}s]\n")
         return 124, out
@@ -546,6 +600,7 @@ def _gate_module() -> Any:
 
 
 _BASELINE_CACHE: Optional[Any] = None
+_ADJUDICATE_CACHE: Optional[Any] = None
 
 
 def baseline_mod() -> Any:
@@ -565,8 +620,68 @@ def baseline_mod() -> Any:
     return _BASELINE_CACHE
 
 
+def materialise_base(repo: Path, rev: str) -> Optional[Path]:
+    """Materialise *rev* into a temporary tree, for synthesised controls.
+
+    `git archive` rather than a worktree: the base tree must not carry a `.git` directory, because
+    a proof that runs `git` there would answer questions about the wrong repository. Returns None
+    when git cannot produce the revision — the caller then says so rather than pretending a control
+    exists.
+    """
+    try:
+        archive = subprocess.run(["git", "-C", str(repo), "archive", rev],
+                                 capture_output=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if archive.returncode != 0 or not archive.stdout:
+        return None
+    target = Path(tempfile.mkdtemp(prefix="council-base-"))
+    try:
+        subprocess.run(["tar", "-x", "-C", str(target)], input=archive.stdout, check=True,
+                       timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        shutil.rmtree(target, ignore_errors=True)
+        return None
+    return target
+
+
+def _adjudicate_module():
+    """Import `adjudicate` once, the way the gate is loaded — by path, not by sys.path luck."""
+    global _ADJUDICATE_CACHE
+    if _ADJUDICATE_CACHE is None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("adjudicate", HERE / "adjudicate.py")
+        if spec is None or spec.loader is None:
+            raise ImportError("cannot load adjudicate.py")
+        _ADJUDICATE_CACHE = importlib.util.module_from_spec(spec)
+        sys.modules["adjudicate"] = _ADJUDICATE_CACHE
+        spec.loader.exec_module(_ADJUDICATE_CACHE)
+    return _ADJUDICATE_CACHE
+
+
+def note_adjudication_error(round_dir: Path, exc: BaseException) -> None:
+    """Record a failed adjudication in meta.json, where every consumer already looks.
+
+    Silence would be the one unacceptable outcome: the gate reads the absence of
+    proofs.json as "nothing settled", so the run becomes unprovable either way — but a reader
+    deserves the reason, not just the consequence.
+    """
+    path = round_dir / "meta.json"
+    try:
+        meta = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        meta = {}
+    meta["adjudication_error"] = f"{type(exc).__name__}: {exc}"
+    try:
+        path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8", newline="\n")
+    except OSError:  # pragma: no cover - a read-only run dir is not this function's failure
+        pass
+
+
 def run_gate(run_dir: Path, threshold: float, tail_chars: int = 3000,
-             repo: Optional[Path] = None) -> Tuple[int, str, Dict[str, Any]]:
+             repo: Optional[Path] = None,
+             require_proof: bool = True) -> Tuple[int, str, Dict[str, Any]]:
     """Run the deterministic gate. Returns (rc, continuation_prompt, parsed_json).
 
     *repo* is passed through so the gate can measure findings DENSITY rather than
@@ -577,6 +692,11 @@ def run_gate(run_dir: Path, threshold: float, tail_chars: int = 3000,
     base = [sys.executable, str(GATE), str(run_dir), "--threshold", str(threshold)]
     if repo is not None:
         base += ["--repo", str(repo)]
+    if not require_proof:
+        # Enforcement is the gate's DEFAULT now, so the flag travels only as the opt-out. The
+        # previous version still appended `--require-proof`, which argparse then rejected — a
+        # gate exit 2 the loop reported as "missing reviewer output".
+        base += ["--allow-unproven"]
     proc = subprocess.run(base + ["--tail-chars", str(tail_chars)],
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
     parsed: Dict[str, Any] = {}
@@ -648,6 +768,19 @@ def run_probes(repo: Path, timeout: int = 900) -> List[Dict[str, Any]]:
     return data if isinstance(data, list) else []
 
 
+def harness_digest(profile: str = GENERALIST_PROFILE) -> str:
+    """One hash over everything that decides what the reviewer is asked.
+
+    Two rounds with the same `harness_sha` were reviewed by the same prompt and the same profile;
+    two with different digests are not comparable, however similar their numbers look. Without it a
+    prompt edit silently invalidates every calibration point taken before it — the corpus would
+    average scores produced by different questions.
+    """
+    material = "\n".join([GENERALIST_PROMPT, profile, "|".join(DIMENSIONS),
+                          json.dumps(DEFAULT_GOALS, sort_keys=True)])
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 def write_meta(run_dir: Path, repo: Path, scope: str, round_no: int,
                stacks: List[str], sha: str,
                extra: Optional[Dict[str, Any]] = None) -> None:
@@ -656,11 +789,15 @@ def write_meta(run_dir: Path, repo: Path, scope: str, round_no: int,
     *extra* carries the baseline-relative facts (which baseline, what changed,
     what was carried). They belong here rather than in the reviewer's output for
     the same reason: the harness computed them, and a reviewer asserting them
-    would be inventing data.
+    would be inventing data. `require_proof` arrives the same way: the gate and the
+    claim ladder read it back from here rather than each guessing the mode.
     """
     meta = {
         "target_sha": sha, "mode": scope, "round": round_no,
         "stacks": stacks, "repo": str(repo),
+        # Which question was asked: a score is only comparable to another produced by the same
+        # prompt and profile (see harness_digest).
+        "harness_sha": harness_digest(),
     }
     meta.update(extra or {})
     (run_dir / "meta.json").write_text(
@@ -1450,6 +1587,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "run, or pass a run-root path. Default: off.")
     parser.add_argument("--scope", choices=("diff", "working-tree", "whole-repo"),
                         default="working-tree", help="Review scope (DECISIONS #7: diff by default)")
+    parser.add_argument("--allow-unproven", action="store_true",
+                        help="do NOT require a proof for a blocking finding (the pre-proof rule). "
+                             "The loop enforces by default: a blocking claim counts only once its "
+                             "proof was refuted, and anything unsettled makes the run unprovable "
+                             "(docs/ADJUDICATION.md)")
+    parser.add_argument("--base", metavar="REV", default=None,
+                        help="the revision the change is measured against. When given, a claim "
+                             "that arrives without a control gets one synthesised from it: the "
+                             "same check, run where the defect is not (docs/PROOFS.md). Without "
+                             "it, a control-less claim stays `uncontrolled`.")
     parser.add_argument("--threshold", type=float, default=None,
                         help="MINIMUM aggregate score required to pass (default: the "
                              "calibrated value from scripts/calibration.json). "
@@ -1898,6 +2045,8 @@ def claims_snapshot(run_root: Path) -> Tuple[Optional[Dict[str, Any]], Optional[
         import importlib.util
 
         spec = importlib.util.spec_from_file_location("claims", HERE / "claims.py")
+        if spec is None or spec.loader is None:
+            raise ImportError("cannot load claims.py")
         module = importlib.util.module_from_spec(spec)
         sys.modules["claims"] = module
         spec.loader.exec_module(module)
@@ -1998,9 +2147,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.mode, args.samples, args.max_rounds, args.threshold, cfg)
 
     # Still from the calibration manifest when neither the flag nor the config names one,
-    # so the loop and the calibration cannot drift (it was hardcoded in three places).
+    # so the loop and the calibration cannot drift (it was hardcoded in three places). A
+    # review run is claims-scored, so the claims threshold is the one that applies; the
+    # deterministic number is only the fallback when no corpus threshold exists.
     if args.threshold is None:
-        args.threshold = float(_gate_module().calibrated_threshold())
+        gate = _gate_module()
+        claims_payload = gate.load_scale_calibration("claims")
+        resolved = gate.threshold_from_scale(claims_payload)
+        args.threshold = float(resolved if resolved is not None
+                               else gate.calibrated_threshold())
 
     repo, code = resolve_target(args.repo)
     if repo is None:
@@ -2106,7 +2261,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         # 1. Goals: one per dimension, set by the orchestrator. Fail-open — a goal-setting
         #    failure is not a review failure, so it degrades to the built-in set.
         write_meta(round_dir, repo, meta_mode, round_no, stacks, sha,
-                   extra=meta_extra)
+                   extra={**meta_extra, "require_proof": not bool(args.allow_unproven)})
         print("  setting this round's goals…", flush=True)
         goals = set_goals(binary, repo, round_dir, args.scope, round_no,
                           args.timeout, log, probes, stacks, sha)
@@ -2152,8 +2307,28 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("  orchestrator timed out during aggregation "
                   "(the gate still reads the reviewer files)")
 
+        # 3b. Adjudication: every finding's proof is run here, before the verdict is computed.
+        #     The gate enforces by default; `--allow-unproven` only stops the states from deciding.
+        #     Either way the gate reads the file written here, so the report and the verdict cannot
+        #     disagree about what is settled.
+        base_tree = materialise_base(repo, args.base) if args.base else None
+        if args.base and base_tree is None:
+            print(f"  base revision `{args.base}` could not be materialised — controls will not "
+                  f"be synthesised, so a control-less claim stays uncontrolled")
+        try:
+            counts = _adjudicate_module().adjudicate_round(round_dir, repo, base_tree)["summary"]
+            print(f"  adjudication: {counts['confirmed']} confirmed, {counts['refuted']} refuted, "
+                  f"{counts['unsettled']} unsettled, {counts['unrunnable']} unrunnable")
+        except Exception as exc:  # noqa: BLE001 - a failed adjudication must be visible, not fatal
+            note_adjudication_error(round_dir, exc)
+            print(f"  adjudication FAILED: {type(exc).__name__}: {exc}")
+        finally:
+            if base_tree is not None:
+                shutil.rmtree(base_tree, ignore_errors=True)
+
         # 4. Gate: the deterministic verdict, from the reviewer files.
-        gate_rc, gate_out, verdict = run_gate(round_dir, args.threshold, repo=repo)
+        gate_rc, gate_out, verdict = run_gate(round_dir, args.threshold, repo=repo,
+                                              require_proof=not args.allow_unproven)
         if gate_rc == 2:
             reason = "gate could not evaluate the run (missing/unparseable reviewer output)"
             print(f"  {reason}: {gate_out[:400]}")

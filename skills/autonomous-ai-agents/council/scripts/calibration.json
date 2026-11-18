@@ -1,6 +1,7 @@
 {
   "method": "research/deterministic-quality-tooling.md §7",
   "calibrated_with": "scripts/calibrate.py",
+  "scale": "deterministic",
   "provenance": {
     "eval_set": "a graded defect ladder built from this repository",
     "rungs": [

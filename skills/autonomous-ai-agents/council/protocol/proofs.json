@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "note": "The closed vocabulary of a proof, and the ONLY place a proof kind is declared. scripts/proofs.py loads this file and refuses a kind it does not find here; tests/test_proofs.py asserts the registry and this file agree in both directions. Adding a kind is therefore a two-file change with a test that fails until both exist.",
+  "control": {
+    "description": "Optional. A second proof that the orchestrator runs and requires to be REFUTED, on the same or another kind. It is the claim's negative control: evidence that the check is capable of failing. A blocking claim without one is `uncontrolled` — admissible as a note, never as a defect.",
+    "shape": {"kind": "string (defaults to the proof's kind)", "params": "object"}
+  },
+  "kinds": {
+    "absent": {
+      "description": "No file in the tree matches `pattern` outside `exclude`. Proves dead code, an absent call site, a removed identifier.",
+      "params": {
+        "pattern": {"type": "string", "required": true, "description": "Python regex, searched line by line."},
+        "include": {"type": "array", "default": ["**"], "description": "fnmatch globs on the POSIX relative path."},
+        "exclude": {"type": "array", "default": [], "description": "fnmatch globs excluded after include."},
+        "max_files": {"type": "integer", "default": 20000, "description": "Above this the proof is unrunnable, never silently truncated."}
+      }
+    },
+    "present": {
+      "description": "A cited line exists and says what was claimed. Proves a citation, kills a hallucinated one.",
+      "params": {
+        "path": {"type": "string", "required": true},
+        "line": {"type": "integer", "required": true},
+        "line_end": {"type": "integer", "required": false, "description": "Inclusive; defaults to `line`."},
+        "text": {"type": "string", "required": true, "description": "Substring that must appear in the cited lines."}
+      }
+    },
+    "command": {
+      "description": "A command's exit status or output proves the claim. Proves a test fails, a build breaks, an analyzer hits.",
+      "params": {
+        "argv": {"type": "array", "required": true, "description": "Executable first, no shell, no string concatenation."},
+        "expect": {"type": "object", "required": true, "description": "{exit: 'zero'|'nonzero'|int, stdout_contains: str, stdout_absent: str}"},
+        "timeout": {"type": "integer", "required": false, "default": 120}
+      }
+    },
+    "dom": {
+      "description": "A page, loaded in a headless browser, contains or lacks an element. Proves runtime behaviour rather than source.",
+      "params": {
+        "selector": {"type": "string", "required": true, "description": "#id, .class, tag, tag[attr=value] or text:<phrase>."},
+        "expect": {"type": "string", "required": true, "enum": ["present", "absent"]},
+        "url": {"type": "string", "required": false, "description": "Defaults to $COUNCIL_WEB_URL or the first web entry point."},
+        "timeout": {"type": "integer", "required": false, "default": 120}
+      }
+    },
+    "http": {
+      "description": "A LOCAL endpoint answers as claimed. Proves an API contract; refuses any non-loopback host, because a proof that reaches the network is not reproducible.",
+      "params": {
+        "url": {"type": "string", "required": true},
+        "expect_status": {"type": "integer", "required": false, "default": 200},
+        "body_contains": {"type": "string", "required": false},
+        "timeout": {"type": "integer", "required": false, "default": 30}
+      }
+    },
+    "json": {
+      "description": "A structured file holds a value at a pointer. Proves manifest, config and lockfile claims without reading prose.",
+      "params": {
+        "path": {"type": "string", "required": true},
+        "pointer": {"type": "string", "required": false, "default": "", "description": "RFC 6901, e.g. /dependencies/foo."},
+        "equals": {"type": "any", "required": false, "description": "Value the pointer must hold. Omit only with `absent: true`."},
+        "absent": {"type": "boolean", "required": false, "default": false}
+      }
+    },
+    "diff": {
+      "description": "A line is part of this change, or was removed by it. Proves a defect is new rather than inherited.",
+      "params": {
+        "path": {"type": "string", "required": true},
+        "line": {"type": "integer", "required": true},
+        "mode": {"type": "string", "required": false, "default": "added", "enum": ["added", "removed"]}
+      }
+    }
+  }
+}

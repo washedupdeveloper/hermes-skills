@@ -39,6 +39,8 @@ def _require_repo() -> None:
 # Directories that are not shipped source, or are fixture data.
 SKIP_DIRS = {
     ".git",
+    ".direnv",
+    ".hypothesis",
     ".review-council",
     "__pycache__",
     ".pytest_cache",

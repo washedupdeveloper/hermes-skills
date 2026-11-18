@@ -63,10 +63,15 @@ let
     "council.py" # the dispatcher: the one entry point
     "council_loop.py" # review
     "score_reviews.py" # gate
+    "adjudicate.py" # adjudicate — run the proofs, record what could not be settled
     "doctor.py" # doctor
     "probes.py" # probes
+    "proofs.py" # proofs — the closed vocabulary a claim must speak to be believed
+    "severity.py" # severity — what the tool detected decides the severity, not the reviewer
+    "compare.py" # compare — better or worse than a baseline, decided by evidence
     "swarm.py" # swarm
     "sample.py" # sample
+    "failures.py" # why a sample produced nothing — recorded, so an outage is visible
     "merge.py" # merge
     "baseline.py" # baseline
     "metrics.py" # metrics — acceptance/address/iterations from judged findings
@@ -86,15 +91,18 @@ let
     "_shared.py" # shared: the helpers more than one module needs
     "hermes.py" # shared: locate the launcher, report what can be known
     "calibration.json" # the threshold + curves
+    "calibration.claims.json" # the claims threshold, derived from a corpus
     "eval-baseline.json" # the nix-eval-time baseline
   ];
 
   devModules = [
     "ablate.py" # dev/ablate
     "calibrate.py" # dev/calibrate
+    "corpus.py" # dev/corpus — the graded ladder: plan, sample, collect, derive
     "golden.py" # dev/golden
     "inject_defects.py" # dev/corpus
     "version.py" # dev/version — the release policy, docs/VERSIONING.md
+    "sandbox.py" # dev/sandbox — runs the image where no container runtime exists
   ];
 
   # Top-level attrs first, then python3Packages: several tools exist only there.
@@ -168,6 +176,7 @@ let
   # them, and the container does not carry them -- which is what keeps the shipped
   # toolchain the QA set rather than everything anyone has used.
   devToolNames = [
+    "pyright" # Python language server / type checker
     "nixd" # LSP, option-system aware
     "nil" # LSP + `nil diagnostics`
     "nix-tree" # closure browser (--dot, --diff)
@@ -199,6 +208,9 @@ let
       ${lib.concatMapStringsSep "\n" (n: "cp ${../scripts}/${n} $out/scripts/${n}") modules}
       cp -r ${../skills} $out/skills
       cp -r ${../bots} $out/bots
+      # The proof vocabulary's only home. Without it proofs.py refuses to run a kind, which is
+      # correct but makes every claim unrunnable — so it ships with the scripts, not with docs.
+      cp -r ${../protocol} $out/protocol
       ${lib.optionalString dev "cp -r ${../tests} $out/tests"}
       chmod -R u+w $out
       rm -rf $out/scripts/__pycache__ $out/tests/__pycache__
@@ -224,7 +236,11 @@ let
       # The gate's data files: without them score_reviews falls back to the
       # uncalibrated count-based curve, so the deployment scores differently.
       cp ${../scripts}/calibration.json $out/scripts/calibration.json
+      # The claims scale's own threshold. Without it the gate reports `uncalibrated` for a
+      # claims-scored run and the deployment enforces a number from the other scale.
+      cp ${../scripts}/calibration.claims.json $out/scripts/calibration.claims.json
       cp ${../scripts}/eval-baseline.json $out/scripts/eval-baseline.json
+      cp -r ${../protocol} $out/protocol
       cp ${../tests}/*.py $out/tests/
       cp -r ${../tests}/golden $out/tests/golden
       cp -r ${../bots}/. $out/assets/bots/
@@ -399,6 +415,11 @@ let
 
       nixConf = mkContainerNixConf pkgs;
 
+      # Chromium renders text through fontconfig, and a minimal image has neither a config nor a
+      # font: the DOM still parses, but the screenshot artefact — the thing a human reads — comes
+      # back as empty boxes. One config, one family, referenced from Env so it stays in the closure.
+      fontsConf = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; };
+
       nixConfAt = pkgs.runCommand "review-council-nix-conf-at-opt" { } ''
         mkdir -p $out/opt/nix
         cp ${nixConf} $out/opt/nix/nix.conf
@@ -421,6 +442,15 @@ let
           # `baseline.py`'s changed_files shells out to git, and the framework's own
           # test check needs it too.
           pkgs.git
+          # The `dom` proof lane needs its driver INSIDE the image. A claim about what a page
+          # does cannot be proven from source, and a host-mounted browser is exactly the
+          # dependency the image exists to remove. `browser_argv` already passes --no-sandbox
+          # and --disable-dev-shm-usage, so it runs as uid 1000 with no setuid helper.
+          pkgs.chromium
+          # `FONTCONFIG_FILE` names a config, not the fonts themselves; without the font dirs in
+          # the closure chromium renders every glyph as a box and the screenshot artefact — the
+          # one a human reads — is a blank rectangle that still "passes".
+          pkgs.dejavu_fonts
         ]
         ++ deps
       );
@@ -441,6 +471,8 @@ let
           # the conf staged by nixConfAt; without it the nix probes fail
           "NIX_CONF_DIR=/opt/nix"
           "PYTHONUNBUFFERED=1"
+          # the dom lane's screenshots render glyphs, not boxes
+          "FONTCONFIG_FILE=${fontsConf}"
         ];
       };
     };
@@ -479,6 +511,11 @@ let
         entrypoint
         pkgs.bashInteractive
         pkgs.git
+        # `mkContainer` ships these and this rootfs did not, so one image built
+        # two ways had two different runtime contracts: the `dom` proof lane ran
+        # in the OCI image and was unrunnable in the Dockerfile one.
+        pkgs.chromium
+        pkgs.dejavu_fonts
       ]
       ++ deps;
     in
@@ -487,11 +524,20 @@ let
       cd $out
 
       mkdir -p opt/nix bin
+      # Mountpoints a runtime fills: a container runtime needs /dev, /proc and /sys to
+      # exist before it can mount over them, and an image with no /dev is an image whose
+      # browser lane cannot open /dev/null. Empty here; mounted at run time.
+      mkdir -p dev proc sys tmp
       ln -s ${fw} opt/review-council
       cp ${nixConf} opt/nix/nix.conf
       # A symlink, so the Dockerfile can name a stable path in ENV rather than a
       # store hash it cannot know at build time.
       ln -s ${tc} opt/toolchain
+
+      # Fontconfig names a config, not the fonts: without it chromium renders every
+      # glyph as a box and the screenshot artefact still "passes". Exported by the
+      # Dockerfile; `mkContainer` carries the same file in its Env.
+      cp ${pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; }} opt/fonts.conf
 
       # Merge the runtime's `bin` into /bin, as dockerTools does with `contents`.
       # Without it the analyzers are reachable only through the entrypoint's PATH,

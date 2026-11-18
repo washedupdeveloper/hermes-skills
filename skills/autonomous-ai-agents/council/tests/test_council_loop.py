@@ -196,6 +196,12 @@ def run_loop(tmp, scores_per_round, **kwargs):
     loop.git_sha = lambda *a, **k: "stub-sha"
     try:
         argv = [str(tmp), "--run-root", str(Path(tmp) / "rc"), "--timeout", "5"]
+        # These tests drive the LOOP (satisfy, stall, oscillate, budget). Their stub writes
+        # findings and no proofs, so enforcement — the default — would make every round
+        # unprovable and they would all test the same thing. `enforce_proof=True` opts one test
+        # back in; the gate's own two modes are covered in tests/test_gate_proofs.py.
+        if not kwargs.pop("enforce_proof", False):
+            argv += ["--allow-unproven"]
         # Pin the threshold unless the test names one: these exercise LOOP LOGIC,
         # and the shipped default comes from scripts/calibration.json, so leaving
         # it implicit would fail them on a recalibration. Its own behaviour has a test.
@@ -225,6 +231,33 @@ def test_satisfied_first_round():
         rc, outcome, _ = run_loop(Path(td), [PASS], mode="advisory", max_rounds=1)
         assert rc == 0, outcome
         assert outcome["outcome"] == "satisfied"
+
+
+def test_the_default_refuses_to_certify_a_blocking_finding_without_proof():
+    """The loop's transport carries enforcement: no flag means the gate enforces."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        repo = root / "repo"
+        (repo / "src").mkdir(parents=True)
+        (repo / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+        round_dir = root / "round-1"
+        round_dir.mkdir()
+        (round_dir / "meta.json").write_text(
+            json.dumps({"repo": str(repo), "stacks": ["generic"]}), encoding="utf-8")
+        for dim in ("security", "correctness", "readability", "architecture", "performance"):
+            findings = []
+            if dim == "security":
+                findings = [{"id": "SEC-1", "dimension": dim, "severity": "high",
+                             "status": "open", "location": {"path": "src/app.py",
+                                                            "line_range": "1"},
+                             "claim": "fixture blocker"}]
+            (round_dir / f"{dim}.json").write_text(json.dumps(
+                {"dimension": dim, "score": 95, "findings": findings}), encoding="utf-8")
+        # No proofs.json: nobody adjudicated, so nothing was settled.
+        rc, _, verdict = loop.run_gate(round_dir, 95.0, repo=repo)
+    assert rc == 1, verdict.get("reason")
+    assert verdict["certification"] == "unprovable", verdict.get("reason")
+    assert verdict["enforced"] is True
 
 
 def test_advisory_never_edits():
@@ -1134,6 +1167,21 @@ def test_merge_ignores_a_missing_sample():
         # clean 100 and PASS, turning total reviewer failure into reported success.
         for dim in DIMS:
             assert not (tmp / f"{dim}.json").exists(), dim
+
+
+def test_the_prompt_says_a_proof_must_be_able_to_observe_the_claim():
+    """Measured: six passes over one tree, one seeded complexity defect, and three of them proved
+    it with `absent` proofs that excluded the file. After the rule was stated in the prompt:
+    confirmed 5/6 instead of 3/6, with the same six reporting it."""
+    prompt = loop.GENERALIST_PROMPT.format(
+        rubrics=", ".join(loop.DIMENSION_SPEC[d]["rubric"] for d in loop.DIMENSIONS),
+        repo="r", scope="whole-repo", round=1, sha="abc", stacks="nix",
+        goal_objective="o", goal_acceptance="a", goal_focus="f", probe_json="[]",
+        carry_block="",
+        out_path="/tmp/x.json", profile=loop.GENERALIST_PROFILE, prefix="GEN")
+    assert "must be able to OBSERVE" in prompt
+    assert "C901" in prompt, "the prompt names no way to measure complexity"
+    assert "excludes a file says" in prompt
 
 
 def test_the_generalist_prompt_carries_every_rubric_and_an_output_path():

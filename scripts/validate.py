@@ -45,7 +45,12 @@ class Result:
         self.counts: dict[str, int] = {}
 
     def fail(self, where: str | Path, what: str) -> None:
-        self.violations.append(f"{where}: {what}")
+        # Two rules can catch one defect: the per-file check sees a CRLF `SKILL.md`, and the
+        # tree sweep sees the same file again. Report it once — a duplicate makes a reader
+        # chase a count that is really one file.
+        line = f"{where}: {what}"
+        if line not in self.violations:
+            self.violations.append(line)
 
 
 # ── the contract ────────────────────────────────────────────────────────────
@@ -226,8 +231,8 @@ def check_dead_references(skills: list[Path], repo: Path, result: Result) -> Non
         for line in body.splitlines():
             for m in re.finditer(r"`((?:references|templates|assets|scripts)/[^`\s]+)`", line):
                 rel = m.group(1).rstrip(".")
-                if "<" in rel or ">" in rel:
-                    continue
+                if "<" in rel or ">" in rel or "*" in rel or "?" in rel or "[" in rel:
+                    continue  # a placeholder or a glob names no single file to dereference
                 if WRITE_VERBS.search(line):
                     continue
                 if not (path.parent / rel).exists():

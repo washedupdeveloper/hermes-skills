@@ -489,5 +489,57 @@ def main() -> int:
     return 1 if failed else 0
 
 
+# --- the tag a release leaves behind -----------------------------------------
+#
+# pyproject, CHANGELOG and docs/MILESTONES.md agreed at 1.8.3 while the newest git tag was
+# v1.8.1. Nothing noticed, because `check` is hermetic and never read tags. `--tags` is the
+# opt-in that closes it, and it must stay silent where there is nothing to read.
+
+
+def _repo_with_tag(root: Path, tag: str | None) -> Path:
+    import subprocess
+
+    repo = root / "repo"
+    repo.mkdir()
+    for args in (("init", "-q", "."), ("config", "user.email", "t@example.com"),
+                 ("config", "user.name", "t")):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    (repo / "pyproject.toml").write_text('[project]\nversion = "1.8.3"\n', encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "release"], check=True,
+                   capture_output=True)
+    if tag:
+        subprocess.run(["git", "-C", str(repo), "tag", "-a", tag, "-m", tag], check=True,
+                       capture_output=True)
+    return repo
+
+
+def test_a_version_without_its_tag_is_reported():
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = _repo_with_tag(Path(tmp), "v1.8.1")
+        problems = version.local_tag_problems(repo, "1.8.3")
+    assert problems, "an untagged version was accepted"
+    assert "no tag" in problems[0] and "v1.8.1" in problems[0], problems
+
+
+def test_a_version_with_its_tag_is_silent():
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = _repo_with_tag(Path(tmp), "v1.8.3")
+        assert version.local_tag_problems(repo, "1.8.3") == []
+
+
+def test_a_tree_without_git_is_not_drift():
+    """The nix check runs in a store copy. Absence of tags is not evidence of a missing tag."""
+    with tempfile.TemporaryDirectory() as tmp:
+        assert version.local_tag_problems(Path(tmp), "1.8.3") == []
+
+
+def test_a_repository_with_no_tags_at_all_is_reported():
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = _repo_with_tag(Path(tmp), None)
+        problems = version.local_tag_problems(repo, "1.8.3")
+    assert problems and "(none)" in problems[0], problems
+
+
 if __name__ == "__main__":
     sys.exit(main())

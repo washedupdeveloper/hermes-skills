@@ -17,6 +17,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+import failures  # noqa: E402 - why a sample produced nothing, classified rather than guessed
+
 LOOP_PATH = HERE / "council_loop.py"
 
 _LOOP = None
@@ -31,6 +35,8 @@ def _loop():
     global _LOOP
     if _LOOP is None:
         spec = importlib.util.spec_from_file_location("council_loop", LOOP_PATH)
+        if spec is None or spec.loader is None:
+            raise ImportError("cannot load council_loop.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         _LOOP = module
@@ -75,6 +81,20 @@ def load_goals(loop, round_dir: Path, round_no: int) -> Dict[str, Any]:
         if goals:
             return goals
     return loop.default_goals(round_no)
+
+
+def write_status(round_dir: Path, index: int, rc: int, out_path: Path, log: Path,
+                 parsed: bool) -> Dict[str, Any]:
+    """Write why this sample produced what it did, beside the sample.
+
+    A failed run used to leave only a missing file, which the corpus reported as "not run" —
+    indistinguishable from a rung nobody ever attempted, and silent about a provider that refused.
+    """
+    log_text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+    status = failures.attempt_record(rc, out_path.exists(), parsed, log_text)
+    (round_dir / f"sample-{index}.status.json").write_text(
+        json.dumps(status, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return status
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -133,17 +153,28 @@ def main(argv: Optional[List[str]] = None) -> int:
     rc = loop.run_one_generalist_sample(binary, repo, out_path, prompt,
                                         args.timeout, log)
 
-    if rc == 0 and out_path.exists():
+    parsed = False
+    findings = 0
+    if out_path.exists():
         try:
             doc = json.loads(out_path.read_text(encoding="utf-8-sig"))
             findings = len(doc.get("findings") or [])
-            print(f"sample {args.index}: wrote {out_path.name} ({findings} finding(s))")
+            parsed = True
         except (OSError, json.JSONDecodeError):
-            print(f"sample {args.index}: wrote {out_path.name} (unparseable)")
+            parsed = False
+
+    # Why this sample produced what it did, beside the sample. A failed run used to leave only a
+    # missing file, which the corpus reported as "not run" — indistinguishable from a rung nobody
+    # ever attempted, and silent about a provider that refused.
+    status = write_status(round_dir, args.index, rc, out_path, log, parsed)
+
+    if parsed:
+        print(f"sample {args.index}: wrote {out_path.name} ({findings} finding(s))")
+    elif out_path.exists():
+        print(f"sample {args.index}: wrote {out_path.name} (unparseable)", file=sys.stderr)
     else:
         # Say which failed: the merge sees both, and the board is where it is diagnosed.
-        print(f"sample {args.index}: FAILED (rc={rc}, "
-              f"file={'present' if out_path.exists() else 'missing'})", file=sys.stderr)
+        print(f"sample {args.index}: FAILED (rc={rc}, reason={status['reason']})", file=sys.stderr)
     return rc
 
 

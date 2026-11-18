@@ -1474,6 +1474,12 @@ def _selector_present(dom: str, selector: str) -> bool:
     return re.search(r"<%s\b" % re.escape(s), dom, re.I) is not None
 
 
+# Public names: `proofs.py` (the claim vocabulary) runs the same matcher, and a second
+# implementation of it would drift from this one the first time either changed.
+selector_present = _selector_present
+dom_text = _dom_text
+
+
 def probe_browser(root: Path) -> Dict[str, Any]:
     """Load the app in a headless browser and report what the page DID, with artifacts.
 

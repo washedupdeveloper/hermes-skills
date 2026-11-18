@@ -91,7 +91,11 @@ def hash_inputs() -> Dict[str, str]:
 
 def _round_result(name: str, scorer) -> Dict[str, Any]:
     run_dir = GOLDEN / "rounds" / name
-    result = scorer.evaluate(run_dir, scorer.calibrated_threshold(), repo=TARGET)
+    # Golden replays a SCORE. `require_proof=False` keeps it a regression test of the scorer
+    # rather than a certification of a fixture that predates proofs — the enforcing default is
+    # covered by tests/test_gate_proofs.py and by the loop's own round.
+    result = scorer.evaluate(run_dir, scorer.calibrated_threshold(), repo=TARGET,
+                             require_proof=False)
     per_dim = {
         entry["dimension"]: {
             "llm": round(entry["llm"], 6),

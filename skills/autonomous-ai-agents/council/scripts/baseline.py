@@ -360,7 +360,8 @@ def _cmd_changed(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser = argparse.ArgumentParser(
+        description=(__doc__ or "").split("\n")[0] if (__doc__ or "").strip() else None)
     parser.add_argument("--repo", required=True, help="the project to inspect")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="report the baseline and why it qualifies")
