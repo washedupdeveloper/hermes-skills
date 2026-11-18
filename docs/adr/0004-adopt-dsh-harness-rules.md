@@ -20,8 +20,8 @@ rejected, with the reason.
    single test is the pattern; it is now applied to every predicate in `nix/lib.nix` and
    `nix/tests.nix`, so a rule that silently matches everything fails.
 4. **One home per fact, with a decision record per decision.** This repo has `docs/adr/`,
-   and the failure mode is already visible in ADR-0003: a copy drifts from its source and
-   nothing notices. One home, plus a record of what was given up, is the cheapest defence.
+   and the failure mode is a copy that drifts from its source while nothing notices. One
+   home, plus a record of what was given up, is the cheapest defence.
 
 **Rejected, each for a measured cost.**
 
@@ -33,7 +33,7 @@ rejected, with the reason.
   Here the eval tier plus one negative control per rule covers the same claims at
   milliseconds.
 - **Bilingual documentation pairs.** Two files per fact is a second home for the fact, and
-  only the pairing gate keeps them equal — exactly the drift ADR-0003 records.
+  only the pairing gate keeps them equal — the same drift, one level down.
 - **Branded ids at every boundary.** Worth it at dsh's package count; overhead in a tree of
   Markdown files.
 

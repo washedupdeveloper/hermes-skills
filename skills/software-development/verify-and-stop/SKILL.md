@@ -130,7 +130,7 @@ Concretely, the cheapest observation that counts:
 
 ```bash
 # a static entry, a dev server, or an explicit driver — one of these, and quote what it printed
-council probes browser --repo .                        # review-council's runtime lane (DOM + screenshot)
+council probes browser --repo .                        # a review tool's runtime lane (DOM + screenshot)
 COUNCIL_WEB_URL=http://127.0.0.1:3000 council probes browser --repo .
 chromium --headless=new --screenshot=/tmp/p.png --dump-dom https://the.page   # or any driver you have
 node -e 'fetch("http://127.0.0.1:3000/health").then(r=>console.log(r.status))'
@@ -227,14 +227,14 @@ of describing the screen. A screenshot you did not keep is not evidence; a path 
 - **An acceptance claim on a repository needs a gate that is not the repo's own.** The
   suite and the flake gate assert what their author thought of, so they cannot see the
   classes nobody wrote an assertion for — trust boundaries, exposure, a fix that only looks
-  like one. This user asks for the council before a milestone is declared verified, and the
-  order matters: convene it **advisory over the whole tree**, read **the gate's exit code**
+  like one. This user asks for an independent review before a milestone is declared verified,
+  and the order matters: convene it **advisory over the whole tree**, read **the exit code**
   rather than the prose summary, and treat each blocking finding as a *claim* — reproduce it
   with the `falsifiable_check` it carries before applying anything. Measured: a workflow
   guard written to satisfy one round's finding was itself falsified by four of four samples
   in the next round, because the guard sat inside a file the untrusted input controls — a
   verdict no run of the repo's own gate could ever produce. A green suite beside a red
-  council gate is a stale proof, not a green one; the two carry different requirements
+  review gate is a stale proof, not a green one; the two carry different requirements
   (a score minimum *and* no open blocking finding) and a run can clear one and fail the
   other.
 - Run focused checks before wider gates. A focused failure is faster to read and

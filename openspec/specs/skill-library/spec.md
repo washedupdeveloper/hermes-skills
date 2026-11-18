@@ -48,14 +48,15 @@ directly under a category the repository's layout declares.
 
 ### Requirement: A generated copy is not a source
 
-The council skill SHALL be generated from `review-council` and synced; a lesson written into
-the copy alone SHALL be ported into the source before the next sync.
+A skill this library ships SHALL have its source of truth inside this repository. A copy
+generated from another repository SHALL NOT be committed here: a lesson written into it
+would be reverted by the next sync, and the repository would then depend on a project it
+does not own.
 
-#### Scenario: A sync overwrites the copy
+#### Scenario: A generated copy is proposed
 
-- **WHEN** `council setup skill` runs
-- **THEN** every deployed file matches its source byte for byte
-- **AND** a lesson that existed only in the copy is first moved into the source
+- **WHEN** a skill is to be added that another repository generates
+- **THEN** it is installed by that repository's own tooling and is not committed here
 
 ### Requirement: A spec names only paths that exist
 

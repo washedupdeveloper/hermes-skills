@@ -10,7 +10,7 @@ targets: [hermes]
 metadata:
   hermes:
     tags: [hermes, subprocess, spawning, background, provenance, argv, diagnosis]
-    related_skills: [hermes-agent, council, hermes-terminal-backend]
+    related_skills: [hermes-agent, hermes-terminal-backend]
 ---
 
 # Hermes process operations

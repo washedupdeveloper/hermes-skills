@@ -57,7 +57,7 @@ Every rule below is applied and names its home.
 | skill dispatch: size and volatility off the every-turn surface; digest-gated catalogue; exact-name fresh loads; corrupt fails loud while a blip is not a deletion | `writing-for-agents/references/tool-surface.md` |
 | exact-name identity; a duplicate name never merges — the nearest layer wins | `skill-library-curation` |
 | record hygiene: alternatives mandatory; scoped supersession check; a rejection lives only while tempting; consolidation only if every unique rationale survives | `domain-modeling` |
-| review practice: weight a reviewer by the blamed old lines; a gating reviewer runs the protected branch's program, never the reviewed revision; the reviewing system lands no artifact; the whitelist request; verify base and head before reading the diff | `review-council` — a **generated copy** (ADR-0003, withdrawn by ADR-0010), so editing it here is silently reverted |
+| review practice: weight a reviewer by the blamed old lines; a gating reviewer runs the protected branch's program, never the reviewed revision; the reviewing system lands no artifact; the whitelist request; verify base and head before reading the diff | a copy generated from another repository would silently revert edits made here; the library ships none |
 
 ## Refused, each for a cost this repo would pay
 

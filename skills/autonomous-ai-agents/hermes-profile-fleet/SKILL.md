@@ -10,7 +10,7 @@ targets: [hermes]
 metadata:
   hermes:
     tags: [hermes, profiles, multi-agent, packaging, portability, installation, orchestration]
-    related_skills: [council, hermes-agent]
+    related_skills: [hermes-agent]
 ---
 
 # hermes-profile-fleet

@@ -19,8 +19,8 @@ weighted aggregate, a pass threshold — and calibrating its free parameters fro
 labelled evidence instead of intuition. Also covers the loop that drives the gate
 and has to know when to stop.
 
-This is the **principle** side. For a worked implementation of these ideas, see
-the `council` skill — its operational commands, paths and flags live there, not here.
+This is the **principle** side: what a score must be made of, and how to calibrate it. The
+operational commands belong to whichever implementation you are calibrating.
 
 For the concrete failure patterns that make a check lie about itself — a filter that
 skips the very file it names, a copy that aliases nested state, a payload past the
@@ -114,7 +114,7 @@ missing analyzer gets: no verdict, said out loud — never a pass.
 before re-running the producers.** A gate cannot score what its producers never wrote,
 but "never wrote" is often "wrote after the collector ran": the collection step is
 deterministic and cheap, the producers are slow and paid for, and the two race. Measured
-on the council: five reviewer samples hit a 1800 s per-turn cap (`rc=124`, distinct from
+on a five-sample review run: five reviewer samples hit a 1800 s per-turn cap (`rc=124`, distinct from
 the `143` a lifecycle kill leaves and the `126` an argv overrun leaves), the merge that
 runs at round end read 0 of them and wrote no dimension files, so the gate reported it
 could evaluate nothing — and re-running the *merge verb alone* recovered 4 of 5 samples

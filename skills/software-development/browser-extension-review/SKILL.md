@@ -9,7 +9,7 @@ category: software-development
 metadata:
   hermes:
     tags: [code-review, webextension, mv3, chrome, firefox, background-script, extension]
-    related_skills: [council, defensive-patterns, critical-verdict, web-app-security]
+    related_skills: [defensive-patterns, critical-verdict, web-app-security]
 ---
 
 # browser-extension-review

@@ -9,7 +9,7 @@ category: communication
 metadata:
   hermes:
     tags: [code-review, brevity, tokens, findings, communication]
-    related_skills: [caveman, council, requesting-code-review]
+    related_skills: [caveman, requesting-code-review]
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 ---
 

@@ -51,7 +51,7 @@ are not.
   problem they already solve. The rule survives as a rule; the mechanism does not.
 - **Bilingual documentation pairs.** dsh carries a `.zh.md` and an `.i18n.yaml` beside
   nearly every document, and its own review skill admits a green pairing hash proves
-  nothing about translation quality. Two files per fact is the drift ADR-0003 records.
+  nothing about translation quality. Two files per fact is the same drift.
 - **Per-file 100% coverage.** Unchanged from ADR-0004, and the incidents now make the
   argument better: 100% line coverage was green throughout a bridge that could not open a
   single session.
