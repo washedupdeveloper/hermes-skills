@@ -55,7 +55,9 @@ REQUIRED_FM = ("title", "created", "updated", "type", "tags", "sources", "status
 WORK_REQUIRED = ("status", "priority", "owner", "topic")
 WORK_STATUSES = ("backlog", "active", "blocked", "done")
 WORK_PRIORITIES = ("P0", "P1", "P2", "P3")
-WORK_OWNERS = ("agent", "human", "council")
+WORK_OWNERS = ("agent", "human", "panel")
+# Pages ingested before the rename carry `owner: council`; accepted on read, never offered.
+WORK_OWNER_ALIASES = {"council": "panel"}
 MAX_LINES = 200
 STALE_DAYS = 180
 LIVE_STATUSES = ("proposed", "approved")
@@ -335,8 +337,11 @@ def _read_page(p: Path, root: Path, dirname: str) -> tuple[str, dict]:
         "owner": str(fm.get("owner") or ""),
         "topic": str(fm.get("topic") or ""),
         "blocked_by": as_list(fm.get("blocked_by")),
-        "council_run": str(fm.get("council_run") or ""),
-        # Council-run properties, so the board can group and filter on them.
+        # The run this page was ingested from. `source_run` is the name; `council_run`
+        # repeats it because boards written before the rename filter on that property.
+        "source_run": str(fm.get("source_run") or fm.get("council_run") or ""),
+        "council_run": str(fm.get("source_run") or fm.get("council_run") or ""),
+        # Per-run properties, so the board can group and filter on them.
         "generated": str(fm.get("generated") or "").lower() in ("true", "yes", "1"),
         "project": str(fm.get("project") or ""),
         "verdict": str(fm.get("verdict") or ""),
@@ -445,7 +450,8 @@ def lint(root: Path, pages: dict, archived: dict) -> dict:
             if m["priority"] and m["priority"] not in WORK_PRIORITIES:
                 work_odd.append({"page": slug, "priority": m["priority"],
                                  "expected": "| ".join(WORK_PRIORITIES)})
-            if m["owner"] and m["owner"] not in WORK_OWNERS:
+            owner = WORK_OWNER_ALIASES.get(m["owner"], m["owner"])
+            if owner and owner not in WORK_OWNERS:
                 work_odd.append({"page": slug, "owner": m["owner"],
                                  "expected": "| ".join(WORK_OWNERS)})
             if m["status"] == "blocked" and not m["blocked_by"]:

@@ -364,13 +364,13 @@ Verify what you can: `.base` files are YAML, so parse them and assert the view t
 `groupBy` properties. That catches a malformed file but **cannot** confirm Obsidian renders it
 — say so rather than implying you checked.
 
-## Review-council integration
+## Ingesting another tool's verdict
 
-When a corpus must serve a multi-agent review panel, the panel's output directory is the
-integration point, not its code. A council run writes `outcome.json` (the verdict),
-`next-steps.md`, and `round-N/<dimension>.json` per reviewer plus `meta.json`.
+When a corpus must serve a multi-agent panel, that panel's output directory is the
+integration point, not its code: read whatever the tool records — its verdict, its
+per-reviewer rounds, its own metadata — and publish exactly that.
 
-**Never recompute a score the panel already computed.** Read its recorded outcome verbatim.
+**Never recompute a score the tool already computed.** Read its recorded outcome verbatim.
 A second implementation of the scoring can disagree with the gate that actually decided the
 merge, and then two numbers claim authority over one decision. If the panel recorded no
 outcome, report that there is no verdict instead of inventing one.
@@ -416,7 +416,6 @@ what came of it.
 - `scripts/kb_open.py` — open the vault, a note, or a session note in Obsidian.
 - `scripts/kb_reindex.py` — the single generator for all derived views (`index.md`,
   `_meta/*.json`) and the lint report.
-- `scripts/kb_council.py` — ingests review-council runs into `work/` pages for the board. — deterministic graph/sha256 indexer + lint, silent when clean.
   Regenerates `index.md` and `_meta/orient.json` from the pages; `--orient` prints a one-read
   orientation and writes nothing.
 - `scripts/kb_selftest.py` — builds a broken vault and a clean vault in temp dirs and asserts
