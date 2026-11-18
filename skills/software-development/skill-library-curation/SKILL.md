@@ -337,6 +337,14 @@ folds the background review's uncommitted edits into your commit and destroys at
 stage the files you changed by name, and give the foreign edits their own commit after
 reading them.
 
+**An explicit `git add` is not enough when the index was already loaded.** `git commit`
+commits every staged path, not the ones you just named, so a second writer's staged work
+rides along even when every `add` named a file of yours: a commit meant to be 138 files
+landed 155, seventeen of them not mine, and the tell was `--stat` after the fact. Check
+`git diff --cached --name-only` against the set you intend and abort on anything else.
+When it has already happened, `git reset --soft HEAD~1 && git reset` puts the tree back
+byte for byte — nothing on disk moves — and leaves the foreign work unstaged for its author.
+
 **Attribute a change you did not make before you carry it.** A dirty file or an unfamiliar
 commit is the background review or a second agent, and the evidence names it: `git status
 --porcelain`, `git reflog -8` for who committed and when, `git log -1 --format='%h %ci %s'
