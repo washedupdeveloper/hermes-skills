@@ -432,13 +432,17 @@ def main() -> int:
               f"archive: exits 0 (got {arc_proc.returncode}: {arc_proc.stderr.strip()[:200]})")
         check(not (arc / "concepts" / "legacy.md").exists(),
               "archive: the retired page left its canonical directory")
-        check((arc / "_archive" / "concepts" / "legacy.md").is_file(),
-              "archive: the retired page is in _archive/")
-
-        moved = (arc / "_archive" / "concepts" / "legacy.md").read_text(encoding="utf-8")
-        check("status: archived" in moved, "archive: sets status: archived")
-        check("superseded_by: concepts/current" in moved, "archive: records its successor")
-        check("archived: " in moved, "archive: records the archive date")
+        # The move failing used to crash here instead of reporting, so the run lost both
+        # the reason and every check after it. A failing check carries its own evidence.
+        moved_path = arc / "_archive" / "concepts" / "legacy.md"
+        check(moved_path.is_file(),
+              "archive: the retired page is in _archive/ - kb_archive exited "
+              f"{arc_proc.returncode}, stderr: {arc_proc.stderr.strip()[:300]!r}")
+        if moved_path.is_file():
+            moved = moved_path.read_text(encoding="utf-8")
+            check("status: archived" in moved, "archive: sets status: archived")
+            check("superseded_by: concepts/current" in moved, "archive: records its successor")
+            check("archived: " in moved, "archive: records the archive date")
 
         succ = (arc / "concepts" / "current.md").read_text(encoding="utf-8")
         check("supersedes: [legacy]" in succ, "archive: successor acknowledges what it replaced")
