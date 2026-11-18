@@ -42,6 +42,7 @@ copy when a skill moves in.
 ## Verify
 
 ```bash
+./scripts/ci-local.sh                  # every CI job this machine can run, in order
 python3 scripts/validate.py            # every rule, over the whole tree
 python3 -m pytest tests/ -q            # the code the skills ship, and the gate's negative controls
 python3 scripts/claim-audit.py         # exit 1 on any claim in the prose that is FALSE
@@ -52,6 +53,11 @@ nix flake check                        # optional: the same gate under a pinned 
 the whole point of this repository's shape — a contributor on any OS runs the same command CI runs.
 Exit 1 names each violation with its file; exit 2 means the scan found no skills, which is a wrong
 directory, not a pass.
+
+`ci-local.sh` runs the workflow's jobs as the commands they are, and names the ones no single
+machine can run: the macOS leg of the matrix, the Windows leg unless you are on Windows, and
+`cost`, which reads a GitHub run id. `nix develop` provides the interpreter, pytest, actionlint
+and nixfmt it needs.
 
 `nix flake check` runs `validate.py`, the Python suite, the prose audit and the formatter, then the
 eval-tier assertions about this repository's own CI (workflow pins, runner labels, the OpenSpec CLI

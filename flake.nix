@@ -30,9 +30,13 @@
       );
 
       devShells = forAllSystems (pkgs: {
+        # What `scripts/ci-local.sh` needs: the interpreter the gate runs on, pytest for
+        # the suite, actionlint for the workflow, nixfmt for the formatter.
         default = pkgs.mkShell {
           packages = [
             pkgs.python3
+            pkgs.python3Packages.pytest
+            pkgs.actionlint
             pkgs.nixfmt
           ];
         };
