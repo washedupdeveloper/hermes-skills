@@ -1,7 +1,7 @@
 ---
 name: nix-declarative-config
 description: "Use when editing Nix modules, options, or overrides."
-version: 1.3.0
+version: 1.3.1
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -225,7 +225,8 @@ export PATH=/root/.nix-profile/bin:$PATH
 - `. /root/.nix-profile/etc/profile.d/nix.sh` does not work in a non-login shell; put `/root/.nix-profile/bin` on `PATH` directly.
 - Substitution from `cache.nixos.org` and GitHub does work, so a full `nix flake check` of the flake takes a minute or two once the inputs are fetched, not hours.
 - Pass `--accept-flake-config` for this repo: the flake declares `nixConfig` and the machines set `nix.settings.accept-flake-config`. Check both ways -- it must pass without the flag too.
-- **Untracked files are invisible to the flake.** A newly written module must be `git add`-ed before evaluation sees it, or the error is `attribute missing` / `path … is not valid` on a file that plainly exists. This looks like a real bug and is not one. The general rule, its scope and its corollaries are owned by `nixos-clan-flake` — read it there rather than from this line.
+- **Untracked files are invisible to the flake.** A newly written module must be `git add`-ed before evaluation sees it, or the error is `attribute missing` / `path … is not valid` on a file that plainly exists. This looks like a real bug and is not one. **The same cause reports every new file the tree cites as a `dead reference`** when the check runs a link validator inside the derivation: the message names broken links rather than untracked files, so a green-tree content defect and an unstaged file are indistinguishable until you read `git status`. Stage first, then believe a link failure. The general rule, its scope and its corollaries are owned by `nixos-clan-flake` — read it there rather than from this line.
+- **A store path captured from a devShell is the interpreter, not the environment.** `nix develop --command python3 -c 'import sys; print(sys.executable)'` prints a `/nix/store/…` path that carries none of the shell's packages, so reusing it later fails with `No module named pytest` on a suite that passes inside the shell. Run anything needing the environment's modules as `nix develop -c <cmd>`; keep a resolved path only for a single tool whose closure is complete, and say which of the two you ran.
 - The first `nix flake check` in a fresh container can fail with `error: path '/nix/store/…' is not valid` for an eval-time store path that has not been substituted yet. Re-run before believing it.
 - **An error naming an *input's* store path is about the cached copy, not your tree.** `error: syntax error, unexpected end of file` at `<input>/flake.nix:1:1`, or any nonsense from a file you did not write, means the sandbox's copy of that input is corrupt -- check with `stat -c %s /nix/store/<hash>-source/flake.nix` and count zero-byte files. To prove it is not your change before chasing it: `git stash push -- <your file>`, re-run, `git stash pop`; a failure that reproduces without your change is pre-existing. Repair by moving `~/.cache/nix/tarball-cache*` and `~/.cache/nix/fetcher-cache*.sqlite` aside, `nix-store --delete --ignore-liveness <path>`, then `nix flake prefetch <input-url>` -- and verify the re-fetched file's sha256 against the upstream one before trusting it.
 - **A store whose paths are missing while the database calls them live is a different failure.** Outputs and `.drv` files absent from disk but listed by `nix path-info`, delete refusing with `still alive` referrers that do not exist. Diagnosis and the repair ladder (including why `--repair` cannot restore a derivation): `references/store-repair.md`.
