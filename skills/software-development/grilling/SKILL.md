@@ -114,6 +114,11 @@ Do not act until the user confirms shared understanding.
 8. **An answer that changes the question is a new branch,** not a decision on the
    old one. Record it, ask its design questions next round, and keep it out of the
    batch the answered questions unblocked.
+9. **Asking in internal vocabulary.** A choice stated as "user verb" or "module
+   owner" is unanswerable to the person deciding — they have to ask what it means,
+   which costs a round. State the concrete difference: what they type, what they
+   see, what changes in the artifact. If a term needs a gloss to be answered, it is
+   the wrong term for the question.
 
 ## Verification
 
