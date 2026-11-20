@@ -55,6 +55,25 @@ it never lands in the user's repo by accident.
 Write into the project instead when the handoff is meant to be durable — a
 multi-day effort, or one a teammate will pick up. Ask which, if unclear.
 
+## When the reader arrives after a reboot
+
+A restart — kernel update, `wsl --shutdown`, a host reboot — is a handoff boundary with its
+own requirements, and the order matters:
+
+- **Write to durable storage, not the temp directory.** The default above assumes the same
+  machine and the same boot; after a restart `$TMPDIR` may be gone. Put the handoff beside the
+  project in the home directory.
+- **Ship a checkpoint, not only prose.** One script that re-establishes what a reader would
+  otherwise take on trust: the version that changed (`uname -r` after a kernel update), the
+  full gate with its expected counts, and `git log`/dirty count. The resumed session's first
+  line is that script, and its exit status is the state.
+- **Run the checkpoint once BEFORE the shutdown.** A checkpoint first tried after the restart
+  can fail for its own reasons — a moved path, a tool that no longer resolves — and the reader
+  cannot tell a broken check from a broken project.
+- **Resolve tools from the flake, not from `/nix/store/…`.** A hardcoded store path disappears
+  at the next gc; `nix develop --command …` re-derives the same tools every run, so the
+  checkpoint keeps meaning the same thing.
+
 ## A handoff is a claim about state, not state
 
 A summary written from memory drifts the moment the work continues, and its reader has
@@ -84,3 +103,5 @@ own compacted actions.
 - [ ] Every artifact is referenced by path, not paraphrased
 - [ ] No secrets, tokens or personal data
 - [ ] Suggested skills named, each with a reason
+- [ ] If a restart intervenes: durable path, checkpoint run before shutdown, tools resolved
+      from the project rather than a store path
