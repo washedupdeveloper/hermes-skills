@@ -1,7 +1,7 @@
 ---
 name: skill-library-curation
 description: "Curate the skill library: sourcing, overlap, conflicts."
-version: 1.3.1
+version: 1.11.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -34,6 +34,10 @@ Three adjacent skills, each with a distinct job:
 - A skill contradicts the code it describes, or contradicts another skill.
 - A rule was updated in one skill but siblings still restate the old version.
 - Skills need to be made portable / free of machine-local paths.
+- **"Make this library usable by any agent"** — which members are host-bound, and how to label
+  them without moving them (*Host scope is a label, not a directory*).
+- **"Make this library independent of every other project"** — what counts as coupling rather
+  than provenance, and the clean-clone proof (Step 2, *Independence*).
 - **"Add this external skill" / "keep it updated" / "I don't want to maintain it
   myself"** — choosing which of a source's skills to adopt, and whether to
   reference it or vendor it (Step 9).
@@ -45,24 +49,33 @@ Three adjacent skills, each with a distinct job:
 
 ## Step 1 — Establish provenance before touching anything
 
-Two classes of skill live under `$HERMES_HOME/skills/`, and they need **opposite**
+Three classes of skill live under `$HERMES_HOME/skills/`, and they need **opposite**
 treatment.
 
 | Class | How to identify | Editable? |
 |---|---|---|
-| Bundled / hub-installed | listed in `.bundled_manifest` (`<name>:<hash>` per line) | **No** — refreshed periodically; edits are clobbered |
-| Locally authored | every dir with a `SKILL.md` *not* in the manifest | Yes |
+| Bundled | listed in `.bundled_manifest` (`<name>:<hash>` per line) | **No** — `hermes update` refreshes it; edits are clobbered |
+| Hub-installed | an `installed` entry in `.hub/lock.json`, whose `identifier` carries the source (`skills-sh/<owner>/<repo>/<skill>`) | **No** — upstream's; `hermes skills update` maintains it |
+| Locally authored | every dir with a `SKILL.md` in neither record | Yes — and only this class may be promoted into the repo |
 
 ```bash
 cd "$HERMES_HOME/skills"
-for f in $(find . -name SKILL.md); do
-  n=$(basename $(dirname "$f"))
-  grep -q "^$n:" .bundled_manifest || echo "local: $n  ($f)"
+for f in $(find . -name SKILL.md -not -path './.hub/*'); do
+  n=$(basename "$(dirname "$f")")
+  grep -q "^$n:" .bundled_manifest && continue
+  grep -q "\"$n\"" .hub/lock.json 2>/dev/null && { echo "hub: $n"; continue; }
+  echo "local: $n  ($f)"
  done
 ```
 
 `.curator_ledger.jsonl` records an `actor` per change (`curator` / `agent`) — useful
 for confirming who owns a skill.
+
+**A hub skill is invisible to the manifest.** `.bundled_manifest` lists only what
+shipped with Hermes, so a two-class check calls every hub-installed skill "local" —
+and that misclassification is exactly what turns "promote my local skills" into
+vendoring somebody else's (Step 9, item 7). Confirm ownership from the identifier in
+`.hub/lock.json`, never from absence in the manifest.
 
 Report the bundled count and skip them explicitly. Silence reads as an oversight.
 
@@ -75,9 +88,141 @@ installed copy is lost on the next sync.
   paths it copies.
 - Edit the **repo source**, then run the sync.
 - If the sync has no `--check` mode, add one: compare instead of copy, print each
-drifted path, exit non-zero. That gives copy-based distribution the same guarantee
-as a symlink, without symlink portability problems (elevation on Windows, and a
-symlink into a repo breaks the skill for anyone who installs without the repo).
+  drifted path, exit non-zero. That gives copy-based distribution the same guarantee
+  as a symlink, without symlink portability problems (elevation on Windows, and a
+  symlink into a repo breaks the skill for anyone who installs without the repo).
+
+### When the gate says the copy drifted
+
+The report is usually right — an unsynced copy is stale — but three causes wear the same
+message, and they are settled cheapest first because ordinary `diff` conflates them.
+
+1. **Content.** `diff --strip-trailing-cr copy/x source/x`. Whatever remains is real drift,
+   and it is read *before* re-syncing: the copy may hold a lesson the source never received,
+   which a sync deletes (pitfall below).
+2. **Line endings.** A file differing only by CR is the generator's normalisation, not drift.
+3. **A missing final newline.** One byte at EOF is not content. A generator documented as
+   `sed 's/\r$//'` *that also terminates the last line* can never match a source whose last
+   line is unterminated; `cmp -l` showing one byte, and a `diff` hunk whose only change is
+   `\ No newline at end of file`, is the entire diagnosis. **Terminate the source; never
+   weaken the claim to absorb it** — the generator was masking a real defect, and a
+   byte-exact claim is worth keeping exact.
+
+Two further defects the copy's own suite finds, both fixed in the generator rather than the
+installation:
+
+- **Ship the data, not only the code.** A sync that copies `scripts/` and `tests/` but not the
+  directory those scripts open at runtime produces a deployment that looks complete and cannot
+  work: dozens of failures with one cause (`FileNotFoundError: protocol/…`, "the contract is
+  missing"). Ship every file the shipped code reads beside the code that reads it.
+- **When the copy runs the source's suite, ignore only what it cannot carry.** A deployment
+  ships the tool, not the project, so a test importing a module left behind cannot run. Derive
+  the ignore list from pytest's own collection errors and fail on every error whose reason is
+  not `No module named`, so a syntax error is never skipped as "not ours". The reason lives in
+  the `ImportError while importing test module '<path>'` block; the `-q` summary prints only
+  `ERROR tests/x.py`, so a parser reading that line finds nothing at all.
+
+### When the generator is being replaced
+
+A copy is only as good as its generator. When the upstream project is rewritten and the
+rewrite cannot deploy a skill yet — no `setup skill` verb, a different layout, a thinner skill
+of its own with nothing to ship — the copy is a fork with no future. **Remove it from the
+library rather than keep it in step with a repository nobody will run**, and install it
+locally in `$HERMES_HOME/skills/` so the command keeps working while the rewrite catches up.
+An artifact that leaves takes its checks with it, and each one is a place the copy was still
+described:
+
+- the claim comparing it to its source — **delete it**, do not leave it reporting `UNPROVEN`:
+  a claim about an absent thing is noise in a ledger whose only value is that every line is evidence;
+- the tests whose subject was its code, including any that ran its suite;
+- the README counts and the layout-tree row — a copy is usually the only skill carrying support
+  `SKILL.md`s, so `N SKILL.md across N skills`, the platform figure and the rubric sentence all
+  move at once;
+- a marker exempting a file *inside* it (a formatter's golden fixture) **and** the assertion that
+  the fixture exists, which now fails closed on its absence;
+- any reader that hardcoded its on-disk layout.
+
+**Delete the removal record with the thing, when the library states only what is.** A tombstone
+ADR — "X left the library", "X is a generated copy, withdrawn" — is itself a reference to the
+deleted thing: it keeps the name in the index and in every reader's head. This owner's standard
+is that the tree describes the present, so the ADR that justified publishing the artefact and
+the one that recorded its removal both go, with their rows in the ADR table; and the records
+that reasoned *by citing* them are rewritten, because the argument usually stands without the
+example ("a copy drifts from its source and nothing notices"). Withdrawing is right only where
+the repo treats decision records as immutable history — ask once, and never assume a label like
+"withdrawn" makes a tombstone harmless.
+
+**The records are the smallest half of a removal.** What outlives an artefact is everything that
+*asserts* it: frontmatter names a gate resolves, a spec requirement binding this library to
+another project, a sentence deferring its detail to the removed skill, archived change records
+describing files that no longer exist, and data files that baked its paths in.
+`references/removal-audit.md` is the sweep — where each survives, the grep order, how to tell an
+assertion from an illustration, and the evidence a finished removal reports.
+
+### Independence — prove it from an empty directory
+
+A library that publishes artefacts from other projects drifts into depending on them, and the
+drift is invisible while those checkouts sit on the same disk. **Independence is a property of
+execution, not of prose:** the question is not "does the tree mention another project" but "does
+it still work when that project is gone". Prove it from a clone with nothing beside it.
+
+```sh
+git clone <repo> /tmp/independent/lib && cd /tmp/independent/lib
+python3 scripts/validate.py && python3 -m pytest tests/ -q && python3 scripts/claim-audit.py
+./install.sh /tmp/independent/agent-skills --nested   # the install path, not only the gate
+nix flake check                                       # the optional second engine
+grep -rn 'R\.parent\|/home/\|/Users/\|~\(/projects\)' --include='*.py' --include='*.sh' .
+grep -rln '<other-project>' --include='*.py' --include='*.sh' --include='*.nix' .
+```
+
+- **Sibling-checkout arithmetic is coupling.** `REPO.parent / "<other-repo>"` makes a rule about
+  *this* tree depend on what someone cloned beside it, and a clean clone flips its claim from
+  `FALSE` to `UNPROVEN` — which reads as a pass. Delete the check with the artefact.
+- **Search data and caches before counting, or the count is noise.** A tracked fixture can carry
+  `/home/<user>/…` in a recorded field, and an untracked cache (`.hypothesis/constants`,
+  `__pycache__`) embeds the checkout path in dozens of files — a name search over the tree then
+  reports a deleted project everywhere and means nothing. Delete or exclude caches, search
+  `fixtures/` and `*.json` as well as code (`search_files`, or `grep -rn` in a shell), and quote
+  the count only after that.
+- **An adapter to one project's on-disk layout is coupling, not a feature.** A reader that
+  hardcodes another tool's state directory, its dimension names and its verdict filename only
+  works for that project. Move it out of the library, or generalise it to "read whatever that
+  tool recorded" and drop the names: keep the rule it taught, not the schema.
+**Rename the vocabulary, then delete the old spelling.** A data schema keeps a project's name
+long after its code is gone (`owner: <project>`, a `<project>_run` property). Rename to the
+neutral term and remove the old key outright: one spelling, judged as written. A read alias
+plus a duplicated key is a stopgap for pages already on disk — offer it once, name it in the
+report as temporary, and retire it when the owner says nothing should be left behind, which
+is this owner's bar. After the alias goes, a page still carrying the retired value lints as
+wrong, and that is the honest report: the value is wrong, not the rule.
+- **Provenance is not dependency.** A ledger of upstream sources with pinned revisions is what a
+  republishing library owes the licences it shares them under, and nothing executes it. Keep it,
+  and state that it was deliberately left alone.
+- **The working tree hides the last coupling.** Untracked files and local checkouts let a dirty
+  tree pass checks a stranger's clone would fail — and the clone is the only tree that proves
+  the installer works without the author's layout.
+
+### Being consumed: the integrator resolves, the library stays silent
+
+A library that another tool *uses* needs no knowledge of that tool, and this direction costs
+the library nothing — a consumer reads `library/contract.json` and
+`skills/<category>/<name>/SKILL.md`, both of which already exist. Keep it that way.
+
+- **Resolve the library by structure, never by name.** `--library`, else `$SKILLS_LIBRARY`, else
+  the nearest ancestor holding `library/contract.json`. A directory that is renamed, vendored or
+  cloned elsewhere is still found; one that merely shares the name is not.
+- **The destination is a directory shape, not an agent.** Anything laid out as `<name>/SKILL.md`
+  is a destination: `--dest`, else `$SKILLS_DIR`, else the directory an `--agent` name maps to.
+  Agent names are a convenience table, so the verb must **refuse to invent** a directory that is
+  not already on disk — a machine without that agent gets a message, not a stray tree. That is
+  what lets one implementation serve every host, including whichever one replaces this one.
+- **Install semantics that cannot lose work:** a byte-identical copy reports `unchanged`; a
+  differing copy is refused unless `--force`; `--dry-run` writes nothing; a refusal exits
+  non-zero and says how to force it.
+- **A verb that parses and documents is not a verb that runs.** Add one test through the real
+  entry point (`main([...])`, not the helper it delegates to): wiring is exactly what a
+  module-level suite bypasses, and a missing dispatch branch survives a green unit suite, a
+  declared-command check and every frontmatter test at once.
 
 ## Step 3 — Find overlap by owning token
 
@@ -221,6 +366,15 @@ trigger list will work without them. A pitfalls or rules block is usually why th
 
 ## Step 6 — Validate every file you touched
 
+**Read the target repository's gate before you draft, because "done" is per-repo.** One
+in-repo skills tree demands a per-skill pytest, a regenerated docs page and a sidebar row;
+another enforces a contract file — required frontmatter, an index window, a category set —
+through one `nix flake check`, then proves the loader with a live-discovery script and the
+prose with a claim audit. Importing the first tree's artefact list into the second writes a
+test nobody runs; importing the second's into the first skips a gate. Enumerate the gate
+(the agent instructions, the contract file, every test that parses the docs), then say which
+command you ran and what it printed.
+
 ```bash
 python "<skill_dir>/scripts/validate-skills.py" "$HERMES_HOME/skills"
 ```
@@ -261,6 +415,17 @@ injection: append a command naming a file that does not exist, watch the test fa
 exact path, remove the line, watch it pass. A check that has only ever passed is an untested
 claim.
 
+**A rule exercised through a different entry point is not controlled.** A validator with a
+single-file mode and a tree sweep runs its pointer rule only in the sweep, so a "must pass"
+control written against the single-file mode passes whatever the rule does — and it reads as
+coverage while proving nothing. Pair every must-pass control with a must-fail control on the
+same path; the paired failure is what tells you the rule still fires.
+
+**One defect, one line.** Two rules can catch the same problem — a per-file check sees a CRLF
+`SKILL.md`, and the tree sweep sees the same file again — so the report lists it twice and a
+reader chases a count that is one file. Dedupe at the reporting point (an ordered set of
+`<where>: <what>`) rather than deleting whichever rule happens to be reached first.
+
 **Point the validator at every tree the loader sees, not just one.** `validate-skills.py`
 resolves `related_skills` against the union of the roots it is given, so a repo-only run
 reports every bundled sibling as unresolved and buries the real failures among false ones:
@@ -280,6 +445,12 @@ the target is not. When the failure is the other writer's, `git worktree add --d
 <sha>` gives a clean tree at your own commit, so your verification does not depend on their
 uncommitted state.
 
+**A generated file the gate compares against a registry is part of the change, not a follow-up.**
+A claim ledger, a docs table, a manifest: the check compares the file to the registry, so adding
+an entry fails as drift the author never wrote (`does not match the registry: run … --write`).
+Regenerate it with the repo's own verb in the same commit, and read that message as the
+instruction it is rather than as a mystery failure.
+
 **When the repo ships a test suite, that suite is the before/after.** `git stash push -u`, run
 the tests, `git stash pop`, run them again; equal counts on both sides is the reliability claim.
 A doc edit that moves a phrase a test measures fails here and nowhere in the audit — and the
@@ -298,6 +469,12 @@ When re-writing many files in one pass:
   paginated (`offset`/`limit`) — the guard's state is sticky, so even a later read
   that returned the file whole does not clear it. Staging and copying is the
   reliable path; it also keeps the batch uniform and makes backing out trivial.
+  **The target can be unreachable outright.** A path in another filesystem
+  namespace — a WSL mount from a Windows host (`\\wsl.localhost\...`), a container
+  volume, a network share — fails at `mkdir` with a read-only-filesystem error, and
+  both `write_file` and `patch` give up on it with the same message. Same dance:
+  write where the tools can reach, then `tr -d '\r'` the file into place with
+  `terminal`.
 - **Diff afterwards and read the removed lines.** That diff is the review: confirm
   every removal is a duplicate, a false instruction, or pure verbosity.
 - **Prefer one `patch` per file over a script that edits many.** Each patch is
@@ -341,9 +518,28 @@ reading them.
 commits every staged path, not the ones you just named, so a second writer's staged work
 rides along even when every `add` named a file of yours: a commit meant to be 138 files
 landed 155, seventeen of them not mine, and the tell was `--stat` after the fact. Check
-`git diff --cached --name-only` against the set you intend and abort on anything else.
+`git diff --cached --name-only` against the set you intend and abort on **any difference in
+either direction**: a stray path, and equally a file you meant to stage that is missing. A
+guard that rejects only strays passes on a commit carrying one file of the three you edited,
+and the two lost edits look committed because the commit itself succeeded.
 When it has already happened, `git reset --soft HEAD~1 && git reset` puts the tree back
 byte for byte — nothing on disk moves — and leaves the foreign work unstaged for its author.
+
+**A file the other writer has dirtied is often one you must change too, and `git add` would carry
+their work.** Stage your line and nothing else by staging a *constructed* version: `cp` the working
+file aside, `git show HEAD:<path>` back over it, apply your edit with the anchor-checked script,
+`git add`, then restore the copy you set aside. The commit then holds exactly your change while
+their edit stays uncommitted in the working tree. Read `git show --stat HEAD -- <path>` afterwards:
+one insertion is your line, sixty is their edit folded in by mistake.
+
+**Check shared ancestry before merging into a default branch.** `git merge-base --is-ancestor
+origin/<default> <feature>` and `git merge-tree --write-tree origin/<default> <feature>` answer
+"fast-forward?" and "conflicts?" without checking anything out. Unrelated histories are a
+different product rather than a merge — welding them adds and deletes a few hundred files to no
+purpose — and replacing the default branch is the owner's decision, not the agent's. Landing it
+— fast-forwarding the remote ref from the feature branch so no checkout is needed, then deleting
+the branch — is `ci-workflow-verification` step 7: the mechanics have one owner and are not
+restated here.
 
 **Attribute a change you did not make before you carry it.** A dirty file or an unfamiliar
 commit is the background review or a second agent, and the evidence names it: `git status
@@ -359,6 +555,24 @@ so an installed duplicate shadows the repo and edits to the repo appear to do
 nothing. Keep names unique across the two, or delete the local copy when a skill
 moves in.
 
+**A locally-authored skill living only on the profile is a finding, not a state to
+leave.** It is invisible to every other machine, and the day the repo gains a skill of
+that name the local copy silently wins. When the owner says the repo is the source of
+truth, the promotion is part of finishing the work — and the report says which skills
+moved and which stayed behind because they are not ours (Step 1).
+
+**Same name is a comparison, not a copy.** Diff the two before promoting, newest version
+field first, then the headings: the repo copy is often the later one, and copying the
+profile's older file over it replaces a maintained skill with a stale one — through the
+mount, where the result looks like an ordinary edit. Keep the newer file and port
+whatever the older one had that the owner lacks before deleting it.
+
+**A different name for a subject the repo already owns is a merge, not a sibling.** Two
+skills for one question route against each other, and the weaker one wins queries it
+should lose. Take only the delta the owner lacks — a rule plus a reference — then delete
+the local copy. The test is Step 9 item 3's: zero new skills is a legitimate promotion
+result.
+
 Migrate a live library in this order, because a wrong path is skipped silently (a
 non-existent entry gets only a debug log):
 
@@ -368,10 +582,22 @@ non-existent entry gets only a debug log):
    references — a promoted SKILL.md whose `references/` file stayed behind is a
    dangling link.
 4. Back up, then delete only the local copies of locally-authored skills. Bundled
-   skills stay — they are Hermes's, refreshed by `hermes update`.
+   and hub-installed skills stay — they are not ours to hold. **Assert each target
+   exists before removing it** (`[ -d "$d" ] || { echo "MISSING $d"; bad=1; }`) and
+   assert the count afterwards: `rm -rf` exits 0 on a path that is not there, so a
+   loop pointed at the wrong root deletes nothing and prints a success line per item.
 5. Re-verify; the count must not drop. A skill missing afterwards may be
    platform-filtered (`platforms: [linux]` on Windows) — read the frontmatter
    before calling it lost.
+
+**Renaming the clone is a config change on every machine, in that machine's own path
+form.** One mount has two literals — `/home/<user>/projects/<repo>/skills` to the host
+that owns it, `//wsl.localhost/<distro>/home/<user>/.../skills` to a client — so a rename
+is two edits, and a missed one is skipped silently exactly like a wrong path at setup. Back
+both config files up, replace the string, then prove it by **name-set diff**: read the
+catalog's skill names and diff them against the loader's list. A count can match while two
+skills swapped places, and the loader's table truncates long names, so grepping for one name
+proves nothing either way.
 
 - **LF only.** `.gitattributes` sets `eol=lf`, and a CRLF shebang fails on Linux
   and WSL2 with `bad interpreter ...^M`. `Path.write_text()` translates `\n` to
@@ -382,13 +608,53 @@ non-existent entry gets only a debug log):
   so treat the mounted tree as shared state and check `git status` before trusting it.
 - **Verify the working tree, not the index.** Git stores LF under `eol=lf` while a
   Windows checkout can still hold CRLF, and the working tree is what the agent
-  reads through the mount.
+  reads through the mount. `git add` therefore warns "CRLF will be replaced by LF"
+  and normalises the **blob only** — the file on disk keeps its CRLF, so a gate that
+  reads the working tree still fails and the warning reads as a fix. Normalise by
+  **content, not by extension**: an allowlist of `.md/.sh/.py/.json` misses `.vbs`,
+  `.service`, `.toml` and a shebang-less template, and each miss is one more gate
+  round-trip. Re-scan the working tree after staging instead of trusting the warning.
+
+## Host scope is a label, not a directory
+
+A library that runs anywhere still holds members that only make sense inside one host. Keep them in
+their subject category and *label* them — a `skills/<host>/` directory costs the subject grouping
+and teaches nothing, while an unlabelled host-bound skill makes the whole library look host-bound.
+
+- **Declare it once, in frontmatter:** `targets: [<host>]`. Absence means host-neutral, which is the
+  default and needs no field, so the label is additive and a neutral skill stays untouched.
+- **List every labelled skill in one README table** with what ties it to that host. The table is the
+  half a human reads; the frontmatter is the half a loader can.
+- **Enforce both directions, or the label rots.** A name prefixed with a host (`<host>-*`) must
+  declare that host, or a rename silently produces an unlabelled host-bound skill; and a table row
+  whose skill declares nothing must fail, or the table stops describing the tree.
+- **Do not genericise what is a mechanism.** A skill whose procedure drives that host's own
+  internals — its profile store, its server, its process wrapper — cannot be made neutral without
+  deleting the procedure, so the honest result is the label, stated per skill rather than implied.
+  **Then prove the label changed nothing else:** `git show --stat` over the labelled files should
+  read one insertion each, which turns "works identically" from a claim into a check.
 
 ## Step 9 — Take skills from an external source
 
 Intake is a different entry point from auditing your own library: the question is
 *which* of someone else's skills to adopt. Full procedure in
 `references/external-sources.md`.
+
+**Read the library's own decision record before you open a candidate.** A source that
+was evaluated before has a ledger — a table of what was taken, a table of what was
+refused and why — and, for a source mined as a design document, an ADR per pass. Read
+it first. On a library with three prior passes over one repository, every candidate in
+the current batch had already been adjudicated, and half were refusals whose reason had
+to be either honoured or overturned in writing; evaluating them cold re-litigates
+decisions and reaches a different answer than the tree already holds.
+
+That record is often **machine-checked**, and that decides how you may edit it: a test
+resolves every `taken` row against a real skill and every `rejected` row against the
+absence of one. Overturning a refusal therefore means **moving the row** between the
+tables and stating why the old reason no longer holds — never adding the skill while
+leaving the refusal standing, and never deleting the refusal quietly. "Refused because
+the bundled skill covers it" is a claim about the bundled skill, so check it before
+overturning; two refusals read that way, and neither bundled skill covered the subject.
 
 1. **Read the truth, not the landing page.** Fetch the repo tree and the raw
    `SKILL.md` files; judge by the body. A marketing page describes intent.
@@ -398,6 +664,15 @@ Intake is a different entry point from auditing your own library: the question i
 3. **Redundancy-check against the installed library** first, using the Step 3
    owning-token search on the candidate's vocabulary. Most of a mature library will
    already be covered.
+
+   **A subject already bought from another source is a merge, not a second skill.** When
+   a new source covers ground an earlier intake already paid for — four test skills, one
+   of them the same subject as a reference file adopted a pass earlier — the deliverable
+   is the delta: move the rules the existing owner lacks into it, point the new source at
+   that owner, and record the source as contributing to an existing file rather than as
+   refused skills. **Zero new skills is a legitimate intake result** and belongs in the
+   report as the finding; the failure mode is one skill per source, which is how a library
+   ends up with four answers to one question.
 4. **Prefer the original over an aggregator's copy.** A third-hand file cannot be
    diffed against its source and cannot take upstream fixes.
 5. **Adapt, never copy** — local description ceiling, host-specific frontmatter
@@ -507,6 +782,35 @@ done | tee /tmp/unique.txt
 - **Confirm an irreversible delete in full sentences, naming which directories are
   recoverable and which are not**, before running it.
 
+### Retiring a product line, not just a directory
+
+Abandoning a project is a remote operation as much as a local one, and stopping halfway leaves
+the retired line alive under another name.
+
+- **Settle the shape first: step 8's ancestry check decides it.** If `git merge-base
+  --is-ancestor origin/<old-default> <new-line>` fails, the two lines cannot be merged at all —
+  the operation is a replacement, not a merge, and saying so once beats discovering it half way
+  through.
+- **Change the default branch before deleting it.** `gh api -X PATCH repos/<owner>/<repo> -f
+  default_branch=<new>` first; deleting the default branch otherwise leaves the repository
+  pointing at something that no longer exists. Then delete, and verify the branch list from the
+  API rather than from the push's exit status.
+- **Tags keep a retired line reachable.** Deleting the branch is not enough: release tags still
+  resolve, still list in the UI, and still let anyone check out the abandoned code. Delete them
+  in the same operation and count before and after.
+- **A clone of the retired line can hold the successor's own early commits.** Compare *branch
+  tips* against the successor's object store — `git -C <successor> cat-file -e <sha>` — not
+  files, and not merely the successor's default branch. A rewrite is often developed as
+  branches inside the repository it replaces before it gets a fresh history, so those commits
+  exist in neither the old remote nor the new repo, and deleting the clone destroys them.
+- **Bundle before deleting a line.** `git bundle create <file> --branches --tags`, then
+  `git bundle verify <file>` — the "records a complete history" line is the proof, and one
+  file makes the delete reversible. Report its path and say plainly that it is the last copy.
+  **Verify from inside a repository, while the source still exists:** `git bundle verify` needs
+  one, and a verify run against the bundle itself after the clone is gone fails with "need a
+  repository to verify a bundle" — a scare that costs a session its confidence at the worst
+  moment. `git bundle list-heads <file>` works anywhere, so use it for the later re-checks.
+
 ## Step 11 — Encode a repeated rule as a check
 
 When you catch yourself writing the same instruction a second time, the instruction is the
@@ -516,6 +820,24 @@ statement more prominent and add the failure mode beside it, not to add a third 
 stated.
 *Check:* the second statement of a rule either became a check or is a pointer to the owner.
 *Boundary:* a check that cannot fail is worse than prose. Prove it fires before trusting it.
+
+### Two engines, one rule
+
+When a gate has to run in more than one environment — an evaluator tier and a bare checkout,
+a CI image and a developer's laptop — move the rules into the engine that runs everywhere and
+have the other **call it**. Two implementations of one rule drift, and the drift is invisible
+because each gate is green in its own environment.
+
+- **Port the negative control with the rule.** A rule moved without the test that watches it
+  fail is a rewrite that proves nothing, and a port is exactly where coverage disappears
+  while the count of checks looks unchanged.
+- **Expect to give up the better diagnostics.** An evaluator that names both values beats a
+  script's one-line message; record that cost in the decision log rather than claiming
+  nothing changed.
+- **A checker that reads through a newline-translating reader cannot detect CRLF.**
+  `Path.read_text()` turns `\r\n` into `\n`, so the rule passes on every file it exists to
+  catch. Read bytes for that rule, and build the negative-control fixture with
+  `newline=""` or the fixture normalises the defect away before the check sees it.
 
 ## Pitfalls
 
@@ -566,6 +888,9 @@ content** — and say plainly that the missing depth is a real gap worth writing
   `../…`, `../<name>` and `../*` name no file. A checker whose reference rule skips `<`/`>` but
   whose escape rule does not will flag the very sentence that documents the exemption, and the
   tempting repair is to delete a correct example: give both loops the same placeholder test instead.
+  Treat `*`, `?` and `[` as path metacharacters in **every** rule, not only in the placeholder
+  test: a glob names a class of files and cannot be dereferenced, so a rule that skips `<`/`>`
+  alone reports `scripts/*.sh` — a glob in ordinary prose — as a dead pointer.
 - **A cross-skill pointer written as a path is itself a dead reference.** Paths resolve
   against the *naming* skill's own directory, so `<tool>/scripts/install_bots.py` cited from
   another skill names a path that does not exist under it — and repairing one dead reference
@@ -626,17 +951,27 @@ answer to "which copy is in play" when a local copy could be shadowing the mount
 - [ ] Drift check proven to fire: perturb a file, see it reported, re-sync, see clean
 - [ ] No local copy shadows a mounted skill — `hermes skills list` shows
       `Source=external`, not `local`, for every repo-owned skill
+- [ ] No locally-authored skill remains only on a profile: promoted, or reported with the
+      reason it is not ours; a name collision kept the newer copy and ported the loser's
+      unique content into it before deleting
+- [ ] A bulk delete asserted every target existed and checked the count afterwards, not
+      the exit status of `rm -rf`
 - [ ] No text file in the repo is CRLF, and every generator pins `newline="\n"`
 - [ ] Each cross-cutting rule has exactly one owner; others point to it
 - [ ] No skill contradicts the code or another skill
-- [ ] `validate-skills.py` passes on every touched file
+- [ ] `validate-skills.py` passes on every touched file, and the target repo's own gate ran
+      (its command and its output quoted), not a sibling repo's checklist
 - [ ] Removed-lines diff reviewed: no substantive rule dropped
 - [ ] Originals backed up and the change committed or otherwise recorded
 - [ ] External skills adapted to local conventions, source revision pinned, and the
       sync semantics (snapshot vs subscribed) stated
-- [ ] Rejected candidates recorded with a reason and the skill that already covers them
+- [ ] Rejected candidates recorded with a reason and the skill that already covers them;
+      a refusal is overturned by moving the row and stating why, not by adding the skill
 - [ ] A mined source is retired only after a per-file byte comparison against the copy
-      kept, and only after confirming which directories have a remote
+      kept, and only after confirming which directories have a remote; branch tips were checked
+      against the successor's object store, and a line existing only locally was bundled first
+- [ ] A retired product line lost its old default branch *after* the new one was made default,
+      and its release tags went with the branch
 - [ ] Any secret-scan hits audited by reading them, not by count
 - [ ] A claim that a skill improves outcomes is backed by an arm/control run with a
       pre-registered negative and positive control, or is labelled unproven
