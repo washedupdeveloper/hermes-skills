@@ -1,7 +1,7 @@
 ---
 name: openspec
 description: "Use when a repo has an openspec/ directory."
-version: 1.1.1
+version: 1.1.2
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -68,6 +68,16 @@ method.
 - **The repo is the gate.** `openspec validate <name> --strict` runs in the repo's CI, not only
   by hand. A repo whose CI lacks it gets that step before its first change; the job block to
   append is `templates/ci-job.yml`, with the repository's own checkout pin.
+
+## Work communication contract
+
+When the owner asks for OpenSpec as the communication medium, use the change as the record:
+
+- Every non-trivial work item, task assignment, status update and handoff names the change and
+  the task IDs it covers. Chat is a short pointer to the artifact, never the only brief.
+- A subagent brief names the change and task IDs and does not add a competing prose brief.
+- A subagent returns the same IDs, the files it changed and the evidence commands it ran.
+- Pure refactors and dependency bumps use `skip_specs: true` when behavior does not change.
 
 ## Verify
 

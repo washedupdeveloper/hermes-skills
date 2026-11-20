@@ -24,3 +24,16 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "ci"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"

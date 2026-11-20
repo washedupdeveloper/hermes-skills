@@ -64,6 +64,27 @@ A host that resolves a local skills directory before a mounted one will read the
 silently: edits here then appear to do nothing. Keep names unique across the two, and delete a local
 copy when a skill moves in.
 
+## Work communication
+
+Every non-trivial work item, task assignment, status update and handoff is an OpenSpec change:
+
+- Start with `openspec/changes/<name>/`; its proposal and `tasks.md` are the authoritative brief.
+- A subagent brief names the change and the task IDs it owns. It does not carry a second prose brief
+  that contradicts the change.
+- A subagent returns the same change and task IDs, the files it changed, and the evidence commands
+  it ran.
+- Chat is a short pointer to the change, never the only record of the work.
+- Pure refactors and dependency bumps use `skip_specs: true` when behavior does not change.
+
+Use the `openspec` skill for the loop: `openspec instructions`, `openspec validate --strict`, and
+`openspec archive`. The CLI is pinned to 1.15.0 in CI.
+
+## Dependency maintenance
+
+Dependency sources have a weekly automated check: Dependabot for GitHub Actions and Python, and
+the `dependencies` workflow for the Nix flake lock. Updates are pull requests; CI must pass and a
+human merges them. No workflow enables auto-merge.
+
 ## Verify
 
 ```bash

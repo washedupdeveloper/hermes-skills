@@ -17,9 +17,10 @@ HARNESS = ROOT / "tests/e2e/test_gate_mutants.py"
 
 # The sentence, whitespace-normalised: the document wraps its lines.
 CONTRACT = re.compile(
-    r"\*\*(\d+) requirements across two capabilities\*\* — "
-    r"`([a-z-]+)` \((\d+)\) and `([a-z-]+)` \((\d+)\) — measured by \*\*(\d+) mutants\*\*"
+    r"\*\*(\d+) requirements across (?:two|three|four|\w+) capabilities\*\*"
 )
+CAPABILITY = re.compile(r"`([a-z-]+)` \((\d+)\)")
+MUTANTS = re.compile(r"measured by \*\*(\d+) mutants\*\*")
 
 
 def requirement_counts() -> dict:
@@ -41,19 +42,22 @@ def mismatches(text: str) -> list:
     if match is None:
         return ["the contract sentence is gone or reworded, so nothing states these figures"]
 
-    total, first, first_n, second, second_n, stated_mutants = (
-        int(match[1]), match[2], int(match[3]), match[4], int(match[5]), int(match[6]))
+    total = int(match[1])
     counts = requirement_counts()
+    stated = {name: int(number) for name, number in CAPABILITY.findall(flat)}
+    mutant_match = MUTANTS.search(flat)
+    stated_mutants = int(mutant_match[1]) if mutant_match else -1
     problems = []
 
     if total != sum(counts.values()):
         problems.append(f"doc says {total} requirements; the specs hold {sum(counts.values())} {counts}")
-    if total != first_n + second_n:
-        problems.append(f"doc's parts sum to {first_n + second_n}, its total says {total}")
-    if counts.get(first) != first_n:
-        problems.append(f"{first}: doc says {first_n}, spec holds {counts.get(first)}")
-    if counts.get(second) != second_n:
-        problems.append(f"{second}: doc says {second_n}, spec holds {counts.get(second)}")
+    if total != sum(stated.values()):
+        problems.append(f"doc's parts sum to {sum(stated.values())}, its total says {total}")
+    for name, number in counts.items():
+        if stated.get(name) != number:
+            problems.append(f"{name}: doc says {stated.get(name)}, spec holds {number}")
+    if set(stated) != set(counts):
+        problems.append(f"doc names {sorted(stated)}, specs hold {sorted(counts)}")
     if stated_mutants != mutant_count():
         problems.append(f"doc says {stated_mutants} mutants; the harness defines {mutant_count()}")
     return problems
@@ -66,10 +70,10 @@ def test_the_milestone_agrees_with_the_tree():
 def test_a_drifted_number_is_caught():
     """The negative control: bump one figure and the comparison must notice."""
     real = DOC.read_text(encoding="utf-8")
-    assert "**16 requirements across two capabilities**" in real, "the checked sentence moved"
-    drifted = real.replace("**16 requirements across two capabilities**",
-                           "**17 requirements across two capabilities**", 1)
-    assert mismatches(drifted), "a document stating 17 requirements was accepted"
+    assert "**21 requirements across four capabilities**" in real, "the checked sentence moved"
+    drifted = real.replace("**21 requirements across four capabilities**",
+                           "**22 requirements across four capabilities**", 1)
+    assert mismatches(drifted), "a document stating 22 requirements was accepted"
 
 
 def test_a_missing_sentence_is_caught():
