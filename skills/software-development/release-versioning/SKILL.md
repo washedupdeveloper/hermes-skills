@@ -1,7 +1,7 @@
 ---
 name: release-versioning
 description: "Use when cutting a release. Semver policy and gates."
-version: 1.1.0
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -247,14 +247,43 @@ dozens of changes old, carrying bugs the source no longer has. When a milestone'
 acceptance is "a fresh machine installs this", check the artifact's provenance, not the
 tree's.
 
+## When the ask is a backlog, not a version
+
+"Release everything on the main branch" usually means *land the uncommitted work*, not *cut a
+number*. Settle which before touching a version: a repository with no changelog, no build
+metadata and no version check has no release surface, and building one is a second project. Say
+which reading you took. The deliverable is commits on the branch; the push is the one step still
+worth a question, because it publishes and the remote belongs to its owner. Ask once, and treat a
+yes as scoped to that push rather than as a new standing policy.
+
+- **Split by intent, not by file count.** `git reset` first — it unstages everything and leaves the
+  working tree byte-identical — then stage one intent at a time, naming the paths. A document and
+  the reference file it cites ship in the same commit: a commit that cites a file it does not
+  contain fails the gate's own dead-reference rule, so **every intermediate commit must be
+  self-consistent, not only the head**.
+- **Prove every commit, not just the head.** For each new commit, `git worktree add --detach
+  /tmp/v-<sha> <sha>`, run the repository's cheapest gate inside it, `git worktree remove --force`.
+  A series whose head is green can still carry a commit that never built, and a bisect will blame
+  the wrong one. A stdlib validator or a two-second suite makes this a per-commit habit rather
+  than a special occasion.
+- **Reconcile the count before pushing.** `git status --porcelain` empty, and
+  `git diff --shortstat <base>..HEAD` equal to the change you started from. A file left unstaged
+  and a file staged twice both read as success from the log alone.
+- **Read the run you caused, not the latest one.** `gh run list --branch <b> --limit 1 --json
+  databaseId,status,conclusion,headSha` and assert `headSha` is the commit you pushed before
+  reading `conclusion`; a run listed seconds after a push can still be the previous one.
+
 ## Pitfalls
 
-- **The branch is yours; the main branch and the remote are not.** Work on a branch per session or
-  per feature and commit there. Never commit to the main branch and never push: a push publishes,
-  exactly as a tag does, and publishing belongs to whoever owns the remote. When the staging area or
-  `HEAD` changes under you, check `git reflog` and for a scheduling daemon before concluding your
-  work was lost or reverted — an orchestration job can commit and push on a timer while you edit,
-  and its commit messages will not describe your changes.
+- **The branch is yours; the main branch and the remote are not.** Work on a branch per session
+  or per feature and commit there. Never commit to the main branch and never push: a push
+  publishes, exactly as a tag does, and publishing belongs to whoever owns the remote. An
+  instruction to land the work on the deployed branch is the exception, and it is still a question
+  about the push: commit there, then ask once — *When the ask is a backlog, not a version* is the
+  procedure. When the staging area or `HEAD` changes under you, check `git reflog` and for a
+  scheduling daemon before concluding your work was lost or reverted — an orchestration job can
+  commit and push on a timer while you edit, and its commit messages will not describe your
+  changes.
 
 - **`01.2.3` is not semver.** Leading zeros are forbidden; `^(0|[1-9]\d*)\.` per part, or
   a lenient `\d+` silently normalises a malformed version into a valid-looking one.
