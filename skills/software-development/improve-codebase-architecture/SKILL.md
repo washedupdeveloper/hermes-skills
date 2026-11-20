@@ -45,6 +45,14 @@ For each hot module, name the specific symptom — not "it's messy":
 | **adapter with one implementation** | an indirection justified by a second implementation that does not exist | inline it; keep the seam in mind, not the adapter |
 | **change ripple** | one behaviour change touches N files | pull the behaviour into one module behind one interface |
 
+## Whole-codebase untangle requests
+
+When the ask is to untangle the entire codebase and carry the refactor to the end, the
+proposal-only rule above is not sufficient. Read `references/untangle-codebase.md` and run
+that execution variant: inventory every module first, write the hidden-link, needless-link,
+surplus and special-case log, then redesign and implement. The RFC in step 3 is the design
+record, not the deliverable.
+
 ## 3. Propose, do not perform
 
 Write the proposal as an RFC, one per opportunity:
