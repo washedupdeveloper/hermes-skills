@@ -1,7 +1,7 @@
 ---
 name: ephemeral-cleanup
-description: "Use when a task left ephemeral files; clean them up."
-version: 1.1.0
+description: "Use when a run must leave no state; sandbox and clean up."
+version: 1.3.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -26,6 +26,8 @@ The knowledge survives in skills and in the session record; the files do not.
 
 - The end of any task that created scratch files: probe scripts, captured logs,
   JSON/TSV dumps, temp clones, fixtures, caches.
+- Running a shell, test, reviewer or other child process that must read the host
+  but not write to it: sandbox it first — `references/sandboxing.md`.
 - Before calling any task done whose evidence files no longer have a reader.
 - Don't use for: things that serve a purpose by existing (repos, configs,
   deliberately named backups), caches an installed tool is actively using, or
@@ -37,6 +39,29 @@ The knowledge survives in skills and in the session record; the files do not.
 final report: list what the task created, fold anything durable into the skill it
 belongs to, then delete the rest. "Cleaned up" is part of "done", not a favour
 to be asked for. This has needed restating more than once; treat it as standing.
+
+**Ephemeral is the default, not an option.** When the standing rule is
+zero-footprint, every write-capable shell, code run and runner starts in a
+private tree or sandbox and is removed after the result is printed. A persistent
+run directory is the explicit opt-in (`--no-ephemeral`), not the default; a
+`--keep DIR` copy is how evidence survives. A run that leaves state the caller
+did not ask for is a defect, not a convenience.
+
+**A tool that writes a run directory should make the ephemeral path the default,
+and cleanup belongs on the success path.** Put the run in a private temp tree
+(`tempfile.mkdtemp`), print the verdict and write any requested report/SARIF
+**before** removing it, and remove it on failure as well as success. `--keep DIR`
+copies the run there first; if the copy fails, leave the evidence in place and
+print its path rather than deleting the only copy. Record `ephemeral: true` in the
+result so a reader knows the run directory is gone by design.
+
+**Preflight the output destination before the private tree exists.** A `--keep`
+or `--sarif` parent that cannot be written is a start failure; discovering it
+after the model call leaves a tree with no reader. Validate the parent, the
+regular-file/directory shape and writability before `mkdtemp`; if a late report
+write still fails, remove the tree in the same failure path.
+
+Sandbox recipe and the NixOS/non-NixOS matrix: `references/sandboxing.md`.
 
 ## What counts as ephemeral
 
@@ -70,6 +95,20 @@ survive reboots (verified). Treat every probe run on the guest as a cleanup debt
   `Permission denied` per file — megabytes of output in a single tool result — and deletes
   nothing. `chmod -R u+w <tree> && rm -rf <tree> 2>/dev/null`, then assert the path is gone;
   the noise is not evidence of progress and reading it costs more than the cleanup.
+- **Inventory the home caches by SIZE before sweeping by name.** One directory can be most of
+  the disk while the file count says nothing: a sandbox whose overlay upper lived under
+  `~/.cache` produced 17 directories × 5 GB (84 GB) invisible to any name-based sweep. Start
+  with `du -sh ~/.cache/* | sort -h | tail`, then delete. Prevent the next one at the source —
+  an overlay upper belongs on tmpfs, never in `$HOME`.
+- **Root-owned files inside a user cache need a sudo second pass.** A tree copied by a
+  sandbox or a root-run build keeps the original ownership, so `rm -rf` prints one
+  `Permission denied` per file and removes none of them, and `chmod` cannot help because you
+  are not the owner. Run the user pass, then `sudo rm -rf` what is left, then assert the path
+  is gone rather than trusting the exit code.
+- **A `nix develop` / `nix-shell` directory is a mount point, not a directory.** `rm -rf`
+  leaves it or fails; unmount first (`sudo umount -l <dir>`), then remove. When a deletion
+  needs an approval that does not arrive, stop and name the leftovers in the report — do not
+  reach the same outcome by another command.
 - **`nix build -o /tmp/…` output symlinks are gcroots.** The symlink is the only
   thing pinning that store path; remove it once the artefact is inspected.
 - **`nix-collect-garbage` and generation deletion are never automatic.** Old
@@ -86,7 +125,8 @@ survive reboots (verified). Treat every probe run on the guest as a cleanup debt
   and every repo the user keeps.
 - **Evidence a report cites.** Before/after audit JSONs, a scored run's directory, a
   subagent's transcript: these exist so a claim can be re-derived later, so keep them
-  and list them as kept. A runner's own output is a record, not debris.
+  and list them as kept. A run kept via `--keep` is a record; an unkept ephemeral run is
+  not.
 
 ## Procedure
 
@@ -109,6 +149,19 @@ survive reboots (verified). Treat every probe run on the guest as a cleanup debt
   private-tmp mounts until restart; avoid, and if done, say so.
 - Sweeping "everything old" without the recent guard can eat live state; the
   `-mmin` guard is not optional.
+- **Deleting the run directory before the verdict is printed or the report is
+  written.** The output is the product; remove the tree only after stdout, SARIF
+  and any kept copy are complete.
+- **Cleaning up only on success.** A failed run leaves the same debris; put the
+  removal in a `finally`/cleanup path that also runs on the error return.
+- **A failed `--keep` copy followed by deletion.** If the copy raises, keep the
+  source and print its path; deleting it turns a copy failure into evidence loss.
+- **A sandbox that hides `/tmp` also hides the prompt and the binary.** Rebind
+  both read-only after `--tmpfs /tmp`; otherwise the child starts with `ENOENT`
+  on a file that exists on the host.
+- **Kill the process group, not just the parent.** A wrapper's child can inherit
+  the pipe and keep a stream open after the parent dies; start the child in its
+  own session and kill the group.
 
 ## Verification
 
