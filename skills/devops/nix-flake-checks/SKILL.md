@@ -1,7 +1,7 @@
 ---
 name: nix-flake-checks
 description: "Use when writing a flake's checks or eval assertions."
-version: 1.2.1
+version: 1.2.2
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -147,7 +147,12 @@ nix flake check --keep-going          # every group reports, not just the first
   has no `/usr/bin/env`, so shebangs must be patched before scripts run — or invoke the script
   through its interpreter (`bash ./script`), which needs no rewrite of the file being checked.
   A test that executes the script directly fails with `FileNotFoundError` naming the script,
-  not `/usr/bin/env`; read that as a missing interpreter, not a missing file.
+  not `/usr/bin/env`; read that as a missing interpreter, not a missing file. **The rewrite also
+  hits files the check only reads**, so a claim asserting a file's interpreter by literal path sees
+  the patched form and fails inside the sandbox while passing in a checkout — measured, a claim
+  asserting `#!/bin/sh` reported FALSE with `#!/nix/store/…-bash-…/bin/sh` beside it. Assert the
+  *property* (the interpreter's basename is `sh`), never the literal line, and scope the patching
+  away from files whose bytes are the thing under test.
 - **A test that reads the machine's real `/etc` passes on a workstation and fails in the build
   sandbox**, which has no `/etc/resolv.conf`, no network and a different `$HOME`. Inject the
   lookup root as a parameter — `host_files_to_bind(rootfs, host_root=Path("/"))` — and point the
