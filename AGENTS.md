@@ -21,6 +21,31 @@ a mount it declares once (`external_dirs`, a symlinked skills directory), or a c
    window, the category set, the hosts and the external skills. `scripts/validate.py` reads it; no
    other file restates it. Change a rule there, never in two places.
 
+## Line endings
+
+LF everywhere — in the repository and in the working tree, on every host. The tree is mounted into
+WSL and Linux, where a CRLF shebang fails as `bad interpreter: …^M`, and a CRLF/LF pair reports
+drift that is not there.
+
+`.gitattributes` (`* text=auto eol=lf`) is the tracked half: it overrides `core.autocrlf`, so a
+Windows checkout is byte-identical to a Linux one. The other half is per clone, because git does not
+track its own config:
+
+```bash
+git config core.autocrlf false
+git config core.eol lf
+git config core.safecrlf true    # git add refuses a CRLF file instead of normalising it silently
+```
+
+`safecrlf` is what makes this a check rather than a convention: a writer that emits CRLF fails at
+`git add` with `fatal: CRLF would be replaced by LF in <path>`, naming the file, and nothing is
+staged. Without it the blob is normalised, `git status` goes clean, and the file on disk keeps its
+CRLF — the failure this repository has hit twice, invisible until a script breaks in WSL. Fix the
+file (`tr -d '\r' < f > f.lf && mv f.lf f`), never the check.
+
+The gate cannot do this job: `nix flake check` and CI both read a git-tracked tree, which is already
+LF, so worktree CRLF is visible to neither.
+
 ## Adding a skill
 
 - One directory per skill: `skills/<category>/<name>/SKILL.md`, `<name>` equal to the directory.
