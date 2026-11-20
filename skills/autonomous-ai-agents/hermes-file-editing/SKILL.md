@@ -1,7 +1,7 @@
 ---
 name: hermes-file-editing
 description: "Use when Hermes refuses a write. Read fully, or patch."
-version: 1.0.0
+version: 1.1.0
 author: Storm, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -47,6 +47,35 @@ three reasons:
    writer)". The file's mtime moved since your last read.
 2. **partial** — "was last read with offset/limit pagination (partial view)".
 3. **no baseline** — "has not seen its full current content".
+
+## A refusal that is not the guard: a `\\wsl.localhost\` path
+
+The two tools die before the guard is consulted when the target sits behind a WSL UNC path:
+
+```
+Failed to write file: mkdir: cannot create directory '//wsl.localhost': Read-only file system
+```
+
+The path is valid and the file is writable — the tool collapses the `\\` prefix and tries to
+`mkdir` it. No read clears this, no spelling of the path avoids it, and the same file written
+through `terminal` succeeds. Treat it as a *different* failure from `stale_write_blocked`: more
+reading cannot help, and retrying in a loop spends the turn.
+
+**Stage on the side the tools can write, place it through the shell.** Write the content to the
+scratch directory the tools can reach, then move it into place from inside the guest:
+
+```bash
+tr -d '\r' < /mnt/c/.../scratch/stage/SKILL.md > /home/<user>/projects/<repo>/skills/<cat>/<name>/SKILL.md
+```
+
+`tr -d '\r'` is not decoration: a Windows-side write can carry CRLF into an LF-only tree, and the
+copy is the last place it can be removed. For a *targeted edit* rather than a whole file, apply the
+replacement with a small anchor-checked script run through the same interpreter
+(`nix develop -c python3 <edit script> <file>`) instead of a heredoc.
+
+This is the one place where "never edit a file through `terminal`" does not apply. That rule
+protects a baseline; a path the tools cannot open has no baseline to protect, so the shell copy is
+the only route. Everywhere else the receipt still matters.
 
 ## Rules
 

@@ -1,7 +1,7 @@
 ---
 name: hermes-wsl-backend
 description: "Use when running Hermes or commands inside a WSL2 distro."
-version: 1.3.2
+version: 1.3.3
 author: Storm, Hermes Agent
 license: MIT
 platforms: [linux, windows]
@@ -273,7 +273,14 @@ returning that error — a probe that returns blank or times out while reading a
 prose is this, not a slow filesystem. A **single line** is enough: `bash -c 'S=/nix/store/x;
 head $S/f'` reads `/f`. The symptom is silent — a command that "ran" but did nothing, or a
 fish parse error quoting text you never wrote — so when a WSL command behaves nothing like
-the same text in a shell you control, this is the cause, not your script.
+the same text in a shell you control, this is the cause, not your script. **The
+wrong-directory variant is the expensive one, because the error names your target.**
+`cd X && echo "$(git branch --show-current)"` in a `-c` string evaluates the substitution
+in the *caller's* directory, so the `git` inside it answers about the wrong tree and prints
+`fatal: not a git repository` about a directory that plainly is one — measured, and nearly
+reported as "that checkout is not under git". Never conclude anything about a target from a
+one-liner's error; put the same text in a file under the scratch dir and run that before
+believing it.
 
 **An empty variable does not fail — it collapses the argument.** `ls $D` with `$D` unset
 lists the current directory, and `grep -rn PATTERN $D` becomes a recursive grep of it: run
