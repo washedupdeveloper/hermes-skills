@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance or auditing another's work.
-version: 1.10.0
+version: 1.10.1
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -102,10 +102,53 @@ observation was true. None was evidence about the target.
   failures. A test that resolved a previously built copy passes while the source is broken,
   so prove which artifact ran — a version marker, a path, a hash — not merely that a command
   exited 0.
+- **A result at a reduced configuration is evidence about that configuration.** Fewer samples,
+  a lower reasoning level, a shallower context or a cheaper model change **recall**, not only
+  cost, so a PASS from the cheap arm does not certify the shipped default — and quoting it
+  without the settings invites exactly that reading. Record the instrument beside every result
+  (model, reasoning level, sample count, context depth) and re-run at the shipped default
+  before acceptance. If the default cannot complete, that is an open limit to state plainly,
+  never a pass to report; a caveat attached to a PASS is still an unfinished acceptance.
 
 **Run it again after the last edit.** A proof produced before the final change is a proof
 of a tree that no longer exists; this is the same rule as the stale-verdict one below, and
 it is the one that gets skipped because the edit was "only a doc".
+
+### The input is part of the claim
+
+A proof is about an input as much as about an output. When the input is produced by a
+tool, the tool's defaults and the user's config are silently part of the argument.
+
+- **A change is not what `git diff` shows.** Untracked files are invisible to it, so a
+  gate or review that reads only `git diff` will pass a secret, a migration or a deleted
+  guard that exists in a new file. Add the new files explicitly —
+  `git ls-files --others --exclude-standard -z`, each rendered as a `--- /dev/null` hunk —
+  exclude the tool's own state directory, and assert the result covers every changed
+  path. The same shape applies to any `git diff`-fed scorer: staged-but-uncommitted and
+  untracked are two more inputs the command does not include by default.
+- **Pin the command that produces the evidence, not just the consumer.** `diff.dstPrefix`,
+  `diff.noprefix`, `color.ui=always`, `diff.external` and a configured pager each rewrite
+  the patch: a parser keyed on `+++ b/<path>` then fails to match every file and reports
+  the claim refuted, which reads as a clean negative. Invoke git with the format you
+  parse — `git -c color.ui=false -c diff.srcPrefix=a/ -c diff.dstPrefix=b/ diff
+  --no-color --no-ext-diff` — and keep a test that sets the hostile config and proves the
+  parse still works.
+- **A failure caused by the harness is not a refutation.** A read-only mount, a blocked
+  network, a missing tool: the command exits non-zero for a reason that is not the claim.
+  Check for the harness's own signature first (EROFS, a sandbox's own error prefix,
+  ENOENT for a binary the sandbox lacked) and report **could not run**, never "claim
+  false". A proof that cannot fail honestly must say so; scoring a harness limit as a
+  refutation turns your boundary into a false negative and teaches the user to disable it.
+- **The subject must not choose the judge.** A prompt, rule set, allowlist or config read
+  from the tree under review lets the code being judged decide what counts as evidence —
+  a repository can ship a prompt that reports nothing and the verdict looks clean. Ship
+  the instrument with the tool; make any override an explicit operator flag, and record
+  what was used in the run's artefacts.
+- **Record the whole instrument, or the runs are not comparable.** When the rule set can
+  change independently of the prompt, a digest over the prompt alone silently equates two
+  different judges. Hash the contract — severities, proof kinds, schema version — with the
+  template and profile, and treat a contract change as breaking comparability exactly as
+  a prompt edit does.
 
 ## When you cannot observe it, say so — "not observed" is a value
 
@@ -126,12 +169,18 @@ that is not enough: a component can read correctly and throw on hydration, a rou
 unit test and 404 in the app, a selector can exist in a mock and not in the DOM. If you cannot load
 the page, your finding is `runtime not observed`, not a verdict.
 
+**A bounded run is a partial observation, and its coverage is part of the result.** Quote the
+counts and the reason: "3 of 67 units reviewed; 64 not started within the 300 s budget", never
+"the review found X" as if the whole change had been read. A unit never asked is neither clean
+nor failed, and a verdict that already fails for another reason must still name the units it
+never reached — in the run's own reason, not only in the report you write afterwards.
+
 Concretely, the cheapest observation that counts:
 
 ```bash
 # a static entry, a dev server, or an explicit driver — one of these, and quote what it printed
-council probes browser --repo .                        # a review tool's runtime lane (DOM + screenshot)
-COUNCIL_WEB_URL=http://127.0.0.1:3000 council probes browser --repo .
+<tool> probes browser --repo .                        # a review tool's runtime lane (DOM + screenshot)
+<TOOL>_WEB_URL=http://127.0.0.1:3000 <tool> probes browser --repo .
 chromium --headless=new --screenshot=/tmp/p.png --dump-dom https://the.page   # or any driver you have
 node -e 'fetch("http://127.0.0.1:3000/health").then(r=>console.log(r.status))'
 ```
@@ -157,8 +206,18 @@ of describing the screen. A screenshot you did not keep is not evidence; a path 
   Report the SHA with the result: "18 checks pass at `<sha>`" is checkable, "all checks
   pass" is not. When you discover the tree moved under a verdict you already delivered,
   say so and re-measure in the same breath — a standing property cannot rest on one
-  observation, and a green summary is the easiest thing in the world to keep repeating
+  and a green summary is the easiest thing in the world to keep repeating
   after it has stopped being true.
+
+  **A background service can commit and push the tree you are measuring, so the index you left is not
+  the index you find.** Before reporting repository state, check who else writes to it
+  (`systemctl --user list-units --all | grep -i <tool>`, plus `ps` for a daemon the user may have
+  started), and read `git rev-parse <target> origin/<target>` rather than inferring from a clean tree.
+  Measured: work staged but never committed vanished into a commit authored by a background
+  dispatcher, `origin/<target>` already carried it, and the history had moved days past the session's
+  context — a report of "nothing committed" was true of the index and false of the repository. When
+  the user's rule is "branches yes, the deployed branch and the remote never", note that a second
+  committer bypasses that rule entirely; say so rather than reporting a clean status.
 - **Name the branch, not only the commit. A green run on one branch is not evidence about
   another.** "Merged" is a claim with the same standing as "passes", and the cheap way to
   be wrong is to prove the work on the branch it was written on and never look at the one
@@ -329,6 +388,14 @@ of describing the screen. A screenshot you did not keep is not evidence; a path 
   claim about the assumptions, not about the arithmetic — and a derived number that ships
   into a document is far more expensive to retract than to test, because everything
   downstream restates it.
+- **Never judge a secret-shaped value by how it looks in output — measure it.** Tool output can
+  redact or abbreviate credential-like strings, so an intact 38-character key renders as
+  `sk_liv…lo2C` and reads as a truncated or corrupted fixture. Measured: a calibration corpus was
+  declared malformed on exactly that evidence, a patch was written to "fix" a generator that was
+  never broken, and the value was fine. Decide with a length, a regex match and a hash of the value,
+  quote those instead of the secret, and re-read the file through a length/hash probe before
+  concluding that anything about it is wrong. The general form: when a tool's rendering of a value
+  could differ from the value, the rendering is not the evidence.
 - **Do not state a property in a summary that you have not run a command for.** A closing
   report invites asides — "the mirror is in sync", "no other file references this", "the
   config was untouched" — and each is a claim with the same standing as the ones you
