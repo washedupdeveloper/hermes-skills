@@ -45,6 +45,39 @@ built from repository data — probe JSON, a diff, a file tree — reaches this 
 a small fixture passes while every real input fails, so size the test input to the
 real artifact before trusting a green run.
 
+**Select the reasoning level per call; the profile's default can make a review-shaped
+call look hung — but a timeout is not proof that a level is broken.** `hermes chat` takes
+`--reasoning LEVEL` (`none` … `ultra`), and the profile's `reasoning_effort` applies when
+the flag is absent. A high level is invisible on a one-line probe and can be slow on a
+long-output prompt. Measured on one 7,954-byte review prompt: the profile default (`ultra`)
+timed out at 90 s twice, yet the same level later answered in 84 s plain and 69 s streamed,
+and a two-sample `ultra` review completed in 239 s; `low` answered in 206 s; `none` in 21 s.
+Usage showed one API call, ~4.5k reasoning tokens at `ultra` and ~5.2k at `none`: the
+provider's effort labels do not map cleanly to work done, and the timeouts were
+provider/gateway stalls, not a reasoning overrun. Pass the level explicitly from the
+harness, record it with the result, and hash it into the instrument digest — the same
+prompt at two levels is two different instruments. Validate a cheap level before trusting
+an empty answer: on a tree with a planted credential, `none` returned a `critical` finding
+in 11 s; a level that misses a planted defect is not a reviewer, it is a producer that
+stopped reading. Before blaming the level, repeat the call once with `--usage-file` (did it
+make one call and finish?) and once with `--format stream-json` (does it emit events?) — if
+the same level later answers, the level was not the variable.
+
+**Read the answer as a stream and kill silence, do not wait out the sample timeout.** A
+non-streaming child is invisible until it ends, so a stalled provider holds the caller for
+the full timeout. Pass `--format stream-json` and take the final `result.text` (or the
+concatenated `text` events); a stream that ends without an answer, or a `result` with a
+non-zero `exit_code`, is an `OSError` for the caller to retry. A review model can think for
+about a minute before its first text event (62 s observed), so an idle watchdog must sit
+above that gap — 120 s works — and kill on silence, not only on the overall deadline. Kill
+the **process group**, not the direct child: a wrapper's child inherits stdout and keeps the
+pipe open after the parent dies, and the reader waits forever for an EOF that never comes.
+Start the child in its own session on POSIX (`start_new_session=True`) and use
+`os.killpg(os.getpgid(pid), SIGKILL)`. See `references/streaming-subprocess.md` for the
+working reader and its tests.
+
+**A child that must not write to the host runs under bwrap, with its inputs rebound after the private `/tmp`.** `bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --overlay-src "$HOME" --tmp-overlay "$HOME" --chdir / -- <argv>` gives the child a read-only root, a private `/tmp` and a tmpfs overlay of `$HOME`: it can read the host and reach the network, but every write to `$HOME` or `/tmp` dies with the process. The private `/tmp` also hides the prompt file and the binary, so bind each back read-only **after** the `--tmpfs` (`--ro-bind <prompt-dir> <prompt-dir>`, `--ro-bind <binary> <binary>`), and set `--chdir /` because the caller's cwd may itself be under `/tmp`. `--overlay-src` + `--tmp-overlay` is the two-argument form; `--overlay` takes three (`RWSRC WORKDIR DEST`) and is not interchangeable. Record the choice in the result (`reviewer_sandbox: true|false`), default it on when `bwrap` is on `PATH`, and make the strict flag fail rather than silently run unsandboxed. See `references/bwrap-sandbox.md` for the working invocation and the write-leak test.
+
 **A scratch file derived from a shared base is shared by every concurrent worker.** A
 harness that runs N children in one pool and writes each child's input to a path built
 from a common base — the run log, the output directory — hands all N the *same* file.
@@ -106,6 +139,22 @@ the problem, then propose the narrowest thing that addresses it.
 
 - **Passing the prompt as an argument because it works in testing.** A fixture-sized
   prompt hides the argv cap completely; only the real payload size exposes it.
+- **Leaving the reasoning level to the profile default.** A profile set to `ultra` can read
+  as a hang on a long-output prompt while its one-line probe answers; select the level
+  explicitly, record it, and validate the chosen level against a planted defect before
+  trusting an empty result.
+- **Concluding a level is broken from one timeout.** The same level and prompt can time out
+  once and answer in 69–84 s later; repeat with `--usage-file` and `--format stream-json`
+  before changing the level, and record the level with the verdict rather than guessing.
+- **Killing the parent and waiting for EOF.** A wrapper's child inherits stdout, so
+  `proc.kill()` leaves the pipe open and the reader blocks forever. Start the child in its
+  own session and kill the process group; close `proc.stdout` in the reader's `finally`.
+- **Setting the idle watchdog below the model's thinking gap.** A review model can spend ~60 s
+  before its first text event; an idle timeout shorter than that kills healthy runs. Use 120 s
+  as the working default and expose it as a parameter.
+- **Feeding a plain-output stub to a streaming reader.** `--format stream-json` expects JSON
+  events; a stub that prints the review as plain text ends with "stream ended without an
+  answer". Pass `--no-stream` for plain stubs, or make the stub emit `text`/`result` events.
 - **Reading the caller's exit code as the child's diagnosis.** An exit code carries no
   message. Log the child's stdout and stderr to files and read those.
 - **Inferring a concurrent actor from an unexplained artifact.** An unexplained run
@@ -134,3 +183,13 @@ the problem, then propose the narrowest thing that addresses it.
 - **Letting the child inherit the caller's identity implicitly.** Per-profile
   credentials are not inherited, so a spawned `hermes` must be given the profile it
   should run as (and that profile set up), or it authenticates as the wrong identity.
+- **Binding the prompt or binary before `--tmpfs /tmp`.** The tmpfs is mounted after the
+  bind and hides it, so the child starts with `No such file or directory` for a file that
+  exists on the host. Bind inputs after the tmpfs, and set `--chdir /` for the same reason.
+- **Using `--overlay` with two arguments.** `--overlay` is `RWSRC WORKDIR DEST`; the simple
+  home overlay is `--overlay-src "$HOME" --tmp-overlay "$HOME"`. A two-argument `--overlay`
+  is parsed as a different mount and fails or mounts the wrong thing.
+- **Testing a sandbox with a binary that only prints.** A print-only stub proves the child
+  starts, not that writes are contained. Have the fake write to `$HOME` and `/tmp`, then
+  assert both host paths are absent; skip the test only when `bwrap` is genuinely
+  unavailable, and assert the test ran in the gate.
