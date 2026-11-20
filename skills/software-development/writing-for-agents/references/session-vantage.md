@@ -68,8 +68,14 @@ ones. Apply these keeps as written.
   internal drafts, not external specifications or committed docs that own their numbering.
 - **Project voice** — "we" as the project's voice, and a decision record's
   "Alternatives considered" section.
-- **A decision record's own history.** An ADR, a postmortem or an agent note *is* the change
-  story; that is its artifact. The rules above govern current-state surfaces.
+- **A decision record's own history — while its subject exists.** An ADR, a postmortem or an
+  agent note *is* the change story; that is its artifact, and a record explaining a rule the
+  repository still follows is kept whole. The exemption ends with its subject: an ADR whose
+  subject has been removed preserves a name, a project and a history nobody can act on, so it is
+  deleted alongside the thing it described. Deleting it is half the job — then sweep for the
+  assertions still pointing at the absent thing (a `related_skills` entry, a spec requirement,
+  prose deferring detail to it). A removal is complete when a grep for the name finds only
+  worked examples.
 
 ## Workflow
 

@@ -137,6 +137,18 @@ var. A false pointer is worse than the long paragraph it replaced, because the r
 stops looking. Grep the target for the specific claim before writing the pointer, and
 when it is absent either keep the fact inline or add it to the target in the same edit.
 
+## Describe what is, not what was
+
+A document explains the repository as it is. A record that narrates a change earns its space
+only while the mechanism it describes still exists — once a thing is removed, its removal
+record is session-vantage prose, preserving a name, a project and a history nobody can act on.
+Delete the record with the thing.
+
+Then sweep for the **assertions** the removal did not touch: a `related_skills` entry, a spec
+requirement, a doc that defers operational detail to the absent thing. Deleting the artefact
+and its record leaves a tree that still claims it. A removal is complete when a grep for the
+name finds only worked examples — prose where it illustrates a rule that stands without it.
+
 ## Preserve the complete proposition
 
 Before cutting a sentence, list the propositions in it: the actor and action, the condition
