@@ -1,15 +1,15 @@
 ---
 name: defensive-patterns
-description: "Use when hardening code: input, subprocess, authz."
-version: 1.0.1
+description: "Use when hardening code: input, subprocess, CLI, authz."
+version: 1.2.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 category: software-development
 metadata:
   hermes:
-    tags: [review, lifecycle, concurrency, ownership, subprocess, migration]
-    related_skills: [surgical-patch, verify-and-stop, deterministic-quality-gates, postmortem, agent-harness-design]
+    tags: [review, lifecycle, concurrency, ownership, subprocess, migration, cli, errors]
+    related_skills: [surgical-patch, verify-and-stop, deterministic-quality-gates, postmortem, agent-harness-design, state-machine-audit]
     source: DeepSeek Harness (deepseek-ai/deepseek-harness) docs/defensive-patterns, distilled
 ---
 
@@ -76,6 +76,16 @@ take three representations. One `null`/`undefined` must not stand for several.
 *Check:* does a single "no value" carry more than one semantic — not yet queried, queried
 and empty, cannot be determined? Use a discriminated union or an explicit enum.
 
+**Missing evidence is named in the decision, not only the artefact.** A failed
+sample or unreviewed unit belongs in the verdict reason even when the verdict is
+already FAIL; a failing result does not make missing evidence disappear. Agreement
+is `null`/unknown whenever any sample in the set produced no output, never true from
+the samples that happened to answer.
+*Prevents:* a clean-looking FAIL hiding that half the evidence never arrived, and
+an agreement flag computed from a filtered subset. *Check:* can a missing sample
+be absent from the human reason or counted as agreement? *Boundary:* a sample that
+ran and returned findings is evidence even when other samples failed.
+
 **Optional inputs state both behaviours.** An optional parameter says what the callee does
 when present *and* when absent, so a caller reads both from the contract. Accumulating
 `?.` is the signal: each one substitutes for a decision about whether the field should
@@ -141,12 +151,60 @@ path invites symlink races and disclosure.
 *Check:* does a spawned process inherit the ambient environment, or write somewhere another
 process can predict and replace? *Boundary:* trusted in-process code with no external input.
 
+**Run commands that come from outside the program in a sandbox that fails closed.** When the
+command is supplied by an untrusted source — a reviewer's proposed check, a plugin hook, a
+generated script — wrap it in `bubblewrap`: network unshared, root read-only, a private `/tmp`
+and `$HOME`, a cleared environment, and the repository it judges mounted as an overlay so the
+writes it makes vanish with it. A missing sandbox binary is not a reason to spawn anyway: the
+command is reported unrunnable, and never as a refutation of whatever it was meant to check.
+*Check:* can the command reach the network, write outside its scratch space, or read ambient
+credentials? Is there any path where an unavailable sandbox degrades to a plain spawn?
+*Boundary:* code the program ships and controls, and an explicit opt-out the user configured —
+never a silent fallback. Recipe, argv and the traps: `references/sandboxing-untrusted-commands.md`.
+
 **Unlink link-shaped paths.** A path that may be a symlink or a Windows junction is removed
 with `lstat().is_symlink()` then `unlink`: unlink deletes the link only and refuses a real
 directory, so it never follows into the target. Windows `rmSync(link)` throws
 `ERR_FS_EISDIR` on a junction, and recursive deletion may descend through one.
 *Check:* can the removal primitive follow a link into its target? *Boundary:* a path the
 code created itself in a directory it owns.
+
+**Validate every component between the trusted root and the write, not just the leaf.** A path
+assembled as `root / state / sub / id` passes a separator check on `id` and still lands
+outside the tree when a pre-existing `state` is a symlink: `mkdir(parents=True)` creates the
+target's parents and the write follows the link. `lstat` each component that already exists
+(`is_symlink()`) before creating anything, and refuse rather than resolving to the target.
+*Prevents:* a repository under review carried `.tool-state -> /tmp/elsewhere`; the tool wrote its
+run artefacts outside the checkout its own docstring promised never to leave.
+*Check:* can any existing component of the destination path be a link, and does the code test
+it before `mkdir`/`open`?
+*Boundary:* a path whose parents the code created itself in a directory it owns, and a
+deliberate redirect the operator configured — that is policy, not untrusted input.
+
+**Claim a shared output directory exclusively.** Create the run/artifact directory
+with `mkdir(exist_ok=False)` before the first sample or report. An existence check
+followed by `mkdir(exist_ok=True)` is not a claim: two processes both pass the check
+and write into one directory. On a start failure before evidence, remove the empty
+claim; on a failure after evidence, keep it.
+*Prevents:* two concurrent runs sharing one run id, mixing samples and writing a
+verdict that describes neither. *Check:* can two processes both pass the guard and
+write the same directory? *Boundary:* a directory the caller explicitly supplied
+and owns, with its own locking.
+
+**Copy evidence only into a new destination.** `copytree(..., dirs_exist_ok=True)`
+merges two runs into one and silently overwrites the earlier verdict. Refuse an
+existing target; leave the source evidence in place and name both paths.
+*Prevents:* an export/`--keep` merging evidence. *Check:* can a copy overwrite or
+merge an existing run? *Boundary:* an explicit append/merge operation with a
+declared merge policy.
+
+**Decode child output with replacement, not trust.** `text=True` decodes with strict
+errors; a reviewer emitting one invalid byte raises `UnicodeDecodeError` out of the
+transport. Use `errors="replace"` for stdout/stderr and let schema validation reject
+the answer as a failed sample.
+*Prevents:* invalid UTF-8 crashing the run instead of becoming evidence. *Check:*
+can one non-UTF-8 byte escape as a traceback? *Boundary:* protocol bytes that must
+be exact (binary frames, hashes) are read as bytes, not text.
 
 **A missing working directory is not a missing executable.** A spawn given a `cwd` raises
 `FileNotFoundError` for an absent directory exactly as it does for an absent program, so a handler
@@ -168,6 +226,67 @@ round whose four claims were confirmed — the file was the run's only record of
 *Boundary:* a stage whose output derives only from files it just validated needs no extra gate; the
 rule binds the case where an external argument — a path, a revision, a URL — can be wrong.
 
+## Command-line and error boundaries
+
+A CLI is a boundary with a cost on the other side: a model call, a write, a child
+process. These rules decide what is refused before that cost is paid.
+
+**Preflight every user value before the first write or spawn.** Validate run ids,
+output parents, prompt and reviewer paths, base revisions and configuration before
+creating a run directory or calling a model. A malformed request must fail with the
+same code and message whether it arrives from the parser or a library caller.
+*Prevents:* an invalid `--keep`/`--sarif` path discovered after the expensive call,
+and a temp tree with no reader. *Check:* can any malformed argument reach the first
+`mkdir`, `open(..., "w")` or `Popen`? *Boundary:* a value only knowable after I/O
+(the diff, the resolved base) is validated where it is read, not in the parser.
+
+**A start failure has its own exit code.** Keep "nothing ran" (3) distinct from
+"ran and failed" (1) and "ran, evidence missing" (2). A missing executable or an
+unreadable instrument is a start failure, never a retried sample or an
+`INCOMPLETE` verdict. *Check:* can a missing binary be reported as a negative
+result? *Boundary:* a sample that ran and failed is evidence and stays recorded as
+a failed sample.
+
+**A run id is one portable path segment.** Reject `.`/`..`, both separators,
+Cc/Cf/Cs/Zl/Zp (control, bidi/zero-width, surrogate, line separators),
+Windows-reserved characters and overlong names before joining, then assert the
+joined path is under its root. `root / "/tmp/x"` discards the root.
+*Prevents:* `--run-id ../escape` writing outside the checkout, or a bidi id
+spoofing the path a reviewer reads. *Check:* can the joined path escape, become a
+device, or render as a different name? *Boundary:* a constant the code owns.
+
+**An output destination is a boundary, not a path string.** Before opening a
+report or keep destination, require the parent to exist and be writable and the
+leaf to be a regular file or a directory as the flag demands; a FIFO or device can
+block a write forever, and a symlink can write outside. The component-chain rule
+above applies to the parent too. *Check:* can `write_text` follow a link or block
+on a FIFO? *Boundary:* an operator-configured redirect is policy, but a tool-owned
+artefact still refuses a link.
+
+**A read path is also a boundary.** Check `is_file()`/`lstat` before reading a
+proof, config, prompt or reference path; `is_file()` false does not stop `open()`
+on a FIFO, and reading it can block forever. A non-regular target is a typed
+`UNRUNNABLE`/config error, not an open.
+*Check:* can a read block on a FIFO or follow a link? *Boundary:* a stream the
+caller explicitly supplies as a stream, with its own timeout.
+
+**Malformed external data becomes a typed outcome, not a traceback.** Wrap the
+parser's own exception (`TOMLDecodeError`, `JSONDecodeError`, `UnicodeDecodeError`)
+and a custom error that inherits the wrong base; name the path or field. A proof or
+validator that raises is `UNRUNNABLE`, not a crashed run. *Check:* can malformed
+data produce a traceback or an affirmative result? *Boundary:* programmer errors in
+code the program owns should still surface.
+
+**Human output is sanitized; machine output is exact.** Strip Cc/Cf/Cs/Zl/Zp from
+model text and paths before printing, or a claim can emit ANSI/bidi controls and
+newlines. Keep `verdict.json`/SARIF byte-exact. *Check:* can a finding drive the
+terminal? *Boundary:* structured outputs are evidence, not display.
+
+**Test the real entry point, not only the helper.** A probe matrix invokes the CLI
+with invalid argv, asserts the exit code, asserts no side effect, and fails on the
+word `Traceback`. Unit tests of a validation helper do not prove the parser reached
+it. Recipe and matrix: `references/cli-error-hardening.md`.
+
 ## Boundaries and pure logic
 
 **Validate at the boundary, trust inside.** Parse untrusted input once, at the edge (CLI args,
@@ -185,6 +304,11 @@ reads, calls, and writes.
 *Check:* can the decision be called in a test with literal inputs, no fixture and no server?
 *Boundary:* orchestration code has effects by definition; the rule binds the decision inside it,
 not the orchestration.
+*Enforcement:* name the pure modules in one list and let a test parse them — no `subprocess`,
+`urllib`, `os`, `time` or `sys`, and no `open`, `write_text`, `mkdir` or `run`. Read the
+**imported** module's file (`importlib.import_module(...).__file__`), never a hardcoded `src/`
+path: a scan of the checkout keeps inspecting the unmutated tree when the suite runs against a
+copy.
 
 **An operation converges under retry.** Every command, lifecycle step and loop is idempotent:
 interrupted and re-run, it reaches the same end state. Create-or-update rather than create; a
