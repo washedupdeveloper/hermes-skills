@@ -104,9 +104,17 @@ with the tooling), and it fails on:
 | newest CHANGELOG release ≠ build metadata | two numbers, one truth |
 | released versions are not strictly descending | the file is read top-down |
 | a version appears twice | a bump that was re-run |
+| two headings of one category (two `### Added`) under one release | section-keyed tooling merges or drops a list, and a scripted insert lands in the first |
 | a released heading has no valid date | when, for every release |
-| `## [Unreleased]` is not the first section | where the next entry goes |
+| the Unreleased heading (`## Unreleased`, or bracketed only when a compare link exists) is not first | where the next entry goes |
 | a document claims a release other than the build metadata | the prose is a third copy, and the only one nothing was checking |
+
+**The zero-release state is legal and must pass.** Before the first release there is no
+dated heading, so there is nothing to compare the build metadata against; the check must
+still pass when `## [Unreleased]` is first and every prose claim equals the metadata, and
+the bump cannot compute a version from nothing — require it explicitly (`--version
+0.1.0`) and keep the same rewrite path, so the first release is not the one release that
+skips the gate.
 
 Add `--tag vX.Y.Z` for the same check against a pushed tag. Never resolve the version
 from git inside the check — pass the tag in, so the same code works in a sandbox with no
@@ -128,6 +136,22 @@ tell history from a claim punishes documentation for doing its job. Pin all thre
 behaviours — a stale claim fails naming the file and the version it claims, agreeing prose
 passes in both the bold and plain spellings, and a historical mention does not trip it —
 because a prose check with no negative fixture is a regex you merely hope is right.
+
+**A shipped artifact's file name is a version copy as well.** `tool-1.2.3-py3-none-any.whl`
+in an install line, an image tag in a `docker run`, a download URL — each is the version
+written into prose, and a bump that renames the artifact but not the line ships a command
+that 404s. Add every artifact-name shape the docs quote to the same extractor and the same
+rewrite path; the `Current release` regex alone will not see them.
+
+**A build file is a version copy too, and no prose check reads it.** A `flake.nix` that
+hardcodes `version = "1.2.3"`, an image `tag`, and a check asserting `__version__ ==
+"1.2.3"` is three more copies of the number. Derive them from the one source — in Nix,
+`version = (builtins.fromTOML (builtins.readFile ./pyproject.toml)).project.version;` — and
+feed the package, the image tag and the check's expected value from that binding. Have
+`__version__` read the installed metadata (`importlib.metadata.version("pkg")`) with a
+source-checkout fallback, so the wheel cannot disagree with the tree that built it. A
+hardcoded image tag is the silent one: the package is 2.0.0 and the image still says 0.1.0,
+and every check still passes because each copy is internally consistent.
 
 **The pattern belongs in the production module, not in the test.** A prose check written
 inside the test suite reports the drift *after* the operation that causes it, and the
@@ -162,6 +186,12 @@ gate.
      check on the next push — which means the release is already committed and the fix is
      a second commit. Prose that quotes the release is part of the release, so the one
      command that changes the version changes all of it.
+   - **replace only the captured version group, never the rest of the match.** A pattern
+     that matches a wheel filename (`tool-1.2.3-py3-none-any.whl`) and a replacement built
+     as `match.group(0)[:match.start(1)] + version` drops `-py3-none-any.whl`, and the
+     README then advertises a file that does not exist. Splice `match.span(1)` and keep the
+     prefix and suffix; pin it with a bump test asserting the suffix survives and the
+     result passes the check.
    - **print the `git tag` command rather than running it** — tagging is publishing, and
      publishing is a decision.
    - **take the repository root as an argument (`--repo <path>`), not only from the CWD**,
@@ -206,6 +236,11 @@ chain and say which link you checked:
   and `WorkingDir` the docs claim. That is structure, not execution: say which of the two
   you did, and never present a structural pass as "the image works".
 
+The concrete commands for each artifact — wheel, image, tag and CI entry — are in
+`references/release-artifact-verification.md`. Label every check `executed` or
+`structural` in the release note: a structural check inspects bytes, and only an executed
+one runs the artifact.
+
 **The failure this catches: a release that predates the work.** A repo can be fully green,
 fully tagged, with CI passing — and the only downloadable artifact built from a commit
 dozens of changes old, carrying bugs the source no longer has. When a milestone's
@@ -214,13 +249,24 @@ tree's.
 
 ## Pitfalls
 
+- **The branch is yours; the main branch and the remote are not.** Work on a branch per session or
+  per feature and commit there. Never commit to the main branch and never push: a push publishes,
+  exactly as a tag does, and publishing belongs to whoever owns the remote. When the staging area or
+  `HEAD` changes under you, check `git reflog` and for a scheduling daemon before concluding your
+  work was lost or reverted — an orchestration job can commit and push on a timer while you edit,
+  and its commit messages will not describe your changes.
+
 - **`01.2.3` is not semver.** Leading zeros are forbidden; `^(0|[1-9]\d*)\.` per part, or
   a lenient `\d+` silently normalises a malformed version into a valid-looking one.
 - **Do not tag before CI is green on every platform.** A tag pushed over a red matrix
   publishes an artifact that fails its own suite on two of three OSes. Wait for the run.
-- **If you must move a tag, move it only when no shipped content changed.** Re-pointing a
-  tag over a test-only fix is defensible and keeps one version; re-pointing it over
-  product code is a silent change to a released version. Say which it was.
+- **A tag nobody can see is not published; once it is, it does not move.** Before the
+  remote has the tag and no release references it, a release commit that lands after
+  tagging should carry the tag forward: delete and re-create it at the final commit, and
+  say so. After publication, re-pointing it over product code is a silent change to a
+  released version; a test-only fix is the one defensible case, and even then say which it
+  was. Moving a local tag is not a rewrite of history — leaving it behind means the tag
+  does not contain the release's own evidence.
 - **`git push` the branch before the tag.** A tag on an unpushed commit publishes from a
   ref nobody can see, and the release's "source" link 404s.
 - **A tag-triggered publish job must be idempotent on the asset name.** A fixed asset
