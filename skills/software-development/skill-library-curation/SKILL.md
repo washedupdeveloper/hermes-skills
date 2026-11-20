@@ -1,7 +1,7 @@
 ---
 name: skill-library-curation
 description: "Curate the skill library: sourcing, overlap, conflicts."
-version: 1.11.0
+version: 1.11.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -250,6 +250,14 @@ skill, and do not leave both standing.
 Prefer **deleting** a false instruction over softening it. An unenforced spec inside
 a skill — a formula nothing reads, a flag nothing accepts, a step nobody implements —
 reads to a future agent as required work. Remove it and state who owns that concern.
+
+**A section added by another writer can contradict the rule below it, and shipping it unchanged
+ships the conflict.** Read the neighbouring sections before committing someone else's addition: a
+new procedure that says "commit on the deployed branch" sitting above a pitfall that says "never
+commit there" is two rules for one surface, and the reader cannot tell which wins. Fix it where the
+conflict is — name the exception inside the older rule and point it at the new procedure — rather
+than deleting either half, and say in the commit message that you reconciled them, so the author can
+disagree with the reconciliation instead of discovering it.
 
 ## Step 5 — Measure before cutting, then cut
 
@@ -606,14 +614,24 @@ proves nothing either way.
 - **Edit the repo, not the mount.** The mount is a reference, so a change made
   through it lands in the repo — but it is also *found* there by any other writer,
   so treat the mounted tree as shared state and check `git status` before trusting it.
-- **Verify the working tree, not the index.** Git stores LF under `eol=lf` while a
-  Windows checkout can still hold CRLF, and the working tree is what the agent
-  reads through the mount. `git add` therefore warns "CRLF will be replaced by LF"
-  and normalises the **blob only** — the file on disk keeps its CRLF, so a gate that
-  reads the working tree still fails and the warning reads as a fix. Normalise by
-  **content, not by extension**: an allowlist of `.md/.sh/.py/.json` misses `.vbs`,
-  `.service`, `.toml` and a shebang-less template, and each miss is one more gate
-  round-trip. Re-scan the working tree after staging instead of trusting the warning.
+- **Make git refuse CRLF, or nothing does.** Git stores LF under `eol=lf` while a
+  Windows checkout can still hold CRLF. `git add` warns "CRLF will be replaced by LF"
+  and normalises the **blob only** — the file on disk keeps its CRLF, and every gate that
+  reads the **git tree** (a flake's store copy, CI's fresh clone) is looking at already-LF
+  bytes, so nothing fails and the warning reads as a fix. The defect stays invisible until
+  a shell script breaks in WSL.
+  `core.safecrlf=true` turns that warning into a refusal: `git add` exits 128 with
+  `fatal: CRLF would be replaced by LF in <path>`, names the file, and stages nothing.
+  It is per clone — git does not track its own config — so pair it with the tracked
+  `.gitattributes` (`* text=auto eol=lf`) and set all three where a fresh clone will read
+  them: `core.autocrlf=false`, `core.eol=lf`, `core.safecrlf=true`. State both halves in the
+  repository's agent instructions, because only the attribute travels.
+  Prove it fires once: write a probe with CRLF, `git add` it, expect 128, confirm an LF file
+  still stages. From then on `git ls-files --eol` reading `i/lf w/lf` for every text file is
+  the check, and it needs no gate.
+  When a file does arrive CRLF, normalise by **content, not by extension**: an allowlist of
+  `.md/.sh/.py/.json` misses `.vbs`, `.service`, `.toml` and a shebang-less template, and
+  each miss is one more round-trip.
 
 ## Host scope is a label, not a directory
 
@@ -956,7 +974,9 @@ answer to "which copy is in play" when a local copy could be shadowing the mount
       unique content into it before deleting
 - [ ] A bulk delete asserted every target existed and checked the count afterwards, not
       the exit status of `rm -rf`
-- [ ] No text file in the repo is CRLF, and every generator pins `newline="\n"`
+- [ ] No text file in the repo is CRLF, and every generator pins `newline="\n"`; the clone
+      refuses to stage one (`core.safecrlf=true`, proven with a CRLF probe), and
+      `git ls-files --eol` reads `i/lf w/lf` throughout
 - [ ] Each cross-cutting rule has exactly one owner; others point to it
 - [ ] No skill contradicts the code or another skill
 - [ ] `validate-skills.py` passes on every touched file, and the target repo's own gate ran
