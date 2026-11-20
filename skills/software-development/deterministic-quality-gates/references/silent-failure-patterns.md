@@ -198,3 +198,27 @@ the tracked file makes the test's own failure mode the thing it was written to p
 Detection: plant a fake output directory inside the fixture and assert the check still
 passes and pins nothing from it.
 
+## A decoded read cannot see the encoding it is checking
+
+`Path.read_text()` runs in universal-newline mode, so `"\r\n" in text` is **always** false on a
+file full of CRLF — a line-ending rule written that way passes on every input and reports the tree
+clean. Measured: a gate's CRLF rule was re-implemented in Python with `read_text`, its own negative
+control then could not be made to fail, and the rule had not fired once since the port. Read
+**bytes** for any rule about encoding (`read_bytes()`, or `read_text(newline="")` at a call site
+that also needs text); leave decoding to the code that genuinely parses text, because one read
+serving two purposes hides which purpose it was correct for.
+
+Detection: plant a fixture whose *bytes* contain CRLF. A text-mode writer silently stores LF, so
+the fixture then proves nothing — write the bytes, and assert the rule names that path.
+
+## A rule ported without its control reports green forever
+
+Moving a rule to a new engine is a rewrite of the check, not of the property, so the rule arrives
+tested only if its negative control comes with it. Without one, the new implementation has never
+been observed to fail: it passes on a correct tree and on the defect it was written to catch. Two
+habits keep this visible — delete the old implementation in the same change, because two owners
+drift and the retired one keeps passing in whatever suite still runs it; and port the set
+wholesale, because a rule left behind in the old engine runs there and never here, which no diff
+shows. The proof is per-rule, not per-suite: for each ported rule, break its subject and watch
+*that rule* name it.
+

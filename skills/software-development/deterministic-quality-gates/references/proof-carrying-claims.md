@@ -40,6 +40,14 @@ Every parameter is typed and defaulted in the contract. An unknown key is `unrun
 must not accept a field its executor ignores, because that is how a reviewer adds a knob that does
 nothing and believes it took effect.
 
+**A kind whose executor can only return `unrunnable` is not a kind.** Shipping `dom` while the
+image contains no browser made every such claim unprovable by construction: the vocabulary promised
+a capability the artifact did not have, and the failure read as a property of the repository.
+Either ship the capability — and measure its cost, a browser is ~600 MB in the image — or drop the
+kind and let the claim be proven by a `command` that runs the project's own test. Assert
+`set(PROOF_KINDS) == set(EXECUTORS)`, and delete a kind whose executor is a stub returning "not
+implemented".
+
 **`command` asks the toolchain a narrower question than "is this path inside it?"** A nix
 `symlinkJoin` — the usual shape of a pinned analyzer set — makes `<prefix>/bin/gitleaks` a symlink
 to `/nix/store/<hash>-gitleaks-8.30.1/bin/gitleaks`, which is *not* under `<prefix>`. An
@@ -48,6 +56,71 @@ arrives as `unrunnable` on an individual claim rather than as a configuration er
 inverse: does `<prefix>/bin/<name>` resolve to this executable? A bare name is allowed when
 `which <name>` resolves to something the toolchain provides — and a hand-maintained allowlist of
 analyzer names goes stale the first time one is added.
+
+**Validation and execution must resolve a tool by the same rules.** Accepting a name in the
+allowlist and then failing to *find* it produces the worst message in the system: an approved,
+present, working analyzer reported as "not installed", and the claim left `unrunnable` for a reason
+that is false. The usual cause is that resolution consults only an environment variable — a property
+of the caller, not of the installation — so the same proof runs inside the shipped image and fails
+outside it. Resolve the way the rest of the CLI resolves (its own toolchain resolver, cached), and
+let the environment variable be the first candidate rather than the only one. Measured: six passes
+proved a complexity defect with `ruff`; three came back "`ruff` is not installed" because the caller
+had not exported the variable, and resolving through the CLI's own resolver took confirmation from
+3/6 to 5/6 without touching the producer.
+
+## Does the proof reach the claim?
+
+A proof has two independent coordinates: the **subject** it examines and the **reach** of the check
+it runs. Both have to cover the claim before any outcome means anything.
+
+| kind | names a subject as | reach is | fails to reach when |
+|---|---|---|---|
+| `present` | `path` (+ line) | that file | the path differs from the claim's |
+| `absent` | `include`/`exclude` patterns | every file matching include, minus exclude | the claimed path is excluded, or include does not cover it |
+| `command` | the tree as cwd | whatever its arguments address | only its control can tell — leave it there |
+| `json` | `path` + pointer | that file and node | the path differs |
+| `diff` | `path` + line | that file's changes against a base | no base revision, or the path differs |
+| `dom`, `http` | a selector / a loopback URL | that page or endpoint | the observation is about another target |
+
+Demote to `unsettled` — never `refuted` — when a proof misses its claim's location: the claim may
+still be true, it is simply not what was proven, and calling it false charges the producer for your
+matcher. Record the reason with the excluded or uncovered path in it, so the reader sees which of
+the two coordinates failed.
+
+**Reach is necessary and not sufficient.** A proof can examine the right file and still not observe
+the property claimed: an `absent` check that the symbol appears nowhere else says nothing about how
+complex the function is, even though the file matches. When the kind cannot observe the class of
+claim, the honest state is again `unsettled` — and the durable fix is in the prompt, naming which
+kind measures which property, because a producer that is not told will keep reaching for the check
+it finds easiest.
+
+## What counts as the change
+
+A `diff` proof is only as honest as the patch it reads, and `git diff <base>` is neither complete
+nor stable by default.
+
+- **Untracked files are part of the change.** `git diff` omits them, so a secret in a new file has
+  no hunk, every `diff` proof about it is refuted, and the run passes. Measured: a critical finding
+  at `new.py:1` produced `PASS` while `git status` showed `?? new.py`. Synthesize a new-file patch
+  (`--- /dev/null`, `+++ b/<path>`, one `+` line per line) from
+  `git ls-files --others --exclude-standard`; skip binary and oversized files **by recording
+  them**, because silently dropping a large untracked file reintroduces the same pass; and exclude
+  the tool's own state directory, or the second run reviews the first run's artefacts.
+- **Pin the patch's shape.** `diff.dstPrefix`, `color.ui`, `diff.external` and `diff.noprefix` are
+  user configuration, and a parser keyed on `+++ b/<path>` breaks under them: measured,
+  `diff.dstPrefix=new/` turned every path into `new/a.py`, so a proof about `a.py` was refuted and
+  a real defect passed. Invoke `git -c color.ui=false -c diff.srcPrefix=a/ -c diff.dstPrefix=b/
+  diff --no-color --no-ext-diff <base>`.
+
+## Merging samples: union the evidence
+
+Several samples of one producer report the same defect with different proofs. Key the merge on the
+location `(dimension, file, line)`, but keep **every** distinct proof and run them all: take the
+highest severity for the label, and let **any** proof that holds settle the finding. Keeping only
+the highest-severity sample's proof leaves the other claims unbacked — a claim can outlive the
+evidence that was actually run — and one refuted proof then clears a defect another sample proved.
+Measured: two samples, one refuted and one proven, is a proven finding.
+
 
 ## Wiring the states into the verdict
 
@@ -119,6 +192,26 @@ on which part of the instruction is pinned.
   decides whether the wording works is how many blocking claims come back `proven` in one run of the
   real model against a real repository; 0 of 5 then 4 of 7 is that signal, and no unit test can
   produce it.
+
+### What actually comes back
+
+The model does not always answer in the message body, and three transports break a strict parser:
+
+- **A tool transcript.** The producer may write the JSON to a file and return the tool's output —
+  `│ +{"sections": …}`. Parse the **first complete object** from the text
+  (`JSONDecoder().raw_decode`), not `text[find("{"):rfind("}")]`: the last brace may belong to a
+  second object and the slice then fails with "Extra data". The schema check after it is unchanged.
+- **Literal control characters.** Multi-line claims arrive with unescaped newlines inside strings;
+  `json.loads(..., strict=False)` accepts them, and the bytes are unambiguous.
+- **Truncation.** A long answer is cut mid-string and no parser recovers it — cap what you ask for
+  ("each claim under 160 characters"), and let a truncated sample fail as `unrunnable` rather than
+  parsing a fragment into a finding nobody wrote.
+- **Redaction.** An agent harness redacts credentials in the output (`AKIA…` → `***`), so a
+  `present` proof that quotes the secret cannot round-trip: the string ends at `***` and the sample
+  is unparseable. Never instruct the producer to echo a secret; cite the file and line and prove it
+  with `diff`.
+- **Keep what it said.** Store the raw answer on a failed sample (a few KB is enough). Without it,
+  "not valid JSON" is the only diagnosis available, and the retry repeats the same defect.
 
 ## The verdict document
 
@@ -201,6 +294,11 @@ run**, not only the function — see the verification rule on flags that are par
 
 - **Not a sandbox.** `command` restricts *which* executables may run, not what a permitted one does.
   The reviewer already has the invoking user's access; pretending otherwise is worse than the gap.
+  A default list that contains an interpreter (`python3`) or a build tool (`nix`) is a **trust
+  list**, not a control: `python3 -c` executes anything, and `nix build` runs the flake — which is
+  inside the diff under review. Removing one interpreter while keeping the build tool changes the
+  spelling of the hole, not its size. Either call it a trust list in the docs, or run proofs in a
+  real sandbox; do not let a default make it look like a boundary.
 - **A producer-written control is trusted when it is offered.** Synthesis covers the four
   tree-reading kinds when a base revision is available; it does not audit a control the producer
   did write, and a vacuous one (an empty fixture) still reads as refuted. `control_source` on every
