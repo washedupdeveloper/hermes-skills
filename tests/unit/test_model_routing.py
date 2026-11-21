@@ -139,6 +139,8 @@ class CalibrationTests(unittest.TestCase):
             self.assertEqual(half.monthly_total.input, 500_000)
             with self.assertRaises(calibration.CalibrationError):
                 calibration.measure("builder", path, month_days=0)
+            with self.assertRaises(calibration.CalibrationError):
+                calibration.measure("builder", path, window_days=0)
 
     def test_percentile_bundle_total_is_a_real_session_total(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

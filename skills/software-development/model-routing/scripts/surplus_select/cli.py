@@ -69,6 +69,13 @@ def _role_for_profile(name: str) -> str | None:
 
 
 def _combine(roles: list[calibration.RoleCalibration]) -> calibration.RoleCalibration:
+    """Combine profiles mapped to one role.
+
+    `monthly_total` is exact: it sums the measured windows. `per_session` and
+    `per_call` are an envelope, taking the largest p50 and largest p90 across
+    profiles; they are not a pooled distribution. The report budgets from the
+    exact monthly total, not from these percentiles.
+    """
     first = roles[0]
     total = first.monthly_total
     sessions = first.sessions

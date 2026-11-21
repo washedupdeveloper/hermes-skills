@@ -106,6 +106,8 @@ def measure(
     if not path.is_file():
         raise CalibrationError(f"no state database at {path}")
     now = now or datetime.now(timezone.utc)
+    if window_days <= 0:
+        raise CalibrationError("window_days must be positive")
     if month_days <= 0:
         raise CalibrationError("month_days must be positive")
     cutoff = now.timestamp() - window_days * 86400
