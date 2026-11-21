@@ -272,6 +272,7 @@ understates the sum by an order of magnitude.
 
 ```bash
 python3 tests/unit/test_model_routing.py        # 65 tests, stdlib only
+bash tests/e2e/run_from_scratch.sh             # clone + CLI, black box
 python3 -m surplus_select status --snapshot <file> --budget <file>
 ```
 
