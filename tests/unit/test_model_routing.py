@@ -487,6 +487,12 @@ Route|p50 latency|p95 latency|Throughput|Success rate|Share|
         self.assertFalse(snap.capabilities["discounts"])
         self.assertIsNone(snap.models["m1"].best)
 
+    def test_http_timeout_and_retry_bounds_are_validated(self) -> None:
+        with self.assertRaises(ValueError):
+            providers.UrllibHttp(timeout=0)
+        with self.assertRaises(ValueError):
+            providers.UrllibHttp(retries=0)
+
     def test_catalog_price_quoted_per_million_is_refused(self) -> None:
         payload = {
             "data": [
