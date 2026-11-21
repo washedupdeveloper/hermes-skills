@@ -122,7 +122,9 @@ modes: the price is a spot market, and the benchmark board is a composite.
 Full procedure, board table and cost formulas:
 `references/llm-model-market-selection.md`. Baseline resolution, escalation,
 `routing.yaml`, dispatch, profile emission, budget calibration and the report
-contract: `references/llm-routing-operations.md`.
+contract: `references/llm-routing-operations.md`. The executable selector for
+this repo is the `model-routing` skill; this section is the decision
+framework.
 
 1. **Headline on the live best; budget on the realised.** Marketplaces quote
    top-of-book, median and request-weighted realised prices. Report the live
@@ -135,15 +137,18 @@ contract: `references/llm-routing-operations.md`.
    effective cost as price ÷ success rate and record 24h volume as liquidity.
 3. **Tier by reversibility, not difficulty.** Judge (irreversible), reviewer
    (expensive to undo), builder (everything else), runner (parallel grunt
-   work). The strongest model gets the fewest calls.
+   work). The strongest model gets the fewest calls. A tier is a prompt and a
+   budget, not a requirement for a different model: if no candidate is better
+   and cheaper, the tier collapses into the builder.
 4. **Cross-check two boards that disagree.** Prefer unsaturated agentic and
    reasoning suites (SWE-bench Pro, DeepSWE, Terminal-Bench 4.x, HLE-Diamond,
    FrontierMath) over saturated SWE-bench Verified; separate independent runs
    from vendor-reported tables.
 5. **Cost a standard task, not a million tokens.** Convert $/M into a per-task
    cost at a fixed input/output shape, then report token share beside spend
-   share — the review tier usually dominates the bill while the builder
-   dominates the volume.
+   share. Do not assume the reviewer is the expensive tier: when it shares the
+   builder model, the small-volume judge can dominate the bill. The shares are
+   an output of the chosen portfolio, not a property of the roles.
 6. **Calibrate token volumes; never invent them.** Round-number budgets
    (3,000 turns × 50k in / 10k out) are guesses. Read `session_model_usage` in
    Hermes `state.db` for p50/p90 input, output, cache reads and reasoning over
@@ -158,6 +163,11 @@ contract: `references/llm-routing-operations.md`.
    verify against a task-level acceptance check, and move up only when that
    check fails; never route below the baseline without an explicit opt-in. A
    task with no predicate returns "needs scoping", not a bigger model.
+8. **No dominated candidate, and no premium without a threshold.** Drop any
+   candidate that another beats on both the discriminating score and realised
+   price. A different model or technology must clear a stated materiality bar
+   (5% relative is a defensible default) and fit a budget; otherwise use the
+   incumbent. Report marginal cost per point, not just the price multiple.
 
 ## Adopting an external system over an in-house one
 
