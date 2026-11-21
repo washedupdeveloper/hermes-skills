@@ -378,6 +378,7 @@ class PortfolioTests(unittest.TestCase):
                     coding=80.0, hle=47.3, frontier_math=90.9
                 ),
                 "gpt-6.2-sol": benchmarks_mod.Benchmark(coding=83.3, hle=64.0),
+                "qwen4-max": benchmarks_mod.Benchmark(coding=76.0, hle=44.9),
                 "gpt-6.2-astra": benchmarks_mod.Benchmark(
                     coding=91.8, hle=72.2, frontier_math=92.6
                 ),
@@ -404,6 +405,7 @@ class PortfolioTests(unittest.TestCase):
             market("deepseek-v4.1-flash-1017", "DeepSeek", 0.147, 0.60, 0.0097, 0.0396, 93.4),
             market("gpt-6.1-terra", "Terra", 1.00, 5.00, 0.226, 1.13, 77.4),
             market("gpt-6.2-sol", "Sol", 2.00, 10.00, 0.548, 2.74, 72.6),
+            market("qwen4-max", "Qwen4 Max", 1.43, 4.28, 0.1916, 0.5735, 86.6),
             market("gpt-6.2-astra", "Astra", 8.00, 40.00, 2.096, 10.48, 73.8),
             market("claude-fable-5.2", "Fable", 8.00, 40.00, 3.328, 16.64, 58.4),
         ]
@@ -414,14 +416,55 @@ class PortfolioTests(unittest.TestCase):
             models={model.model_id: model for model in models},
         )
 
-    def test_portfolio_has_four_distinct_roles(self) -> None:
+    def test_default_portfolio_does_not_buy_a_premium(self) -> None:
         portfolio = choose(self._cache(), self._snapshot(), "deepseek-v4.1-flash-1017")
         roles = {role.name: role.model_id for role in portfolio.roles}
         self.assertEqual(roles["judge"], "claude-fable-5.2")
         self.assertEqual(roles["builder"], "deepseek-v4.1-flash-1017")
-        self.assertEqual(roles["reviewer"], "gpt-6.1-terra")
-        self.assertEqual(roles["runner"], "gpt-6.2-sol")
-        self.assertEqual(len(set(roles.values())), 4)
+        self.assertEqual(roles["reviewer"], "deepseek-v4.1-flash-1017")
+        self.assertEqual(roles["runner"], "deepseek-v4.1-flash-1017")
+        self.assertIn("qwen4-max", portfolio.rejected or {})
+        self.assertEqual(
+            portfolio.rejected["qwen4-max"], "deepseek-v4.1-flash-1017"
+        )
+
+    def test_dominated_model_is_never_a_role(self) -> None:
+        portfolio = choose(self._cache(), self._snapshot(), "deepseek-v4.1-flash-1017")
+        self.assertNotIn("qwen4-max", portfolio.model_ids())
+
+    def test_reviewer_upgrade_requires_materiality_and_budget(self) -> None:
+        tokens = Tokens(input=75_000_000, output=8_000_000)
+        tight = choose(
+            self._cache(),
+            self._snapshot(),
+            "deepseek-v4.1-flash-1017",
+            review_budget_usd=200,
+            review_tokens=tokens,
+        )
+        self.assertEqual(tight.get("reviewer").model_id, "gpt-6.2-sol")
+        wide = choose(
+            self._cache(),
+            self._snapshot(),
+            "deepseek-v4.1-flash-1017",
+            review_budget_usd=1_000_000,
+            review_tokens=tokens,
+        )
+        self.assertEqual(wide.get("reviewer").model_id, "gpt-6.2-astra")
+
+    def test_runner_uses_a_cheaper_nondominated_model(self) -> None:
+        cache = self._cache()
+        cache.models["cheap-coder"] = benchmarks_mod.Benchmark(coding=70.0)
+        snap = self._snapshot()
+        snap.models["cheap-coder"] = ModelMarket(
+            model_id="cheap-coder",
+            name="Cheap Coder",
+            context=1_000_000,
+            list_price=Price(0.01, 0.04),
+            best=Price(0.005, 0.02),
+            realised_discount=50.0,
+        )
+        portfolio = choose(cache, snap, "deepseek-v4.1-flash-1017")
+        self.assertEqual(portfolio.get("runner").model_id, "cheap-coder")
 
     def test_portfolio_refuses_an_unscored_market(self) -> None:
         empty = benchmarks_mod.BenchmarkCache(

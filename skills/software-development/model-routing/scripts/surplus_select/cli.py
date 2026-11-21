@@ -210,7 +210,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
     cache = benchmarks_mod.load(args.benchmarks)
 
     resolved = baseline_mod.resolve(args.baseline, args.baseline_env, Path(args.profile_config))
-    portfolio = choose(cache, snap, resolved.model)
+    review_tokens = budget.role("reviewer").monthly_total if budget.role("reviewer") else None
+    portfolio = choose(
+        cache,
+        snap,
+        resolved.model,
+        review_budget_usd=args.review_budget,
+        review_tokens=review_tokens,
+        min_gain=args.min_gain,
+    )
     routing_map = _resolve_routing(change)
     if not routing_map.tasks:
         print(f"error: no tasks in {change / 'tasks.md'}", file=sys.stderr)
@@ -231,6 +239,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
         baseline=resolved.model,
         baseline_source=resolved.source,
         sources=SOURCES,
+        review_tokens=review_tokens,
+        review_budget_usd=args.review_budget,
+        min_gain=args.min_gain,
     )
     out = Path(args.out).expanduser()
     out.mkdir(parents=True, exist_ok=True)
@@ -240,10 +251,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
         (out / "report.html").write_text(report.render_html(payload), encoding="utf-8")
 
     print(f"baseline   {resolved.model}  ({resolved.source})")
+    print(
+        f"policy     independent reviewer budget ${args.review_budget:,.2f}/mo, "
+        f"materiality {args.min_gain:.0%}"
+    )
     print(f"snapshot   {snap.freshness()}  {snap.age_hours():.1f}h  {snapshot_mod.digest(snap)}")
     print("portfolio")
     for role in portfolio.roles:
         print(f"  {role.name:<9} {role.model_id:<32} coding {role.coding or 0:>5.1f}  {report._price(role.realised)}")
+    print(f"models     {len(set(portfolio.model_ids()))} distinct for {len(portfolio.roles)} roles")
     print(f"cost       ${payload['costs']['total']:,.2f}/mo (7-day realised, {budget.window_days}d window)")
     print("tasks")
     for decision in decisions:
@@ -297,6 +313,18 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--baseline-env", default=os.environ.get("SURPLUS_BASELINE_MODEL", ""))
     plan.add_argument("--out", default=None)
     plan.add_argument("--accept-stale", action="store_true")
+    plan.add_argument(
+        "--review-budget",
+        type=float,
+        default=0.0,
+        help="USD/month cap for an independent reviewer model; 0 keeps the builder model",
+    )
+    plan.add_argument(
+        "--min-gain",
+        type=float,
+        default=0.05,
+        help="relative coding improvement required for a reviewer upgrade",
+    )
     plan.add_argument("--no-html", action="store_true")
     plan.set_defaults(func=cmd_plan)
     return parser

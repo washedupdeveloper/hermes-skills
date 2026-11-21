@@ -43,6 +43,13 @@ python3 "$S/scripts/run.py" refresh \
 python3 "$S/scripts/run.py" plan \
   --change openspec/changes/<change-name> \
   --out "$STATE/report"
+
+# Optional: authorise an independent reviewer up to $80/month.
+# Without this, the builder model reviews under a separate rubric.
+python3 "$S/scripts/run.py" plan \
+  --change openspec/changes/<change-name> \
+  --review-budget 80 \
+  --out "$STATE/report-independent"
 ```
 
 `plan` reads `routing.yaml` from the change when present; otherwise it drafts
@@ -53,14 +60,35 @@ one from `tasks.md` by tagging each task. It writes `report.json` and
 
 | Role | Rule | What it is allowed to do |
 |---|---|---|
-| **judge** | Best combined coding and hard-reasoning score; price is not a tie-breaker | Architecture decisions only. Never implements. |
-| **reviewer** | Cheapest model at least two coding points above the builder, under 75% of the judge's price | Plans and reviews. Never writes the patch. |
+| **judge** | Best combined coding and hard-reasoning score on the frontier; price is not a tie-breaker | Architecture decisions only. Never implements. |
+| **reviewer** | The builder model by default. A different model only when `--review-budget` is set, it is at least 5% better on coding, and its measured monthly cost fits that budget | Checks and plans. Never writes the patch. |
 | **builder** | The ambient baseline when it is in the market | Implements every task. |
-| **runner** | Cheapest non-builder, non-judge, non-reviewer model clearing 65 | Mechanical and test work. |
+| **runner** | The builder model unless a cheaper non-dominated model clears 65 | Mechanical and test work. |
+
+### Dominance and materiality
+
+Before any role is filled, a model that another model beats on **both** axes is
+removed: at least as high a coding score for at least as low a realised price.
+A worse model at a higher price is not a tier and cannot be selected.
+
+The reviewer is the builder model unless a review budget is set. A different
+reviewer must clear both gates:
+
+1. **Materiality** — at least `--min-gain` better on the coding basket, 5% by
+   default. A 3.6-point gain on a 76.4 baseline is 4.7%; it is rejected as
+   immaterial, not because the model is bad.
+2. **Budget** — its monthly cost at the measured review volume must fit
+   `--review-budget`. The default is `0`, which means the builder model reviews
+   under a separate rubric. That is a consistency check, not an independent
+   reviewer.
+
+A role is a prompt and a budget. Three roles sharing one model is a valid and
+often the rational outcome.
 
 The judge is the "most capable, least used" tier: it is attached as `decider`
-to `architecture` tasks and nothing else. The reviewer is where volume lives,
-so it is chosen on value, not maximum score.
+to `architecture` tasks and nothing else. The reviewer is a volume role; it
+defaults to the builder and only buys a different model when the materiality
+and budget gates both pass.
 
 ## The four price bases
 

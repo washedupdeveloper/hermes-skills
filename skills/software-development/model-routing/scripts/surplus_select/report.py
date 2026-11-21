@@ -69,6 +69,9 @@ def collect_callouts(
     cache: BenchmarkCache,
 ) -> list[dict]:
     callouts: list[dict] = []
+    review_tokens = (
+        budget.role("reviewer").monthly_total if budget.role("reviewer") else None
+    )
     if not snapshot.allows_profile_writes():
         callouts.append(
             {
@@ -98,6 +101,19 @@ def collect_callouts(
     total = sum(costs.values()) or 1.0
     reviewer = costs.get("reviewer", 0.0) / total
     builder = costs.get("builder", 0.0) / total
+    judge_share = costs.get("judge", 0.0) / total
+    if judge_share > 0.4:
+        callouts.append(
+            {
+                "kind": "info",
+                "title": "The judge is the bill",
+                "body": (
+                    f"The judge is {judge_share * 100:.0f}% of modelled spend on a small "
+                    "fraction of the tokens. That is the price of the critical tier, and it "
+                    "buys architecture decisions only."
+                ),
+            }
+        )
     if reviewer > 0.5:
         reviewer_tokens = (
             budget.role("reviewer").monthly_total.total() if budget.role("reviewer") else 0
@@ -128,19 +144,6 @@ def collect_callouts(
             }
         )
 
-    measured = budget.role("builder")
-    if measured and measured.monthly_total.total():
-        callouts.append(
-            {
-                "kind": "good",
-                "title": "Volume is not the bill",
-                "body": (
-                    f"The builder carries {measured.monthly_total.total() / 1_000_000:.0f}M tokens "
-                    f"for {builder * 100:.0f}% of the modelled spend."
-                ),
-            }
-        )
-
     scored = [
         (market, cache.get(model_id))
         for model_id, market in snapshot.models.items()
@@ -163,7 +166,141 @@ def collect_callouts(
                         ),
                     }
                 )
+
+    reviewer = portfolio.get("reviewer")
+    builder_role = portfolio.get("builder")
+    if reviewer and builder_role and reviewer.model_id == builder_role.model_id:
+        callouts.append(
+            {
+                "kind": "info",
+                "title": "Review is a role, not a second model",
+                "body": (
+                    "The reviewer is the builder model under a separate rubric. It is a consistency "
+                    "check, not an independent reviewer. Set a review budget to buy independence."
+                ),
+            }
+        )
+    runner = portfolio.get("runner")
+    if runner and builder_role and runner.model_id == builder_role.model_id:
+        callouts.append(
+            {
+                "kind": "info",
+                "title": "No separate runner",
+                "body": (
+                    "Every alternative runner is dominated: a lower coding score at a higher price. "
+                    "A second model here would buy nothing."
+                ),
+            }
+        )
+
+    rejected = portfolio.rejected or {}
+    if rejected and review_tokens is not None:
+        examples = []
+        for model_id, by in rejected.items():
+            market = snapshot.models.get(model_id)
+            bench = cache.get(model_id)
+            dominator = snapshot.models.get(by)
+            other = cache.get(by)
+            if (
+                market is None
+                or bench is None
+                or bench.coding is None
+                or dominator is None
+                or other is None
+                or other.coding is None
+            ):
+                continue
+            cost = market.realised().cost(review_tokens)
+            dom_cost = dominator.realised().cost(review_tokens)
+            ratio = cost / dom_cost if dom_cost > 0 else 0.0
+            examples.append((model_id, by, bench.coding, cost, ratio, other.coding, dom_cost))
+        if examples:
+            model_id, by, coding, cost, ratio, other_coding, dom_cost = max(
+                examples, key=lambda item: item[4]
+            )
+            callouts.append(
+                {
+                    "kind": "warn",
+                    "title": "A worse model at a higher price is not a tier",
+                    "body": (
+                        f"{snapshot.models[model_id].name} scores {coding:.1f} at "
+                        f"${cost:,.2f}/mo for review; {snapshot.models[by].name} scores "
+                        f"{other_coding:.1f} at ${dom_cost:,.2f}. Worse and "
+                        f"{ratio:.0f}x the price, so it is removed before any role is chosen."
+                    ),
+                }
+            )
     return callouts
+
+
+def _frontier_rows(
+    snapshot: Snapshot,
+    cache: BenchmarkCache,
+    portfolio: Portfolio,
+    review_tokens: Tokens | None,
+    min_gain: float,
+) -> list[dict]:
+    """Every scored model with the number that decides its fate."""
+    builder = portfolio.get("builder")
+    builder_coding = (builder.coding or 0.0) if builder else 0.0
+    builder_cost = (
+        builder.realised.cost(review_tokens) if builder and review_tokens else 0.0
+    )
+    roles_by_model: dict[str, list[str]] = {}
+    for role in portfolio.roles:
+        roles_by_model.setdefault(role.model_id, []).append(role.name)
+    rejected = portfolio.rejected or {}
+    rows: list[dict] = []
+    for model_id, market in snapshot.models.items():
+        bench = cache.get(model_id)
+        if bench is None or bench.coding is None:
+            continue
+        realised = market.realised()
+        cost = realised.cost(review_tokens) if review_tokens else 0.0
+        gain = bench.coding - builder_coding
+        marginal = (
+            (cost - builder_cost) / gain
+            if gain > 0 and model_id not in rejected
+            else None
+        )
+        if model_id in roles_by_model:
+            verdict = "role: " + ", ".join(roles_by_model[model_id])
+        elif model_id in rejected:
+            dominator = rejected[model_id]
+            dom_market = snapshot.models.get(dominator)
+            if dom_market is not None and review_tokens is not None:
+                dom_cost = dom_market.realised().cost(review_tokens)
+                ratio = cost / dom_cost if dom_cost > 0 else 0.0
+                verdict = f"dominated by {dominator}: {ratio:.0f}x cost, {gain:+.1f} pts"
+            else:
+                verdict = f"dominated by {dominator}"
+        elif gain <= 0:
+            verdict = "no gain over builder"
+        elif gain < builder_coding * min_gain:
+            verdict = (
+                f"rejected: +{gain:.1f} pts "
+                f"(+{gain / builder_coding * 100:.1f}%) < {min_gain:.0%}"
+            )
+        elif cost:
+            verdict = f"upgrade at ${cost:,.0f}/mo"
+        else:
+            verdict = "available"
+        rows.append(
+            {
+                "model": model_id,
+                "name": market.name,
+                "coding": bench.coding,
+                "blend": realised.blended(0.2),
+                "review_cost": round(cost, 2),
+                "delta": round(gain, 1),
+                "delta_pct": round(gain / builder_coding * 100, 1) if builder_coding else None,
+                "marginal_per_point": round(marginal, 2) if marginal is not None else None,
+                "verdict": verdict,
+                "dominated": model_id in rejected,
+            }
+        )
+    rows.sort(key=lambda row: row["blend"])
+    return rows
 
 
 def build(
@@ -178,6 +315,9 @@ def build(
     baseline_source: str,
     generated_at: datetime | None = None,
     sources: list[dict] | None = None,
+    review_tokens: "Tokens | None" = None,
+    review_budget_usd: float = 0.0,
+    min_gain: float = 0.05,
 ) -> dict:
     generated = generated_at or datetime.now(timezone.utc)
     decisions = list(decisions)
@@ -200,6 +340,7 @@ def build(
             }
         )
     market_rows.sort(key=lambda row: (-(row["coding"] or -1), row["realised"][0]))
+    frontier = _frontier_rows(snapshot, cache, portfolio, review_tokens, min_gain)
     costs = {role.name: round(_monthly_cost(role, budget), 2) for role in portfolio.roles}
     return {
         "schema_version": 1,
@@ -238,6 +379,22 @@ def build(
             },
         },
         "portfolio": [_role_row(role) for role in portfolio.roles],
+        "policy": {
+            "min_gain": min_gain,
+            "review_budget_usd": review_budget_usd,
+            "dominance": "a model is removed when another scores at least as high for at least as low a price",
+            "materiality": "a different reviewer must beat the builder by this relative coding gain",
+        },
+        "frontier": frontier,
+        "review_volume": (
+            {
+                "input": review_tokens.input,
+                "output": review_tokens.output,
+                "cache_read": review_tokens.cache_read,
+            }
+            if review_tokens is not None
+            else None
+        ),
         "costs": {
             "roles": costs,
             "total": round(sum(costs.values()), 2),
@@ -264,10 +421,13 @@ def build(
         "method": (
             "Prices are the live best offer (headline) and the request-weighted seven-day "
             "realised average (budget), both read from the provider's order book; list price "
-            "is reference only. Coding scores come from BenchLM's weighted basket; reasoning "
-            "from HLE-Diamond and FrontierMath where cached. Token volumes come from the "
-            "Hermes state database when calibrated, otherwise from the labelled illustrative "
-            "defaults. The model and baseline that produced this report are recorded above."
+            "is reference only. A model that is worse and more expensive than another is "
+            "removed before roles are chosen. A different reviewer must beat the builder by "
+            "the stated materiality threshold and fit the review budget; otherwise the builder "
+            "model reviews under a separate rubric. Coding scores come from BenchLM's weighted "
+            "basket; reasoning from HLE-Diamond and FrontierMath where cached. Token volumes "
+            "come from the Hermes state database when calibrated, otherwise from the labelled "
+            "illustrative defaults."
         ),
     }
 
@@ -349,6 +509,47 @@ def render_html(payload: dict) -> str:
         table_class="market",
     )
 
+    frontier_rows = []
+    for row in payload["frontier"]:
+        marginal = (
+            f"${row['marginal_per_point']:,.2f}"
+            if row["marginal_per_point"] is not None
+            else "—"
+        )
+        verdict = html.escape(row["verdict"])
+        if row["dominated"]:
+            verdict = f'<span class="tag warn">{verdict}</span>'
+        elif row["verdict"].startswith("rejected"):
+            verdict = f'<span class="tag">{verdict}</span>'
+        delta = f"{row['delta']:+.1f}"
+        if row["delta_pct"] is not None:
+            delta += f" ({row['delta_pct']:+.1f}%)"
+        frontier_rows.append(
+            [
+                html.escape(row["name"]),
+                _score(row["coding"]),
+                _money(row["blend"]),
+                f"${row['review_cost']:,.2f}",
+                delta,
+                marginal,
+                verdict,
+            ]
+        )
+    frontier_table = _table(
+        [
+            "Model",
+            "Coding",
+            "7-day blend $/M",
+            "Review $/mo",
+            "Δ pts",
+            "Marginal $/pt",
+            "Verdict",
+        ],
+        frontier_rows,
+        numeric={1, 2, 3, 4, 5},
+        table_class="frontier",
+    )
+
     task_rows = []
     for task in payload["tasks"]:
         badge = (
@@ -386,6 +587,13 @@ def render_html(payload: dict) -> str:
     )
     generated = payload["generated_at"].replace("T", " ").replace("+00:00", " UTC")
     fetched = payload["snapshot"]["fetched_at"].replace("T", " ").replace("+00:00", " UTC")
+    volume = payload.get("review_volume")
+    volume_text = (
+        f"{_mtok(volume['input'])} input, {_mtok(volume['output'])} output and "
+        f"{_mtok(volume['cache_read'])} cache"
+        if volume
+        else "no measured review volume"
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -446,6 +654,8 @@ def render_html(payload: dict) -> str:
   .callout{{border:1px solid #c6ccd4;border-radius:8px;padding:14px 16px;margin:12px 0;background:#fdfcf9}}
   .callout.warn{{background:var(--warnsoft);border-color:#ecd3b3}}
   .callout.good{{background:var(--goodsoft);border-color:#c8e3d4}}
+  .callout.info{{background:var(--soft);border-color:#c9dce8}}
+  .callout.info .label{{color:var(--accent)}}
   .callout .label{{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
                    margin-bottom:4px;color:var(--accent)}}
   .callout.warn .label{{color:var(--warn)}}
@@ -490,27 +700,34 @@ def render_html(payload: dict) -> str:
 <main>
 <section>
   <p class="kicker">The portfolio</p>
-  <h2>Four roles, four jobs</h2>
+  <h2>Roles, not a model count</h2>
   <div class="tiers">{''.join(role_cards)}</div>
-  <p class="note">The judge decides, the reviewer plans and reviews, the builder implements, the runner takes the mechanical work. Role choice is heuristic; the evidence is in the JSON.</p>
+  <p class="note">The judge decides, the reviewer checks, the builder implements, the runner takes the mechanical work. A role is a prompt and a budget; it does not require a separate model.</p>
 </section>
 {''.join(callouts)}
 <section>
-  <p class="kicker">01 · Market</p>
+  <p class="kicker">01 · Frontier</p>
+  <h2>What the market actually offers</h2>
+  <p>Before any role is filled, a model that is worse and more expensive than another is removed. The remainder are priced at the measured review volume, and the marginal cost per coding point is shown against the builder.</p>
+  {frontier_table}
+  <p class="note">Review $/mo applies the 7-day realised price to the measured review month ({volume_text}). A different reviewer must beat the builder by {payload["policy"]["min_gain"]:.0%}; the independent reviewer budget is ${payload["policy"]["review_budget_usd"]:,.0f}/mo, and 0 means the builder model reviews.</p>
+</section>
+<section>
+  <p class="kicker">02 · Market</p>
   <h2>Every price basis, kept apart</h2>
   <p>The live best is what you can buy now. The seven-day realised average is what buyers actually paid and is the only number used for the monthly budget. List price is reference and never enters a cost calculation.</p>
   {market_table}
   <p class="note">Coding score is BenchLM's weighted basket. A dash means the model has no score, not a zero. Snapshot digest {html.escape(payload["snapshot"]["digest"])}.</p>
 </section>
 <section>
-  <p class="kicker">02 · Tasks</p>
+  <p class="kicker">03 · Tasks</p>
   <h2>What runs where</h2>
   <p>Each task carries its acceptance predicate. A task without one is not routed; it is returned for scoping.</p>
   {task_table}
   <p class="note">Review is mandatory for bug fixes, refactors, security and architecture. Architecture tasks also carry a decider.</p>
 </section>
 <section>
-  <p class="kicker">03 · Budget</p>
+  <p class="kicker">04 · Budget</p>
   <h2>Measured volume, not a guess</h2>
   <p>Monthly totals are the sum over the calibration window. Per-session and per-call percentiles size one task; they are not multiplied by the session count. Calibration: {html.escape(payload["budget"]["calibrated_at"])}, window {payload["budget"]["window_days"]} days.</p>
   {_budget_table(payload)}

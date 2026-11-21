@@ -396,8 +396,11 @@ python3 "<skill_dir>/scripts/skill-audit.py" <skills-root> > audit.json
 ```
 
 Checks what breaks loading or discoverability: leading `---`, required frontmatter,
-description ≤ 60 chars ending in a period, `name` matching the directory, and every
-`related_skills` entry resolving. Exit 0 = clean.
+description within the contract's window, `name` matching the directory, and every
+`related_skills` entry resolving. Exit 0 = clean. **Read `library/contract.json`
+for the window**: one library enforces 57 characters, not the 60 a generic
+validator assumes, and its `validate.py` also cross-checks the README headline
+counts and the layout tree.
 
 **A skill's scripts are covered by no metric — compile and run them.** The audit counts
 bytes, descriptions, dead references and orphans; a promoted or freshly written Python file
@@ -440,8 +443,8 @@ reports every bundled sibling as unresolved and buries the real failures among f
 `validate-skills.py <repo>/skills "$HERMES_HOME/skills"`.
 
 After a promotion, run the repo's own gate before touching any prose a test measures — a repo
-that asserts its counts in tests fails on the addition and tells you the right numbers. **Stage
-the new skill first.** A Nix check copies only git-visible paths, so an untracked `SKILL.md`
+that asserts its counts in tests fails on the addition and tells you the right numbers (headline
+counts and the layout tree). **Stage the new skill first.** A Nix check copies only git-visible paths, so an untracked `SKILL.md`
 reads as absent: the counted total stays old and the README number you just corrected is
 reported FALSE. `git add` the new directory, then gate.
 
