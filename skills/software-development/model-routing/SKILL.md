@@ -327,6 +327,13 @@ runs in the bundled Hermes environment.
   of the same diff by the same weights; say so in the report rather than letting
   the role name imply an independent check.
 
+## References
+
+- `references/cost-verification.md` — matching the cost formula to recorded charges.
+- `references/market-parsing.md` — provider page and catalog fields.
+- `references/report-design.md` — report sections and callout policy.
+- `references/council-integration.md` — direct reviewer adapter and profile notes.
+
 ## Troubleshooting
 
 - **`no state database`** — pass `--hermes-home` at the directory containing
