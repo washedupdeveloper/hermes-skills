@@ -101,7 +101,7 @@ No decision value is fixed in code. `plan` exposes:
 | `--judge-coding-weight` | 0.6 | judge score = w*coding + (1-w)*reasoning |
 | `--hle-weight` | 0.5 | reasoning = h*HLE + (1-h)*FrontierMath |
 | `--min-context` | 128000 | context floor for candidates |
-| `--min-discount` | 0 | provider minimum-discount floor (%) |
+| `--min-discount` | 0 | best live offer discount floor (%) |
 | `--blend-output-share` | 0.2 | display-only 80/20 price blend |
 | `--callout-multiple` | 5 | "judge costs Nx" callout threshold |
 | `--judge-share-alert` | 0.4 | judge-share callout |
