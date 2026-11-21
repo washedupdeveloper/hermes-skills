@@ -1,0 +1,21 @@
+{
+  "source": "BenchLM coding basket + HLE-Diamond + FrontierMath (cached rows)",
+  "fetched_at": "2026-11-21T00:00:00+00:00",
+  "models": {
+    "claude-fable-5.2": {"coding": 92.3, "overall": 93.3, "hle": 80.2, "frontier_math": 95.1},
+    "gpt-6.2-neon": {"coding": 93.0, "overall": 91.3, "hle": 71.3},
+    "gpt-6.2-astra": {"coding": 91.8, "overall": 90.8, "hle": 72.2, "frontier_math": 92.6},
+    "claude-opus-5.5": {"coding": 88.3, "overall": 82.7, "hle": 67.9, "frontier_math": 91.2},
+    "claude-sonnet-5.5": {"coding": 86.4, "overall": 77.8, "hle": 53.3, "frontier_math": 88.8},
+    "gpt-6.2-sol": {"coding": 83.3, "overall": 81.0, "hle": 64.0},
+    "gpt-6.1-terra": {"coding": 80.0, "overall": 80.4, "hle": 47.3, "frontier_math": 90.9},
+    "minimax-m3.1": {"coding": 77.8, "overall": 68.1, "hle": 28.1},
+    "claude-opus-5": {"coding": 77.0, "overall": 74.9, "hle": 44.8, "frontier_math": 85.6},
+    "deepseek-v4.1-flash-1017": {"coding": 76.4, "overall": 70.0, "hle": 25.3, "frontier_math": 71.2},
+    "qwen4-max": {"coding": 76.0, "overall": 74.9, "hle": 44.9, "frontier_math": 74.7},
+    "kimi-k3.1-pro": {"coding": 74.0, "overall": 70.1, "hle": 37.3, "frontier_math": 78.3},
+    "kimi-k3": {"coding": 65.4, "overall": 65.4, "hle": 26.9, "frontier_math": 72.2},
+    "glm-5.3": {"coding": 63.2, "overall": 63.7, "hle": 17.9, "frontier_math": 68.8},
+    "glm-5.3-flash": {"coding": 61.6, "overall": 58.3, "hle": 18.2, "frontier_math": 55.8}
+  }
+}

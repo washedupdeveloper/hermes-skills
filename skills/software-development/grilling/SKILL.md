@@ -29,6 +29,12 @@ heard yet.
 Ask the whole frontier in one round, numbered, each question carrying your
 recommendation. Then wait for the answers before the next round.
 
+**Round size is the user's call.** If the user asks for one question at a time,
+ask exactly one and stop; do not batch the frontier. Confirm any answers they
+volunteered, then take the first unresolved decision. "Go with your
+recommendations" accepts the recommendation on the table; it does not delegate
+the remaining decisions, so keep the cadence until the frontier is empty.
+
 ```
 ❓ Q1 — <question title>: <question body, options if relevant>
 ➡️ Recommendation: <your answer + one line on why>
@@ -119,6 +125,14 @@ Do not act until the user confirms shared understanding.
    which costs a round. State the concrete difference: what they type, what they
    see, what changes in the artifact. If a term needs a gloss to be answered, it is
    the wrong term for the question.
+10. **Batching after the user asked for one at a time.** The default round is the
+    whole frontier, but the user's cadence overrides it. A second question in the
+    same message reads as not listening, even when both are good questions.
+11. **Offering a dominated option as a peer.** If an option is worse on every
+    axis the user cares about, do not put it on the menu. Name it as dominated
+    and leave it out; a menu with a known-bad choice costs a round and makes the
+    recommendation look unconsidered. Options are viable alternatives, not a
+    completeness display.
 
 ## Verification
 

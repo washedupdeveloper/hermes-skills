@@ -94,8 +94,9 @@ skills/
                           cross-platform-test-portability  defensive-patterns
                           deterministic-quality-gates  domain-modeling  failure-semantics
                           grill-me  grill-with-docs  grilling  handoff
-                          improve-codebase-architecture  issue-triage  nixos-clan-flake
-                          openspec  postmortem  pr-description  project-kickoff-planning
+                          improve-codebase-architecture  issue-triage  model-routing
+                          nixos-clan-flake  openspec  postmortem  pr-description
+                          project-kickoff-planning
                           readme-for-users  release-versioning  request-refactor-plan
                           retro  skill-library-curation  state-machine-audit
                           surgical-patch  technology-selection  to-spec  to-tickets
@@ -103,7 +104,7 @@ skills/
                           writing-for-agents  zoom-out
 ```
 
-69 `SKILL.md` across 69 skills — 68 load on Windows; `hermes-s6-container-supervision` declares
+70 `SKILL.md` across 70 skills — 69 load on Windows; `hermes-s6-container-supervision` declares
 `platforms: [linux]` and is correctly skipped there.
 
 ## Host-scoped skills

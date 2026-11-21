@@ -1,6 +1,6 @@
 ---
 name: technology-selection
-description: "Use when choosing between candidate stacks or platforms."
+description: "Use when choosing a stack, platform, or model."
 version: 1.1.0
 author: Hermes Agent
 license: MIT
@@ -8,22 +8,25 @@ platforms: [linux, macos, windows]
 category: software-development
 metadata:
   hermes:
-    tags: [architecture, evaluation, tradeoffs, embedded, toolchain, decision]
+    tags: [architecture, evaluation, tradeoffs, embedded, toolchain, decision, llm, model-selection, cost]
     related_skills: [project-kickoff-planning, to-spec, domain-modeling]
 ---
 
 # Technology Selection
 
-Choosing between candidate technologies (languages, frameworks, platforms,
-silicon) for a project. The deliverable is a decision, not a survey: a bottom
-line, per-candidate benefits and drawbacks, a direct comparison, the toolchain
-for each, the pitfalls, and sources.
+Choosing between candidate technologies — languages, frameworks, platforms,
+models, silicon — for a project. The deliverable is a decision, not a survey: a
+bottom line, per-candidate benefits and drawbacks, a direct comparison, the
+toolchain for each, the pitfalls, and sources.
 
 ## When to Use
 
 - "Which should I use for X", "compare A vs B vs C", "is Y viable here"
 - Stack or platform selection where hardware, toolchain, ecosystem reach or
   vendor lock-in are in play
+- Model or provider selection for agent tiers — "which LLM for this role",
+  "compare these models on cost and capability", "build a multi-model or MoE
+  routing stack"
 - Re-analysis after the user revises a constraint mid-conversation
 
 Skip when the user has already chosen and wants implementation, or when only one
@@ -111,6 +114,50 @@ In order:
 9. **Sources.**
 
 Dense and tabular over prose. Tables for anything enumerable. No filler.
+
+## Selecting LLM models and inference markets
+
+Model selection is the same shape as stack selection, with two extra failure
+modes: the price is a spot market, and the benchmark board is a composite.
+Full procedure, board table and cost formulas:
+`references/llm-model-market-selection.md`. Baseline resolution, escalation,
+`routing.yaml`, dispatch, profile emission, budget calibration and the report
+contract: `references/llm-routing-operations.md`.
+
+1. **Headline on the live best; budget on the realised.** Marketplaces quote
+   top-of-book, median and request-weighted realised prices. Report the live
+   best as the "available now" price a buyer recognises from their tooling, but
+   compute the monthly bill on the realised average — it is the only number
+   that reconciles with the invoice after seller failures and thin offers.
+   List price is a reference, never a cost.
+2. **Price reliability with price.** A 99%-off listing on a 63%-success seller
+   costs more in retries than a 96%-off listing on a 99.9% route. Estimate
+   effective cost as price ÷ success rate and record 24h volume as liquidity.
+3. **Tier by reversibility, not difficulty.** Judge (irreversible), reviewer
+   (expensive to undo), builder (everything else), runner (parallel grunt
+   work). The strongest model gets the fewest calls.
+4. **Cross-check two boards that disagree.** Prefer unsaturated agentic and
+   reasoning suites (SWE-bench Pro, DeepSWE, Terminal-Bench 4.x, HLE-Diamond,
+   FrontierMath) over saturated SWE-bench Verified; separate independent runs
+   from vendor-reported tables.
+5. **Cost a standard task, not a million tokens.** Convert $/M into a per-task
+   cost at a fixed input/output shape, then report token share beside spend
+   share — the review tier usually dominates the bill while the builder
+   dominates the volume.
+6. **Calibrate token volumes; never invent them.** Round-number budgets
+   (3,000 turns × 50k in / 10k out) are guesses. Read `session_model_usage` in
+   Hermes `state.db` for p50/p90 input, output, cache reads and reasoning over
+   30 days, or label the numbers `uncalibrated`. Output is often under 10% of
+   input and cache reads can exceed input, so a 20%-output assumption
+   overprices the stack. Separate the **monthly total** (the sum over the
+   window) from the per-session percentiles: the total sizes the bill, p50/p90
+   size one task. Multiplying p50 by the session count understates a skewed
+   month by an order of magnitude. Calibration is an explicit command, not a
+   per-run read — the state-db schema is an internal contract.
+7. **Attempt first, escalate on a predicate.** Start on the ambient model,
+   verify against a task-level acceptance check, and move up only when that
+   check fails; never route below the baseline without an explicit opt-in. A
+   task with no predicate returns "needs scoping", not a bigger model.
 
 ## Adopting an external system over an in-house one
 
@@ -227,3 +274,11 @@ Pitfalls specific to this shape:
 - `references/external-system-footprint-audit.md` — measuring a third-party system
   before adopting it: tree sizing, aggregate skill-description token cost, what the
   installer writes, extension authority, and the baseline comparison table.
+- `references/llm-model-market-selection.md` — model/provider selection for agent
+  tiers: order-book price semantics, benchmark boards and their saturation,
+  per-task cost formulas, router operating rules, and the Surplus marketplace
+  quirks.
+- `references/llm-routing-operations.md` — operating the routing policy:
+  baseline resolution, attempt-then-escalate, task taxonomy and `routing.yaml`,
+  in-session vs spawned dispatch, provider snapshots and staleness, budget
+  calibration from `state.db`, profile emission, report contract, council v2.

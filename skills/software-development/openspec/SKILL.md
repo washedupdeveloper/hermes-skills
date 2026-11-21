@@ -34,8 +34,18 @@ openspec new change <kebab-name>       # creates openspec/changes/<name>/
 openspec instructions proposal --change <name>
 openspec status --change <name>        # the DAG: proposal -> specs + design -> tasks
 openspec validate <name> --strict      # before code, and again before archive
-openspec archive <name> --yes          # merges the delta into openspec/specs/
+`openspec archive <name> --yes`          # merges the delta into openspec/specs/
 ```
+
+When the CLI is not on PATH, run the same pinned command through `npx`
+(`npx -y @fission-ai/openspec@1.15.0 …`) rather than skipping validation. On a
+Nix host with no Node on PATH, borrow one for the command:
+`nix shell nixpkgs#nodejs -c npx -y @fission-ai/openspec@1.15.0 validate <name> --strict`.
+
+After `archive`, a **new capability** gets a placeholder `## Purpose`. Replace it
+by editing `openspec/specs/<capability>/spec.md` directly; a `## Purpose` in a
+delta is ignored when the capability is created, and `validate --all --strict`
+keeps failing until the main spec has a real purpose.
 
 `openspec instructions <artifact> --change <name>` prints that artifact's template and rules.
 It is the only template source. Do not restate a template here or in a repo doc.
@@ -65,6 +75,11 @@ method.
   `references/shape-check-without-the-cli.md` encodes the CLI's own structural rules, treats an
   empty change as invalid rather than absent, and says how to test the checker against a change
   the tool actually produced.
+- **When the CLI is unavailable, read an archived change in the same repo and copy its shape**
+  rather than inventing one. The minimum is `.openspec.yaml` (`schema`, `created`), a `proposal.md`
+  with Why / What Changes / Capabilities / Impact, a `# Tasks` checklist, and one
+  `specs/<capability>/spec.md` per capability. A directory holding only `.openspec.yaml` is an
+  empty change, not a scaffold.
 - **The repo is the gate.** `openspec validate <name> --strict` runs in the repo's CI, not only
   by hand. A repo whose CI lacks it gets that step before its first change; the job block to
   append is `templates/ci-job.yml`, with the repository's own checkout pin.
