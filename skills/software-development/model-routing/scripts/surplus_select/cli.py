@@ -231,6 +231,21 @@ def _resolve_routing(change: Path) -> routing.RoutingMap:
     return routing.draft_routing(change)
 
 
+def _parse_review_types(raw: str) -> frozenset[routing.TaskType]:
+    if not raw.strip():
+        return routing.REVIEW_TYPES
+    result = set()
+    for item in raw.split(","):
+        value = item.strip().lower()
+        if not value:
+            continue
+        try:
+            result.add(routing.TaskType(value))
+        except ValueError as exc:
+            raise ValueError(f"unknown review type: {value}") from exc
+    return frozenset(result)
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     change = Path(args.change).expanduser()
     if not change.is_dir():
@@ -276,6 +291,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     if not routing_map.tasks:
         print(f"error: no tasks in {change / 'tasks.md'}", file=sys.stderr)
         return 1
+    review_types = _parse_review_types(args.review_types)
 
     judge = portfolio.get("judge")
     decisions: list[Decision] = [
@@ -284,6 +300,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
             resolved.model,
             judge=judge.model_id if judge else None,
             reviewer=(portfolio.get("reviewer").model_id if portfolio.get("reviewer") else None),
+            review_types=review_types,
         )
         for task in routing_map.tasks.values()
     ]
@@ -319,6 +336,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         aging_hours=args.aging_hours,
         provisional_hours=args.expired_hours,
     )
+    payload["policy"]["review_types"] = sorted(item.value for item in review_types)
     out = Path(args.out).expanduser()
     out.mkdir(parents=True, exist_ok=True)
     json_path = out / "report.json"
@@ -443,6 +461,11 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--review-share-alert", type=float, default=0.5)
     plan.add_argument("--benchmark-max-age-days", type=float, default=30.0)
     plan.add_argument("--sources", default="", help="JSON list of {title,url} source rows")
+    plan.add_argument(
+        "--review-types",
+        default="bugfix,refactor,security,architecture",
+        help="comma-separated task types that require review",
+    )
     plan.add_argument("--no-html", action="store_true")
     plan.set_defaults(func=cmd_plan)
     return parser

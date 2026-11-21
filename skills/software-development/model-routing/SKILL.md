@@ -110,6 +110,7 @@ No decision value is fixed in code. `plan` exposes:
 | `--aging-hours` | 48 | aging → provisional boundary |
 | `--expired-hours` | 168 | ranking refusal boundary |
 | `--sources` | built-in | JSON list of `{title,url}` source rows |
+| `--review-types` | bugfix, refactor, security, architecture | task types that require review |
 
 `refresh` exposes `--timeout 30`, `--retries 3`, `--workers 6`; `refresh-benchmarks`
 adds `--url`; `calibrate` exposes `--window 30` and `--month-days 30`. The direct
@@ -187,7 +188,8 @@ Types, first match wins: `security`, `architecture`, `bugfix`, `refactor`,
 - Every task needs an acceptance predicate (a test command, a gate, or
   `review: <path>`). Without one the task is returned as **needs scoping**; it
   is not routed and not escalated.
-- `bugfix`, `refactor`, `security` and `architecture` require review.
+- `bugfix`, `refactor`, `security` and `architecture` require review by default;
+  `--review-types` changes the set.
 - `architecture` also gets `decider: <judge>`.
 - The implementer is always the baseline. Escalation is a separate, recorded
   step, not an anticipation of difficulty.

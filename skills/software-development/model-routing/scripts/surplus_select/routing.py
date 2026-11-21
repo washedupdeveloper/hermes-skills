@@ -219,6 +219,7 @@ def route(
     judge: str | None = None,
     budget_usd: float | None = None,
     reviewer: str | None = None,
+    review_types: frozenset[TaskType] = REVIEW_TYPES,
 ) -> Decision:
     """Turn one task into one decision. Pure: no clock, network or filesystem."""
     if not task.verify:
@@ -239,7 +240,7 @@ def route(
         task_type = TaskType.UNCLASSIFIED
 
     decider = judge if task_type is TaskType.ARCHITECTURE else None
-    requires_review = task_type in REVIEW_TYPES
+    requires_review = task_type in review_types
     if task_type is TaskType.ARCHITECTURE:
         reason = "architecture decision: judge decides, baseline implements"
     elif requires_review:

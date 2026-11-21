@@ -1020,6 +1020,7 @@ class CliPlanTests(unittest.TestCase):
                 "--fresh-hours", "6",
                 "--aging-hours", "24",
                 "--expired-hours", "72",
+                "--review-types", "feature",
             )
         policy = payload["policy"]
         self.assertEqual(policy["runner_floor"], 80.0)
@@ -1035,6 +1036,10 @@ class CliPlanTests(unittest.TestCase):
         self.assertEqual(policy["fresh_hours"], 6.0)
         self.assertEqual(policy["aging_hours"], 24.0)
         self.assertEqual(policy["provisional_hours"], 72.0)
+        self.assertEqual(policy["review_types"], ["feature"])
+        tasks = {task["id"]: task for task in payload["tasks"]}
+        self.assertEqual(tasks["1.1"]["reviewer"], "deepseek-v4.1-flash-1017")
+        self.assertIsNone(tasks["1.2"]["reviewer"])
 
     def test_help_lists_every_policy_override(self) -> None:
         result = subprocess.run(
@@ -1058,6 +1063,8 @@ class CliPlanTests(unittest.TestCase):
             "--fresh-hours",
             "--aging-hours",
             "--expired-hours",
+            "--review-types",
+            "--sources",
         ):
             self.assertIn(flag, result.stdout)
 
@@ -1156,6 +1163,7 @@ class CliPlanTests(unittest.TestCase):
                 self.assertEqual(cli.main(base + ["--judge-coding-weight", "1.1"]), 1)
                 self.assertEqual(cli.main(base + ["--callout-multiple", "0"]), 1)
                 self.assertEqual(cli.main(base + ["--review-share-alert", "1.1"]), 1)
+                self.assertEqual(cli.main(base + ["--review-types", "nope"]), 1)
                 self.assertEqual(
                     cli.main(base + ["--fresh-hours", "60", "--aging-hours", "48"]), 1
                 )
