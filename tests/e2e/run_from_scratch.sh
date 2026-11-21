@@ -112,6 +112,7 @@ assert roles == {
     "runner": "m1",
 }, roles
 assert p["costs"]["total"] > 0
+assert round(p["costs"]["total"], 2) == 15.40
 assert p["policy"]["runner_floor"] == 80.0
 assert p["sources"][0]["title"] == "Synthetic source"
 assert (t / "report" / "report.html").is_file()
