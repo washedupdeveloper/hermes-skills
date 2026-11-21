@@ -27,6 +27,7 @@ from .portfolio import (
     BLEND_OUTPUT_SHARE,
     BUILDER_FLOOR,
     DEFAULT_MIN_GAIN,
+    HLE_WEIGHT,
     JUDGE_CODING_WEIGHT,
     MIN_CONTEXT,
     RUNNER_FLOOR,
@@ -93,7 +94,14 @@ def collect_callouts(
     provisional_hours: float = DEFAULT_PROVISIONAL_HOURS,
     benchmark_max_age_days: float = DEFAULT_MAX_AGE_DAYS,
     blend_output_share: float = BLEND_OUTPUT_SHARE,
+    callout_multiple: float = 5.0,
+    judge_share_alert: float = 0.4,
+    review_share_alert: float = 0.5,
 ) -> list[dict]:
+    if callout_multiple <= 0:
+        raise ValueError("callout_multiple must be positive")
+    if not (0 <= judge_share_alert <= 1) or not (0 <= review_share_alert <= 1):
+        raise ValueError("share alerts must be between 0 and 1")
     callouts: list[dict] = []
     review_tokens = (
         budget.role("reviewer").monthly_total if budget.role("reviewer") else None
@@ -160,7 +168,7 @@ def collect_callouts(
     reviewer = costs.get("reviewer", 0.0) / total
     builder = costs.get("builder", 0.0) / total
     judge_share = costs.get("judge", 0.0) / total
-    if judge_share > 0.4:
+    if judge_share > judge_share_alert:
         callouts.append(
             {
                 "kind": "info",
@@ -172,7 +180,7 @@ def collect_callouts(
                 ),
             }
         )
-    if reviewer > 0.5:
+    if reviewer > review_share_alert:
         reviewer_tokens = (
             budget.role("reviewer").monthly_total.total() if budget.role("reviewer") else 0
         )
@@ -212,7 +220,7 @@ def collect_callouts(
         builder_role = portfolio.get("builder")
         if builder_role and builder_role.realised.blended(blend_output_share) > 0:
             multiple = market.realised().blended(blend_output_share) / builder_role.realised.blended(blend_output_share)
-            if multiple >= 5:
+            if multiple >= callout_multiple:
                 callouts.append(
                     {
                         "kind": "warn",
@@ -412,7 +420,11 @@ def build(
     builder_floor: float = BUILDER_FLOOR,
     min_context: int = MIN_CONTEXT,
     judge_coding_weight: float = JUDGE_CODING_WEIGHT,
+    hle_weight: float = HLE_WEIGHT,
     blend_output_share: float = BLEND_OUTPUT_SHARE,
+    callout_multiple: float = 5.0,
+    judge_share_alert: float = 0.4,
+    review_share_alert: float = 0.5,
     benchmark_max_age_days: float = DEFAULT_MAX_AGE_DAYS,
     fresh_hours: float = DEFAULT_FRESH_HOURS,
     aging_hours: float = DEFAULT_AGING_HOURS,
@@ -496,7 +508,11 @@ def build(
             "builder_floor": builder_floor,
             "min_context": min_context,
             "judge_coding_weight": judge_coding_weight,
+            "hle_weight": hle_weight,
             "blend_output_share": blend_output_share,
+            "callout_multiple": callout_multiple,
+            "judge_share_alert": judge_share_alert,
+            "review_share_alert": review_share_alert,
             "benchmark_max_age_days": benchmark_max_age_days,
             "fresh_hours": fresh_hours,
             "aging_hours": aging_hours,
@@ -505,7 +521,8 @@ def build(
             "materiality": "a different reviewer must beat the builder by this relative coding gain",
             "judge_score": (
                 f"{judge_coding_weight:g}*coding + "
-                f"{1 - judge_coding_weight:g}*mean(HLE-Diamond, FrontierMath)"
+                f"{1 - judge_coding_weight:g}*({hle_weight:g}*HLE-Diamond + "
+                f"{1 - hle_weight:g}*FrontierMath)"
             ),
         },
         "benchmarks": {
@@ -557,6 +574,9 @@ def build(
             provisional_hours=provisional_hours,
             benchmark_max_age_days=benchmark_max_age_days,
             blend_output_share=blend_output_share,
+            callout_multiple=callout_multiple,
+            judge_share_alert=judge_share_alert,
+            review_share_alert=review_share_alert,
         ),
         "sources": sources or [],
         "method": (

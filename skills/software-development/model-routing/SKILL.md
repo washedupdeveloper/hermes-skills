@@ -99,8 +99,12 @@ No decision value is fixed in code. `plan` exposes:
 | `--runner-floor` | 65 | minimum coding score for a separate runner |
 | `--builder-floor` | 70 | fallback builder floor when the baseline is absent |
 | `--judge-coding-weight` | 0.6 | judge score = w*coding + (1-w)*reasoning |
+| `--hle-weight` | 0.5 | reasoning = h*HLE + (1-h)*FrontierMath |
 | `--min-context` | 128000 | context floor for candidates |
 | `--blend-output-share` | 0.2 | display-only 80/20 price blend |
+| `--callout-multiple` | 5 | "judge costs Nx" callout threshold |
+| `--judge-share-alert` | 0.4 | judge-share callout |
+| `--review-share-alert` | 0.5 | review-share callout |
 | `--benchmark-max-age-days` | 30 | stale-benchmark banner |
 | `--fresh-hours` | 12 | fresh → aging boundary |
 | `--aging-hours` | 48 | aging → provisional boundary |

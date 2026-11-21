@@ -262,6 +262,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         builder_floor=args.builder_floor,
         min_context=args.min_context,
         judge_coding_weight=args.judge_coding_weight,
+        hle_weight=args.hle_weight,
         blend_output_share=args.blend_output_share,
     )
     routing_map = _resolve_routing(change)
@@ -301,7 +302,11 @@ def cmd_plan(args: argparse.Namespace) -> int:
         builder_floor=args.builder_floor,
         min_context=args.min_context,
         judge_coding_weight=args.judge_coding_weight,
+        hle_weight=args.hle_weight,
         blend_output_share=args.blend_output_share,
+        callout_multiple=args.callout_multiple,
+        judge_share_alert=args.judge_share_alert,
+        review_share_alert=args.review_share_alert,
         benchmark_max_age_days=args.benchmark_max_age_days,
         fresh_hours=args.fresh_hours,
         aging_hours=args.aging_hours,
@@ -318,7 +323,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print(
         f"policy     independent reviewer budget ${args.review_budget:,.2f}/mo, "
         f"materiality {args.min_gain:.0%}, runner floor {args.runner_floor:g}, "
-        f"builder floor {args.builder_floor:g}, judge coding {args.judge_coding_weight:.0%}"
+        f"builder floor {args.builder_floor:g}, judge coding {args.judge_coding_weight:.0%}, "
+        f"HLE weight {args.hle_weight:.0%}"
     )
     print(
         f"snapshot   "
@@ -423,7 +429,11 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--runner-floor", type=float, default=65.0)
     plan.add_argument("--builder-floor", type=float, default=70.0)
     plan.add_argument("--judge-coding-weight", type=float, default=0.6)
+    plan.add_argument("--hle-weight", type=float, default=0.5)
     plan.add_argument("--blend-output-share", type=float, default=0.2)
+    plan.add_argument("--callout-multiple", type=float, default=5.0)
+    plan.add_argument("--judge-share-alert", type=float, default=0.4)
+    plan.add_argument("--review-share-alert", type=float, default=0.5)
     plan.add_argument("--benchmark-max-age-days", type=float, default=30.0)
     plan.add_argument("--sources", default="", help="JSON list of {title,url} source rows")
     plan.add_argument("--no-html", action="store_true")

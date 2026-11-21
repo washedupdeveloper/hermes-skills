@@ -34,6 +34,7 @@ DEFAULT_MIN_GAIN = 0.05
 RUNNER_FLOOR = 65.0
 BUILDER_FLOOR = 70.0
 JUDGE_CODING_WEIGHT = 0.6
+HLE_WEIGHT = 0.5
 MIN_CONTEXT = 128_000
 BLEND_OUTPUT_SHARE = 0.2
 
@@ -70,9 +71,9 @@ def _blend(price: Price, output_share: float = BLEND_OUTPUT_SHARE) -> float:
     return price.blended(output_share)
 
 
-def _reasoning(bench: Benchmark) -> float:
+def _reasoning(bench: Benchmark, hle_weight: float = HLE_WEIGHT) -> float:
     if bench.hle is not None and bench.frontier_math is not None:
-        return (bench.hle + bench.frontier_math) / 2
+        return bench.hle * hle_weight + bench.frontier_math * (1 - hle_weight)
     if bench.hle is not None:
         return bench.hle
     if bench.frontier_math is not None:
@@ -131,6 +132,7 @@ def choose(
     runner_floor: float = RUNNER_FLOOR,
     builder_floor: float = BUILDER_FLOOR,
     judge_coding_weight: float = JUDGE_CODING_WEIGHT,
+    hle_weight: float = HLE_WEIGHT,
     blend_output_share: float = BLEND_OUTPUT_SHARE,
 ) -> Portfolio:
     if min_gain < 0 or min_gain > 1:
@@ -144,6 +146,8 @@ def choose(
             raise ValueError(f"{name} must be between 0 and 100")
     if judge_coding_weight < 0 or judge_coding_weight > 1:
         raise ValueError("judge_coding_weight must be between 0 and 1")
+    if hle_weight < 0 or hle_weight > 1:
+        raise ValueError("hle_weight must be between 0 and 1")
     if blend_output_share < 0 or blend_output_share > 1:
         raise ValueError("blend_output_share must be between 0 and 1")
 
@@ -174,7 +178,7 @@ def choose(
         bench = item[2]
         return (
             (bench.coding or 0) * judge_coding_weight
-            + _reasoning(bench) * (1 - judge_coding_weight)
+            + _reasoning(bench, hle_weight) * (1 - judge_coding_weight)
         )
 
     # The judge is chosen from every live model, not the review frontier: a

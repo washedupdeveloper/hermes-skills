@@ -790,6 +790,7 @@ class PortfolioTests(unittest.TestCase):
             {"runner_floor": -1},
             {"builder_floor": 101},
             {"judge_coding_weight": 1.1},
+            {"hle_weight": -0.1},
             {"blend_output_share": -0.1},
         ):
             with self.assertRaises(ValueError):
@@ -1008,7 +1009,11 @@ class CliPlanTests(unittest.TestCase):
                 "--builder-floor", "60",
                 "--min-context", "500000",
                 "--judge-coding-weight", "0.25",
+                "--hle-weight", "0.75",
                 "--blend-output-share", "0.4",
+                "--callout-multiple", "4",
+                "--judge-share-alert", "0.3",
+                "--review-share-alert", "0.6",
                 "--benchmark-max-age-days", "60",
                 "--fresh-hours", "6",
                 "--aging-hours", "24",
@@ -1019,7 +1024,11 @@ class CliPlanTests(unittest.TestCase):
         self.assertEqual(policy["builder_floor"], 60.0)
         self.assertEqual(policy["min_context"], 500000)
         self.assertEqual(policy["judge_coding_weight"], 0.25)
+        self.assertEqual(policy["hle_weight"], 0.75)
         self.assertEqual(policy["blend_output_share"], 0.4)
+        self.assertEqual(policy["callout_multiple"], 4.0)
+        self.assertEqual(policy["judge_share_alert"], 0.3)
+        self.assertEqual(policy["review_share_alert"], 0.6)
         self.assertEqual(policy["benchmark_max_age_days"], 60.0)
         self.assertEqual(policy["fresh_hours"], 6.0)
         self.assertEqual(policy["aging_hours"], 24.0)
@@ -1038,7 +1047,11 @@ class CliPlanTests(unittest.TestCase):
             "--builder-floor",
             "--min-context",
             "--judge-coding-weight",
+            "--hle-weight",
             "--blend-output-share",
+            "--callout-multiple",
+            "--judge-share-alert",
+            "--review-share-alert",
             "--benchmark-max-age-days",
             "--fresh-hours",
             "--aging-hours",
@@ -1080,6 +1093,7 @@ class CliPlanTests(unittest.TestCase):
                     "--out", str(out),
                     "--runner-floor", "80",
                     "--judge-coding-weight", "0.25",
+                    "--hle-weight", "0.75",
                 ],
                 capture_output=True,
                 text=True,
@@ -1138,6 +1152,8 @@ class CliPlanTests(unittest.TestCase):
                 self.assertEqual(cli.main(base + ["--review-budget", "-1"]), 1)
                 self.assertEqual(cli.main(base + ["--runner-floor", "101"]), 1)
                 self.assertEqual(cli.main(base + ["--judge-coding-weight", "1.1"]), 1)
+                self.assertEqual(cli.main(base + ["--callout-multiple", "0"]), 1)
+                self.assertEqual(cli.main(base + ["--review-share-alert", "1.1"]), 1)
                 self.assertEqual(
                     cli.main(base + ["--fresh-hours", "60", "--aging-hours", "48"]), 1
                 )
