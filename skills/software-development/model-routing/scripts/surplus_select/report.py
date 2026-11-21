@@ -47,6 +47,7 @@ def _role_row(role: Role) -> dict:
         "reason": role.reason,
         "coding": role.coding,
         "reasoning": role.reasoning,
+        "available": role.available,
         "live": [role.live.input, role.live.output],
         "realised": [role.realised.input, role.realised.output],
         "realised_cache": role.realised.cache_read,
@@ -72,6 +73,20 @@ def collect_callouts(
     review_tokens = (
         budget.role("reviewer").monthly_total if budget.role("reviewer") else None
     )
+    no_offer = sorted(
+        model_id for model_id, market in snapshot.models.items() if market.best is None
+    )
+    if no_offer:
+        callouts.append(
+            {
+                "kind": "info",
+                "title": "Some models have no live offer",
+                "body": (
+                    f"{len(no_offer)} of {len(snapshot.models)} models show no current offer. "
+                    "They are listed but cannot fill a role until an offer returns."
+                ),
+            }
+        )
     if not snapshot.allows_profile_writes():
         callouts.append(
             {
@@ -233,6 +248,11 @@ def collect_callouts(
     return callouts
 
 
+def _multiple(ratio: float) -> str:
+    """Format a price multiple without rounding 1.14 down to '1x'."""
+    return f"{ratio:.0f}" if ratio >= 10 else f"{ratio:.1f}"
+
+
 def _frontier_rows(
     snapshot: Snapshot,
     cache: BenchmarkCache,
@@ -255,9 +275,26 @@ def _frontier_rows(
         bench = cache.get(model_id)
         if bench is None or bench.coding is None:
             continue
+        coding = bench.coding
+        gain = coding - builder_coding
+        if market.best is None:
+            rows.append(
+                {
+                    "model": model_id,
+                    "name": market.name,
+                    "coding": coding,
+                    "blend": market.realised().blended(0.2),
+                    "review_cost": 0.0,
+                    "delta": round(gain, 1),
+                    "delta_pct": round(gain / builder_coding * 100, 1) if builder_coding else None,
+                    "marginal_per_point": None,
+                    "verdict": "no live offer; not selectable",
+                    "dominated": False,
+                }
+            )
+            continue
         realised = market.realised()
         cost = realised.cost(review_tokens) if review_tokens else 0.0
-        gain = bench.coding - builder_coding
         marginal = (
             (cost - builder_cost) / gain
             if gain > 0 and model_id not in rejected
@@ -271,7 +308,16 @@ def _frontier_rows(
             if dom_market is not None and review_tokens is not None:
                 dom_cost = dom_market.realised().cost(review_tokens)
                 ratio = cost / dom_cost if dom_cost > 0 else 0.0
-                verdict = f"dominated by {dominator}: {ratio:.0f}x cost, {gain:+.1f} pts"
+                # One decimal below 10x: `{:.0f}` renders 1.14 as "1x", which
+                # reads as "same price" for a model that is strictly dearer.
+                factor = _multiple(ratio)
+                dom_bench = cache.models.get(dominator)
+                dom_coding = (dom_bench.coding or 0) if dom_bench is not None else 0
+                dom_gain = (bench.coding or 0) - dom_coding
+                verdict = (
+                    f"dominated by {dominator}: {factor}x cost, "
+                    f"{dom_gain:+.1f} pts vs dominator"
+                )
             else:
                 verdict = f"dominated by {dominator}"
         elif gain <= 0:
@@ -330,8 +376,11 @@ def build(
                 "name": market.name,
                 "context": market.context,
                 "coding": bench.coding if bench else None,
-                "live": [market.live().input, market.live().output],
-                "live_display": _price(market.live()),
+                "has_live": market.best is not None,
+                "live": (
+                    [market.best.input, market.best.output] if market.best else None
+                ),
+                "live_display": _price(market.best) if market.best else "—",
                 "realised": [market.realised().input, market.realised().output],
                 "realised_display": _price(market.realised()),
                 "list_display": _price(market.list_price),
@@ -412,6 +461,7 @@ def build(
                 "predicate": list(decision.predicate),
                 "reason": decision.reason,
                 "needs_scoping": decision.needs_scoping,
+                "reviewer": decision.reviewer,
             }
             for decision in decisions
         ],
@@ -444,7 +494,12 @@ def _table(
     for row in rows:
         cells = []
         for index, item in enumerate(row):
-            cls = ' class="num"' if index in numeric else ""
+            classes = []
+            if index in numeric:
+                classes.append("num")
+            if table_class == "frontier" and index == len(row) - 1:
+                classes.append("verdict")
+            cls = f' class="{" ".join(classes)}"' if classes else ""
             cells.append(f"<td{cls}>{item}</td>")
         body.append("<tr>" + "".join(cells) + "</tr>")
     classes = f' class="{table_class}"' if table_class else ""
@@ -461,12 +516,16 @@ def render_html(payload: dict) -> str:
     roles = payload["portfolio"]
     role_cards = []
     for role in roles:
+        unavailable = (
+            "" if role.get("available", True)
+            else ' <span class="tag warn">no live offer</span>'
+        )
         role_cards.append(
             f"""
       <div class="tier {html.escape(role['role'])}">
         <div class="role">{html.escape(role['role'])}</div>
         <div class="model">{html.escape(role['model'])}</div>
-        <div class="job">{html.escape(role['reason'])}</div>
+        <div class="job">{html.escape(role['reason'])}{unavailable}</div>
         <div class="price"><span>coding {_score(role['coding'])}</span></div>
         <div class="rate"><strong>{_money(role['realised'][0])}</strong> in · <strong>{_money(role['realised'][1])}</strong> out</div>
       </div>"""
@@ -541,7 +600,7 @@ def render_html(payload: dict) -> str:
             "Coding",
             "7-day blend $/M",
             "Review $/mo",
-            "Δ pts",
+            "Δ vs builder",
             "Marginal $/pt",
             "Verdict",
         ],
@@ -560,13 +619,16 @@ def render_html(payload: dict) -> str:
         model = html.escape(task["model"])
         if task["decider"]:
             model += f'<br><span class="muted">decider: {html.escape(task["decider"])}</span>'
+        review = "yes" if task["requires_review"] else "no"
+        if task.get("reviewer"):
+            review += f'<br><span class="muted">{html.escape(task["reviewer"])}</span>'
         task_rows.append(
             [
                 html.escape(task["id"]),
                 html.escape(task["title"]),
                 badge,
                 model,
-                "yes" if task["requires_review"] else "no",
+                review,
                 html.escape("; ".join(task["predicate"]) or "—"),
             ]
         )
@@ -669,6 +731,8 @@ def render_html(payload: dict) -> str:
   .tasks td:nth-child(4){{min-width:188px}}
   .tasks td:nth-child(6){{white-space:nowrap}}
   .market td:nth-child(1){{white-space:nowrap}}
+  .frontier td.verdict{{white-space:normal;max-width:300px}}
+  .frontier td.verdict .tag{{white-space:normal;text-transform:none;letter-spacing:0}}
   .muted{{color:var(--muted);font-size:12px}}
   .sources{{font-size:12.5px;line-height:1.55;color:#3c4550}}
   .sources ol{{padding-left:18px;margin:12px 0 0}}
@@ -695,6 +759,7 @@ def render_html(payload: dict) -> str:
     <span><strong>Provider</strong> {html.escape(payload["base_url"])}</span>
     <span><strong>Digest</strong> {html.escape(payload["snapshot"]["digest"])}</span>
     <span><strong>Baseline source</strong> {html.escape(payload["baseline"]["source"])}</span>
+    <span><strong>Modelled total</strong> ${payload["costs"]["total"]:,.2f}/mo</span>
   </div>
 </header>
 <main>
@@ -708,9 +773,9 @@ def render_html(payload: dict) -> str:
 <section>
   <p class="kicker">01 · Frontier</p>
   <h2>What the market actually offers</h2>
-  <p>Before any role is filled, a model that is worse and more expensive than another is removed. The remainder are priced at the measured review volume, and the marginal cost per coding point is shown against the builder.</p>
+  <p>Before any role is filled, a model that is worse and more expensive than another on every price component is removed. The remainder are priced at the measured review volume. The judge is different: it is chosen from every live model on capability, because a model can be expensive at review volume and still be the best decision model.</p>
   {frontier_table}
-  <p class="note">Review $/mo applies the 7-day realised price to the measured review month ({volume_text}). A different reviewer must beat the builder by {payload["policy"]["min_gain"]:.0%}; the independent reviewer budget is ${payload["policy"]["review_budget_usd"]:,.0f}/mo, and 0 means the builder model reviews.</p>
+  <p class="note">Review $/mo applies the 7-day realised price to the measured review month ({volume_text}). A different reviewer must beat the builder by {payload["policy"]["min_gain"]:.0%}; the independent reviewer budget is ${payload["policy"]["review_budget_usd"]:,.0f}/mo (a cap, not a target), and 0 means the builder model reviews.</p>
 </section>
 <section>
   <p class="kicker">02 · Market</p>

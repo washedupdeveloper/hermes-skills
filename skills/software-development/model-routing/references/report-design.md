@@ -89,7 +89,8 @@ Computed from the payload, never hand-written:
    the marginal point is.
 3. **Budget.** The reviewer's monthly cost at the measured review volume must
    fit `--review-budget`. The default is 0: the builder model reviews under a
-   separate rubric. That is a consistency check, not an independent reviewer.
+   separate rubric. A cap is not a target: the cheapest model that clears the
+   materiality gate is selected, so raising the cap alone does not buy quality.
 
 ## Sources and method
 

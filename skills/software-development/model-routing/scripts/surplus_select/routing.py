@@ -46,6 +46,13 @@ RULES: tuple[tuple[TaskType, tuple[str, ...]], ...] = (
         ),
     ),
     (
+        TaskType.TEST,
+        (
+            "add a test", "add tests", "write a test", "regression test",
+            "test coverage", "add coverage", "unit test",
+        ),
+    ),
+    (
         TaskType.BUGFIX,
         (
             "fix", "bug", "repro", "crash", "mismatch", "broken",
@@ -211,6 +218,7 @@ def route(
     *,
     judge: str | None = None,
     budget_usd: float | None = None,
+    reviewer: str | None = None,
 ) -> Decision:
     """Turn one task into one decision. Pure: no clock, network or filesystem."""
     if not task.verify:
@@ -247,6 +255,7 @@ def route(
         predicate=task.verify,
         reason=reason,
         budget_usd=budget_usd,
+        reviewer=reviewer if requires_review else None,
     )
 
 

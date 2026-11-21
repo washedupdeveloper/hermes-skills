@@ -162,17 +162,33 @@ def parse_catalog(payload: dict) -> dict[str, ModelMarket]:
     if not isinstance(data, list):
         raise ProviderError("catalog has no data list")
     models: dict[str, ModelMarket] = {}
+    unpriced = 0
     for item in data:
         try:
             pricing = item["pricing"]
+            raw_prompt = float(pricing["prompt"])
+            raw_completion = float(pricing["completion"])
+            raw_cache = (
+                float(pricing["input_cache_read"])
+                if pricing.get("input_cache_read") is not None
+                else None
+            )
+            # OpenAI-compatible catalogs quote per token. A value at or above
+            # 0.01 means the endpoint is quoting per million (or per thousand
+            # of something), and multiplying by 1e6 would overstate the price
+            # by six orders of magnitude. Fail loudly instead.
+            if any(
+                value is not None and value >= 0.01
+                for value in (raw_prompt, raw_completion, raw_cache)
+            ):
+                raise ProviderError(
+                    f"catalog price for {item.get('id')!r} looks per-million, "
+                    "not per-token; refusing to guess"
+                )
             list_price = Price(
-                input=float(pricing["prompt"]) * 1_000_000,
-                output=float(pricing["completion"]) * 1_000_000,
-                cache_read=(
-                    float(pricing["input_cache_read"]) * 1_000_000
-                    if pricing.get("input_cache_read") is not None
-                    else None
-                ),
+                input=raw_prompt * 1_000_000,
+                output=raw_completion * 1_000_000,
+                cache_read=(raw_cache * 1_000_000 if raw_cache is not None else None),
             )
             model_id = str(item["id"])
             models[model_id] = ModelMarket(
@@ -181,8 +197,13 @@ def parse_catalog(payload: dict) -> dict[str, ModelMarket]:
                 context=int(item.get("context_length", 0)),
                 list_price=list_price,
             )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ProviderError(f"malformed catalog entry: {item!r}") from exc
+        except (KeyError, TypeError, ValueError):
+            unpriced += 1
+            continue
+    if not models:
+        raise ProviderError(
+            f"catalog has no priced models ({unpriced} entries had no usable pricing)"
+        )
     return models
 
 
@@ -240,7 +261,16 @@ class SurplusProvider:
                 if market is None:
                     errors[model_id] = error
                     continue
-                markets[model_id] = replace(markets[model_id], **market)
+                # The page carries live and realised prices; the catalog
+                # carries the cache-read price. Merging one over the other
+                # would drop the cache term and understate every role.
+                catalog_price = markets[model_id].list_price
+                merged = dict(market)
+                for key in ("list_price", "best"):
+                    price = merged.get(key)
+                    if isinstance(price, Price) and price.cache_read is None:
+                        merged[key] = Price(price.input, price.output, catalog_price.cache_read)
+                markets[model_id] = replace(markets[model_id], **merged)
         if not any(model.best for model in markets.values()):
             raise ProviderError(f"no market page parsed; first error: {next(iter(errors.values()), 'none')}")
         hashes = {"catalog": sha256(self._catalog_raw.encode()).hexdigest()[:16]}

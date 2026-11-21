@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import baseline as baseline_mod
@@ -27,7 +28,7 @@ from .calibration import Budget
 from .model import Decision, Snapshot
 from .portfolio import Portfolio, choose
 
-DEFAULT_HOME = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser()
+DEFAULT_HOME = baseline_mod.hermes_home()
 DEFAULT_STATE = DEFAULT_HOME / "cache" / "surplus-select"
 
 SOURCES = [
@@ -78,6 +79,10 @@ def _combine(roles: list[calibration.RoleCalibration]) -> calibration.RoleCalibr
     def pick(values: list) -> object:
         return max(values, key=lambda tokens: tokens.total())
 
+    flags = {role.uncalibrated for role in roles}
+    source = "; ".join(role.source for role in roles)
+    if len(flags) > 1:
+        source += " (mixed calibrated/illustrative)"
     return calibration.RoleCalibration(
         role=first.role,
         monthly_total=total,
@@ -85,8 +90,8 @@ def _combine(roles: list[calibration.RoleCalibration]) -> calibration.RoleCalibr
         per_call=snapshot_percentiles(pick([r.per_call.p50 for r in roles]), pick([r.per_call.p90 for r in roles])),
         sessions=sessions,
         window_days=first.window_days,
-        source="; ".join(role.source for role in roles),
-        uncalibrated=all(role.uncalibrated for role in roles),
+        source=source,
+        uncalibrated=any(flags),
     )
 
 
@@ -166,6 +171,20 @@ def cmd_refresh(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_refresh_benchmarks(args: argparse.Namespace) -> int:
+    source = Path(args.benchmarks)
+    if source.is_file():
+        cache = benchmarks_mod.load(source)
+    else:
+        cache = BenchmarkCache(
+            source="none", fetched_at=datetime.now(timezone.utc), models={}
+        )
+    fresh = benchmarks_mod.refresh(cache)
+    benchmarks_mod.save(fresh, args.out)
+    print(f"wrote {args.out}: {len(fresh.models)} scored models, source {fresh.source}")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     snap = snapshot_mod.load(args.snapshot)
     print(f"provider   {snap.provider}  {snap.base_url}")
@@ -211,12 +230,18 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
     resolved = baseline_mod.resolve(args.baseline, args.baseline_env, Path(args.profile_config))
     review_tokens = budget.role("reviewer").monthly_total if budget.role("reviewer") else None
+    builder_tokens = budget.role("builder").monthly_total if budget.role("builder") else None
+    runner_tokens = budget.role("runner").monthly_total if budget.role("runner") else None
+    judge_tokens = budget.role("judge").monthly_total if budget.role("judge") else None
     portfolio = choose(
         cache,
         snap,
         resolved.model,
         review_budget_usd=args.review_budget,
         review_tokens=review_tokens,
+        runner_tokens=runner_tokens,
+        builder_tokens=builder_tokens,
+        judge_tokens=judge_tokens,
         min_gain=args.min_gain,
     )
     routing_map = _resolve_routing(change)
@@ -226,7 +251,12 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
     judge = portfolio.get("judge")
     decisions: list[Decision] = [
-        routing.route(task, resolved.model, judge=judge.model_id if judge else None)
+        routing.route(
+            task,
+            resolved.model,
+            judge=judge.model_id if judge else None,
+            reviewer=(portfolio.get("reviewer").model_id if portfolio.get("reviewer") else None),
+        )
         for task in routing_map.tasks.values()
     ]
     payload = report.build(
@@ -304,6 +334,13 @@ def build_parser() -> argparse.ArgumentParser:
     refresh.add_argument("--models", default="")
     refresh.add_argument("--out", required=True)
     refresh.set_defaults(func=cmd_refresh)
+
+    bench = sub.add_parser(
+        "refresh-benchmarks", help="fetch the BenchLM coding table into a cache"
+    )
+    _add_paths(bench)
+    bench.add_argument("--out", required=True)
+    bench.set_defaults(func=cmd_refresh_benchmarks)
 
     plan = sub.add_parser("plan", help="route one change and write the report")
     _add_paths(plan)

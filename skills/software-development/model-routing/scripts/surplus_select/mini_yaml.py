@@ -50,6 +50,12 @@ def _scalar(text: str) -> Any:
         return None
     if (text[0] == text[-1]) and text[0] in "\"'" and len(text) >= 2:
         return text[1:-1]
+    if text.startswith("{"):
+        raise YamlError("flow mappings are not supported; use a block mapping")
+    if text.startswith(("&", "*")):
+        raise YamlError("anchors and aliases are not supported")
+    if text.startswith(("|", ">")):
+        raise YamlError("block scalars are not supported")
     if text.startswith("[") and text.endswith("]"):
         body = text[1:-1].strip()
         if not body:
@@ -125,6 +131,8 @@ def _mapping(lines: list[tuple[int, str]], index: int, indent: int) -> tuple[dic
         if not sep:
             raise YamlError(f"expected 'key: value', got {content!r}")
         name = _unquote(key.strip())
+        if name == "<<":
+            raise YamlError("merge keys are not supported")
         rest = rest.strip()
         index += 1
         if rest:

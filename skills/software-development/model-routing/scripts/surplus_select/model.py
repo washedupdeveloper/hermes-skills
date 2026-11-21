@@ -19,11 +19,17 @@ class Price:
     cache_read: float | None = None
 
     def cost(self, tokens: "Tokens") -> float:
-        """Cost of a token bundle at this price. Reasoning tokens bill as output."""
-        out = tokens.output + tokens.reasoning
-        total = tokens.input * self.input + out * self.output
-        if self.cache_read is not None:
-            total += tokens.cache_read * self.cache_read
+        """Cost of a token bundle at this price.
+
+        `Tokens.output` already includes `Tokens.reasoning` in the Hermes usage
+        schema: reconstructing the recorded `estimated_cost_usd` matches exactly
+        when reasoning is excluded and fails when it is added. A cache read with
+        no published cache price is billed at the input price; treating it as
+        free would understate every cache-heavy role.
+        """
+        total = tokens.input * self.input + tokens.output * self.output
+        cache_price = self.cache_read if self.cache_read is not None else self.input
+        total += tokens.cache_read * cache_price
         return total / 1_000_000
 
     def blended(self, output_share: float = 0.2) -> float:
@@ -59,8 +65,17 @@ class ModelMarket:
     offers: tuple[Offer, ...] = ()
 
     def live(self) -> Price:
-        """The price a caller can buy at now; list when no offer is known."""
-        return self.best or self.list_price
+        """The price a caller can buy at now; list when no offer is known.
+
+        The order book publishes input and output only, so a live offer with no
+        cache price inherits the catalog's. Dropping it would bill cache reads
+        at zero for the role that carries the most of them.
+        """
+        if self.best is None:
+            return self.list_price
+        if self.best.cache_read is None and self.list_price.cache_read is not None:
+            return Price(self.best.input, self.best.output, self.list_price.cache_read)
+        return self.best
 
     def realised(self) -> Price:
         """The request-weighted average, used for budgets."""
@@ -143,7 +158,8 @@ class Tokens:
         )
 
     def total(self) -> int:
-        return self.input + self.output + self.cache_read + self.reasoning
+        """Billable tokens. Reasoning is a subset of output, not an extra."""
+        return self.input + self.output + self.cache_read
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,3 +223,4 @@ class Decision:
     reason: str
     needs_scoping: bool = False
     budget_usd: float | None = None
+    reviewer: str | None = None

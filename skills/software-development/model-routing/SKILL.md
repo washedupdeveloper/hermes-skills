@@ -2,13 +2,14 @@
 name: model-routing
 description: "Use when picking a model stack for code."
 version: 0.1.0
-author: "Storm / Hermes"
+author: "Storm, Hermes Agent"
 license: MIT
 platforms: [linux, macos, windows]
 category: software-development
 metadata:
   hermes:
     tags: [models, routing, pricing, coding, benchmarks, openspec, council]
+    related_skills: [technology-selection, verify-and-stop, critical-verdict]
 ---
 
 # Model routing selector
@@ -18,9 +19,34 @@ cost at the prices actually available?** It is deliberately not a chat tool and
 not an LLM call. The decision is a pure function over a dated price snapshot, a
 calibrated token budget, and a cached benchmark table.
 
+## When to Use
+
+- Choosing which model should implement an OpenSpec task, and which model may
+  review or decide it.
+- Comparing a provider's live best price, seven-day realised price and discount
+  depth for coding models.
+- Auditing a cheaper or more expensive model: does it actually beat the builder
+  by enough to justify the price?
+- Calibrating token volume from Hermes' own session history instead of guessing.
+
+Don't use for: open-ended chat-model selection, or executing the tasks. `plan`
+writes a routing report; it does not run the models or rewrite a profile.
+
+## Prerequisites
+
+- Python 3.11+ (standard library only).
+- Read access to the Hermes `state.db` for calibration, and network access to
+  the provider for `refresh`.
+- The provider key is not read by this skill. `refresh` fetches the public
+  market pages; the router only prices and reports.
+
 ## Quick start
 
-Set the skill directory once. It is the directory containing this file.
+Set `S` to the directory containing this SKILL.md. The example below uses the
+documented install layout; an external `skills.external_dirs` checkout lives
+wherever it was cloned. `STATE` is a writable cache outside the skill tree.
+On Windows use `python` rather than `python3` and the `%LOCALAPPDATA%\hermes`
+home.
 
 ```bash
 S="${HERMES_HOME:-$HOME/.hermes}/skills/software-development/model-routing"
@@ -40,8 +66,14 @@ python3 "$S/scripts/run.py" refresh \
   --url https://api.surplusintelligence.ai/v1 \
   --out "$STATE/snapshot.json"
 
+# Refresh the BenchLM coding table and keep it beside the snapshot.
+python3 "$S/scripts/run.py" refresh-benchmarks \
+  --benchmarks "$S/assets/benchmarks.json" \
+  --out "$STATE/benchmarks.json"
+
 python3 "$S/scripts/run.py" plan \
   --change openspec/changes/<change-name> \
+  --benchmarks "$STATE/benchmarks.json" \
   --out "$STATE/report"
 
 # Optional: authorise an independent reviewer up to $80/month.
@@ -61,7 +93,7 @@ one from `tasks.md` by tagging each task. It writes `report.json` and
 | Role | Rule | What it is allowed to do |
 |---|---|---|
 | **judge** | Best combined coding and hard-reasoning score on the frontier; price is not a tie-breaker | Architecture decisions only. Never implements. |
-| **reviewer** | The builder model by default. A different model only when `--review-budget` is set, it is at least 5% better on coding, and its measured monthly cost fits that budget | Checks and plans. Never writes the patch. |
+| **reviewer** | The builder model by default. A different model only when `--review-budget` is set, it is at least 5% better on coding, its measured monthly cost fits that budget, and it is the cheapest model that clears both gates | Checks and plans. Never writes the patch. |
 | **builder** | The ambient baseline when it is in the market | Implements every task. |
 | **runner** | The builder model unless a cheaper non-dominated model clears 65 | Mechanical and test work. |
 
@@ -79,8 +111,9 @@ reviewer must clear both gates:
    immaterial, not because the model is bad.
 2. **Budget** — its monthly cost at the measured review volume must fit
    `--review-budget`. The default is `0`, which means the builder model reviews
-   under a separate rubric. That is a consistency check, not an independent
-   reviewer.
+   under a separate rubric. A budget is a cap, not a target: among the models
+   that clear the materiality gate, the cheapest one is selected. Raising
+   `--min-gain` is how you ask for a larger quality step, not raising the cap.
 
 A role is a prompt and a budget. Three roles sharing one model is a valid and
 often the rational outcome.
@@ -195,15 +228,33 @@ understates the sum by an order of magnitude.
 
 ## Known limits
 
-- Benchmark refresh parses BenchLM's coding page only. HLE-Diamond and
-  FrontierMath rows are cached in `assets/benchmarks.json`; they do not refresh
-  yet.
+- `refresh-benchmarks` parses BenchLM's coding table only. HLE-Diamond and
+  FrontierMath rows are carried over from `assets/benchmarks.json`; they do not
+  refresh yet. A model with a coding score but no cached reasoning rows scores
+  zero on the judge's reasoning term, so its judge rank is coding-led.
 - `--emit-profiles` / `create-profiles` are not implemented. The report names
   the portfolio but does not rewrite Hermes profiles.
 - The portfolio is a heuristic, not a proof. It puts a defensible default on
   the page; the report says so.
 - Generic providers have no discount book, so the budget column equals list
   price there.
+- BenchLM slugs and provider model ids are matched literally. A model listed
+  under one name at the provider and another at BenchLM is unpriced or
+  unscored, not guessed; add the slug to `assets/benchmarks.json` or pass
+  `--benchmarks` with your own mapping.
+
+## Verification
+
+```bash
+python3 tests/unit/test_model_routing.py        # 56 tests, stdlib only
+python3 -m surplus_select status --snapshot <file> --budget <file>
+```
+
+Prove the end-to-end path rather than the unit suite alone: run `refresh`, then
+`plan`, then read `report.json` and confirm the portfolio, the frontier verdicts
+and the monthly total. A unit suite cannot see a flag that parses but never
+reaches the selection, so also run one `plan` with `--review-budget 80` and
+confirm the reviewer model actually changes in the output.
 
 ## Tests
 
@@ -213,12 +264,40 @@ python3 tests/unit/test_model_routing.py
 
 The suite covers the price arithmetic (including cache reads), the
 total-versus-median distinction, classification, routing predicates, the
-freshness ladder, provider parsing, portfolio selection, and report emission.
+freshness ladder, provider parsing and its refusal of an unpriced catalog,
+portfolio dominance and materiality, the CLI end-to-end path including
+`--review-budget` and a refused expired snapshot, and report emission.
+
+Every test is standard library `unittest`; there is no pytest dependency, so it
+runs in the bundled Hermes environment.
+
+## Pitfalls
+
+- **A sample is not a ceiling.** `requests_24h` shows liquidity, not capacity.
+  A model with 251 requests/day can be sold out at your peak.
+- **A benchmark gain is a proxy for a capability step.** 3.6 points on a 76.4
+  baseline is inside the noise of most baskets; that is why the materiality
+  gate exists, and why it is a flag rather than a constant.
+- **Dominance is priced at the role's measured volume.** A model can look
+  cheap per input token and be dominated once output and cache reads are
+  priced; a single 80/20 blend would hide that.
+- **A model with no live offer is not selectable.** It remains in the market
+  table with `—`, but no role can recommend it.
+- **Reasoning is already inside output.** `output_tokens` in the Hermes usage
+  table includes `reasoning_tokens`; adding both double-bills the model. The
+  formula is checked against Hermes's own recorded estimate.
+- **The reviewer sharing the builder is not independence.** It is a second read
+  of the same diff by the same weights; say so in the report rather than letting
+  the role name imply an independent check.
 
 ## Troubleshooting
 
 - **`no state database`** — pass `--hermes-home` at the directory containing
-  `state.db`, not the profile directory.
+  `state.db`, not the profile directory. On Windows that is
+  `%LOCALAPPDATA%\hermes`; the tool resolves that default itself.
+- **`has no session_model_usage table`** or a silent empty read — the path was
+  probably unescaped in a URI. The reader uses `Path.as_uri()`, so a path with a
+  space or `#` is safe; if you see this on a plain path, the schema itself moved.
 - **`not in this catalog`** — the benchmark cache names a model the provider no
   longer sells. Remove it or pass `--models` explicitly.
 - **`no benchmark price`** — the model page changed shape. Run `refresh` with

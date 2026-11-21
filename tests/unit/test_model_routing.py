@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import os
 import sqlite3
 import sys
 import tempfile
 import time
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,6 +23,7 @@ from surplus_select import (  # noqa: E402
     baseline,
     benchmarks as benchmarks_mod,
     calibration,
+    cli,
     mini_yaml,
     providers,
     report,
@@ -59,6 +64,19 @@ tasks:
         again = mini_yaml.loads(rendered)
         self.assertEqual(again["tasks"]["1.1"]["verify"], data["tasks"]["1.1"]["verify"])
         self.assertIn('"1.1"', rendered)
+
+    def test_unsupported_yaml_is_refused_not_guessed(self) -> None:
+        cases = [
+            "tasks: {1.1: {type: feature}}\n",
+            "a: &x 1\n",
+            "a: *x\n",
+            "a: |\n  text\n",
+            "a: 1\n<<: *x\n",
+        ]
+        for text in cases:
+            with self.subTest(text=text):
+                with self.assertRaises(mini_yaml.YamlError):
+                    mini_yaml.loads(text)
 
     def test_comments_and_quoted_hashes(self) -> None:
         data = mini_yaml.loads('change: "a#b"  # trailing\nschema: 1\n')
@@ -109,12 +127,45 @@ class CalibrationTests(unittest.TestCase):
             self.assertEqual(role.per_call.p50.input, 1_000)
             self.assertFalse(role.uncalibrated)
 
+    def test_percentile_bundle_total_is_a_real_session_total(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sessions = [
+                ("low", 0, 0, 1),
+                ("middle", 100, 100, 1),
+                ("high", 1000, 0, 1),
+            ]
+            path = self._db(Path(tmp), sessions)
+            role = calibration.measure("builder", path, window_days=30)
+        # The P50 total is 200 from the middle session. Summing per-field
+        # percentiles would give input 100 + output 0 = 100, a bundle that no
+        # session ever had.
+        self.assertEqual(role.per_session.p50.total(), 200)
+        self.assertEqual(role.per_session.p50.input, 100)
+        self.assertEqual(role.per_session.p50.output, 100)
+
     def test_missing_table_is_an_error_not_an_empty_month(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.db"
             sqlite3.connect(path).close()
             with self.assertRaises(calibration.CalibrationError):
                 calibration.measure("builder", path)
+
+    def test_path_with_hash_and_spaces_is_opened_read_only(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="a b#c ") as tmp:
+            path = self._db(Path(tmp), [("s1", 1000, 200, 10)])
+            role = calibration.measure("builder", path)
+        self.assertEqual(role.monthly_total.input, 1000)
+        self.assertEqual(role.sessions, 1)
+
+    def test_combining_a_calibrated_and_an_illustrative_profile_is_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._db(Path(tmp), [("s1", 1000, 200, 10)])
+            measured = calibration.measure("reviewer", path)
+        fallback = calibration._uncalibrated("reviewer", 30, "none")
+        combined = cli._combine([measured, fallback])
+        self.assertTrue(combined.uncalibrated)
+        self.assertIn("mixed", combined.source)
+        self.assertEqual(combined.monthly_total.input, measured.monthly_total.input + fallback.monthly_total.input)
 
     def test_budget_round_trip_marks_uncalibrated_roles(self) -> None:
         budget = calibration.default_budget()
@@ -141,6 +192,20 @@ class BaselineTests(unittest.TestCase):
         with self.assertRaises(baseline.BaselineError):
             baseline.resolve(None, "", None)
 
+    def test_hermes_home_uses_the_windows_default_only_on_windows(self) -> None:
+        self.assertEqual(
+            baseline.hermes_home({"HERMES_HOME": "/x"}, windows=False), Path("/x")
+        )
+        self.assertEqual(
+            baseline.hermes_home(
+                {"LOCALAPPDATA": "C:/Users/x/AppData/Local"}, windows=True
+            ),
+            Path("C:/Users/x/AppData/Local/hermes"),
+        )
+        self.assertEqual(
+            baseline.hermes_home({}, windows=False), Path.home() / ".hermes"
+        )
+
 
 class ClassificationTests(unittest.TestCase):
     def test_representative_titles(self) -> None:
@@ -150,6 +215,7 @@ class ClassificationTests(unittest.TestCase):
             "Fix SARIF ruleId mismatch on merged findings": "bugfix",
             "Split proof execution out of run.py": "refactor",
             "Add a regression test for malformed verdict JSON": "test",
+            "Add a regression test for the parser bug": "test",
             "Rename Finding.dimension to category": "mechanical",
             "Update docs/AGENTS.md with the adapter contract": "docs",
             "Add --dimension filter to council review": "feature",
@@ -196,6 +262,24 @@ class RoutingMapTests(unittest.TestCase):
         self.assertEqual(decision.decider, "claude-fable-5.2")
         self.assertTrue(decision.requires_review)
         self.assertEqual(decision.tier, "judge")
+
+    def test_route_names_the_reviewer_only_when_review_is_required(self) -> None:
+        bugfix = TaskSpec(
+            id="1.2",
+            title="Fix the parser",
+            type="bugfix",
+            verify=("pytest tests/test_parser.py -q",),
+        )
+        feature = TaskSpec(
+            id="1.3",
+            title="Add a flag",
+            type="feature",
+            verify=("pytest tests/test_cli.py -q",),
+        )
+        reviewed = routing.route(bugfix, "deepseek", reviewer="gpt-6.1-terra")
+        plain = routing.route(feature, "deepseek", reviewer="gpt-6.1-terra")
+        self.assertEqual(reviewed.reviewer, "gpt-6.1-terra")
+        self.assertIsNone(plain.reviewer)
 
     def test_next_tier_moves_up_and_stops(self) -> None:
         ladder = ["a", "b", "c"]
@@ -245,6 +329,19 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(loaded.models["deepseek-v4.1-flash-1017"].context, 1_048_576)
         self.assertEqual(snapshot.digest(original), snapshot.digest(loaded))
 
+    def test_a_malformed_snapshot_names_the_model(self) -> None:
+        data = snapshot.to_dict(self._snapshot(1))
+        del data["models"]["deepseek-v4.1-flash-1017"]["list_price"]
+        with self.assertRaises(snapshot.SnapshotError):
+            snapshot.from_dict(data)
+
+    def test_corrupt_json_is_a_snapshot_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "snapshot.json"
+            path.write_text("{not json", encoding="utf-8")
+            with self.assertRaises(snapshot.SnapshotError):
+                snapshot.load(path)
+
     def test_realised_price_uses_the_average_not_the_sticker(self) -> None:
         market = self._snapshot(1).models["deepseek-v4.1-flash-1017"]
         realised = market.realised()
@@ -257,6 +354,17 @@ class SnapshotTests(unittest.TestCase):
         price = Price(1.0, 2.0, 0.1)
         tokens = Tokens(input=1_000_000, output=200_000, cache_read=500_000)
         self.assertAlmostEqual(price.cost(tokens), 1.0 + 0.4 + 0.05)
+
+    def test_a_cache_read_without_a_cache_price_bills_as_input(self) -> None:
+        price = Price(1.0, 2.0)
+        tokens = Tokens(cache_read=1_000_000)
+        self.assertAlmostEqual(price.cost(tokens), 1.0)
+
+    def test_reasoning_is_already_inside_output(self) -> None:
+        price = Price(1.0, 2.0)
+        tokens = Tokens(output=1_000_000, reasoning=500_000)
+        self.assertAlmostEqual(price.cost(tokens), 2.0)
+        self.assertEqual(tokens.total(), 1_000_000)
 
 
 class ProviderTests(unittest.TestCase):
@@ -339,6 +447,9 @@ Route|p50 latency|p95 latency|Throughput|Success rate|Share|
         self.assertTrue(snap.capabilities["discounts"])
         self.assertAlmostEqual(snap.models["m1"].best.input, 0.0045)
         self.assertAlmostEqual(snap.models["m1"].list_price.input, 0.147)
+        # The page has no cache price; the catalog's must survive the merge.
+        self.assertAlmostEqual(snap.models["m1"].list_price.cache_read, 0.0063)
+        self.assertAlmostEqual(snap.models["m1"].live().cache_read, 0.0063)
         self.assertEqual(len(http.calls), 2)
 
     def test_generic_provider_records_the_discount_gap(self) -> None:
@@ -353,6 +464,33 @@ Route|p50 latency|p95 latency|Throughput|Success rate|Share|
         self.assertFalse(snap.capabilities["discounts"])
         self.assertIsNone(snap.models["m1"].best)
 
+    def test_catalog_price_quoted_per_million_is_refused(self) -> None:
+        payload = {
+            "data": [
+                {
+                    "id": "m1",
+                    "pricing": {"prompt": "0.15", "completion": "0.60"},
+                }
+            ]
+        }
+        with self.assertRaises(providers.ProviderError):
+            providers.parse_catalog(payload)
+
+    def test_catalog_skips_unpriced_entries(self) -> None:
+        payload = {
+            "data": [
+                self.CATALOG["data"][0],
+                {"id": "free", "name": "Free", "context_length": 1000},
+            ]
+        }
+        models = providers.parse_catalog(payload)
+        self.assertEqual(set(models), {"m1"})
+
+    def test_catalog_with_no_priced_entries_is_an_error(self) -> None:
+        with self.assertRaises(providers.ProviderError) as caught:
+            providers.parse_catalog({"data": [{"id": "free"}]})
+        self.assertIn("no priced models", str(caught.exception))
+
     def test_provider_factory_matches_the_endpoint(self) -> None:
         self.assertEqual(
             providers.provider_for("https://api.surplusintelligence.ai/v1").name,
@@ -362,6 +500,32 @@ Route|p50 latency|p95 latency|Throughput|Success rate|Share|
             providers.provider_for("https://openrouter.ai/api/v1").name,
             "generic-openai",
         )
+
+
+class BenchmarkTests(unittest.TestCase):
+    def test_parse_benchlm_array_keeps_coding_and_overall(self) -> None:
+        row = [0] * 25
+        row[1] = "Model Name"
+        row[2] = "slug"
+        row[4] = "Proprietary"
+        row[14] = 88.0
+        row[22] = 91.0
+        markup = "[" + json.dumps(row, separators=(",", ":")) + "]"
+        models = benchmarks_mod.parse_benchlm_coding(markup)
+        self.assertIn("slug", models)
+        self.assertEqual(models["slug"].coding, 91.0)
+        self.assertEqual(models["slug"].overall, 88.0)
+
+    def test_refresh_rejects_a_page_with_too_few_rows(self) -> None:
+        class FakeHttp:
+            def get(self, url: str, timeout: float = 30.0) -> str:
+                return "[]"
+
+        cache = benchmarks_mod.BenchmarkCache(
+            source="test", fetched_at=datetime.now(timezone.utc), models={}
+        )
+        with self.assertRaises(providers.ProviderError):
+            benchmarks_mod.refresh(cache, FakeHttp())
 
 
 class PortfolioTests(unittest.TestCase):
@@ -449,7 +613,29 @@ class PortfolioTests(unittest.TestCase):
             review_budget_usd=1_000_000,
             review_tokens=tokens,
         )
-        self.assertEqual(wide.get("reviewer").model_id, "gpt-6.2-astra")
+        # A budget is a cap, not a target: the cheapest material upgrade wins.
+        self.assertEqual(wide.get("reviewer").model_id, "gpt-6.2-sol")
+        strict = choose(
+            self._cache(),
+            self._snapshot(),
+            "deepseek-v4.1-flash-1017",
+            review_budget_usd=1_000_000,
+            review_tokens=tokens,
+            min_gain=0.15,
+        )
+        self.assertEqual(strict.get("reviewer").model_id, "gpt-6.2-astra")
+
+    def test_a_budget_below_the_cheapest_material_upgrade_keeps_the_builder(self) -> None:
+        tokens = Tokens(input=75_000_000, output=8_000_000)
+        portfolio = choose(
+            self._cache(),
+            self._snapshot(),
+            "deepseek-v4.1-flash-1017",
+            review_budget_usd=10,
+            review_tokens=tokens,
+        )
+        self.assertEqual(portfolio.get("reviewer").model_id, "deepseek-v4.1-flash-1017")
+        self.assertIn("no model is both", portfolio.get("reviewer").reason)
 
     def test_runner_uses_a_cheaper_nondominated_model(self) -> None:
         cache = self._cache()
@@ -466,12 +652,119 @@ class PortfolioTests(unittest.TestCase):
         portfolio = choose(cache, snap, "deepseek-v4.1-flash-1017")
         self.assertEqual(portfolio.get("runner").model_id, "cheap-coder")
 
+    def test_a_model_with_no_live_offer_is_not_selectable(self) -> None:
+        cache = self._cache()
+        cache.models["ghost"] = benchmarks_mod.Benchmark(coding=99.0, hle=99.0, frontier_math=99.0)
+        snap = self._snapshot()
+        snap.models["ghost"] = ModelMarket(
+            model_id="ghost",
+            name="Ghost",
+            context=1_000_000,
+            list_price=Price(0.10, 0.10),
+            best=None,
+            realised_discount=0.0,
+        )
+        portfolio = choose(cache, snap, "deepseek-v4.1-flash-1017")
+        self.assertNotIn("ghost", portfolio.model_ids())
+        self.assertNotEqual(portfolio.get("judge").model_id, "ghost")
+
+    def test_dominated_verdict_is_measured_against_its_dominator(self) -> None:
+        cache = self._cache()
+        cache.models["weak"] = benchmarks_mod.Benchmark(coding=77.0)
+        cache.models["strong"] = benchmarks_mod.Benchmark(coding=88.0)
+        snap = self._snapshot()
+        snap.models["weak"] = ModelMarket(
+            model_id="weak",
+            name="Weak",
+            context=1_000_000,
+            list_price=Price(2.0, 2.0),
+            best=Price(2.0, 2.0),
+            realised_discount=0.0,
+        )
+        snap.models["strong"] = ModelMarket(
+            model_id="strong",
+            name="Strong",
+            context=1_000_000,
+            list_price=Price(1.0, 1.0),
+            best=Price(1.0, 1.0),
+            realised_discount=0.0,
+        )
+        portfolio = choose(cache, snap, "deepseek-v4.1-flash-1017")
+        rows = report._frontier_rows(
+            snap, cache, portfolio, Tokens(input=75_000_000, output=8_000_000), 0.05
+        )
+        weak = next(row for row in rows if row["model"] == "weak")
+        self.assertEqual(weak["delta"], 0.6)  # +0.6 over the builder
+        self.assertIn("vs dominator", weak["verdict"])
+        self.assertIn("-11.0 pts", weak["verdict"])  # 77.0 vs 88.0
+
+    def test_the_judge_can_sit_off_the_review_frontier(self) -> None:
+        cache = self._cache()
+        cache.models["reasoner"] = benchmarks_mod.Benchmark(
+            coding=95.0, hle=99.0, frontier_math=99.0
+        )
+        cache.models["cheap-smart"] = benchmarks_mod.Benchmark(coding=96.0, hle=0.0, frontier_math=0.0)
+        snap = self._snapshot()
+        snap.models["reasoner"] = ModelMarket(
+            model_id="reasoner",
+            name="Reasoner",
+            context=1_000_000,
+            list_price=Price(100.0, 100.0),
+            best=Price(100.0, 100.0),
+            realised_discount=0.0,
+        )
+        snap.models["cheap-smart"] = ModelMarket(
+            model_id="cheap-smart",
+            name="Cheap Smart",
+            context=1_000_000,
+            list_price=Price(1.0, 1.0),
+            best=Price(1.0, 1.0),
+            realised_discount=0.0,
+        )
+        portfolio = choose(cache, snap, "deepseek-v4.1-flash-1017")
+        self.assertEqual(portfolio.get("judge").model_id, "reasoner")
+        self.assertIn("reasoner", portfolio.rejected or {})
+
+    def test_negative_policy_values_are_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            choose(self._cache(), self._snapshot(), "deepseek-v4.1-flash-1017", min_gain=-0.01)
+        with self.assertRaises(ValueError):
+            choose(self._cache(), self._snapshot(), "deepseek-v4.1-flash-1017", min_gain=1.5)
+        with self.assertRaises(ValueError):
+            choose(
+                self._cache(),
+                self._snapshot(),
+                "deepseek-v4.1-flash-1017",
+                review_budget_usd=-1,
+            )
+
     def test_portfolio_refuses_an_unscored_market(self) -> None:
         empty = benchmarks_mod.BenchmarkCache(
             source="test", fetched_at=datetime.now(timezone.utc), models={}
         )
         with self.assertRaises(ValueError):
             choose(empty, self._snapshot(), "deepseek-v4.1-flash-1017")
+
+    def test_all_offers_missing_is_a_refusal_not_a_list_price_fallback(self) -> None:
+        snap = PortfolioTests()._snapshot()
+        stripped = Snapshot(
+            provider=snap.provider,
+            base_url=snap.base_url,
+            fetched_at=snap.fetched_at,
+            capabilities=snap.capabilities,
+            models={key: replace(market, best=None) for key, market in snap.models.items()},
+        )
+        with self.assertRaises(ValueError):
+            choose(self._cache(), stripped, "deepseek-v4.1-flash-1017")
+
+    def test_a_review_budget_without_volume_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            choose(
+                self._cache(),
+                self._snapshot(),
+                "deepseek-v4.1-flash-1017",
+                review_budget_usd=10,
+            )
 
 
 class ReportTests(unittest.TestCase):
@@ -507,6 +800,163 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Generated", html_text)
         self.assertIn("The portfolio", html_text)
         self.assertIn("Monthly $", html_text)
+
+    def test_html_escapes_task_titles(self) -> None:
+        cache = PortfolioTests()._cache()
+        snap = PortfolioTests()._snapshot()
+        portfolio = choose(cache, snap, "deepseek-v4.1-flash-1017")
+        task = TaskSpec(
+            id="1.1",
+            title="<script>alert(1)</script>",
+            type="feature",
+            verify=("pytest tests/test_cli.py -q",),
+        )
+        payload = report.build(
+            snapshot=snap,
+            budget=calibration.default_budget(),
+            portfolio=portfolio,
+            routing=routing.RoutingMap(change="demo", tasks={"1.1": task}),
+            decisions=[routing.route(task, "deepseek-v4.1-flash-1017")],
+            cache=cache,
+            baseline="deepseek-v4.1-flash-1017",
+            baseline_source="test",
+        )
+        html_text = report.render_html(payload)
+        self.assertNotIn("<script>alert(1)</script>", html_text)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html_text)
+
+    def test_price_multiple_never_rounds_a_premium_to_one_x(self) -> None:
+        self.assertEqual(report._multiple(1.14), "1.1")
+        self.assertEqual(report._multiple(9.94), "9.9")
+        self.assertEqual(report._multiple(17.4), "17")
+
+
+class CliPlanTests(unittest.TestCase):
+    def _budget(self):
+        base = calibration.default_budget()
+        reviewer = replace(
+            base.role("reviewer"),
+            monthly_total=Tokens(input=75_000_000, output=8_000_000, cache_read=0),
+            sessions=300,
+            uncalibrated=False,
+        )
+        return calibration.build_budget(
+            [base.role("builder"), reviewer, base.role("runner"), base.role("judge")]
+        )
+
+    def _fixture(self, directory: Path) -> tuple[Path, Path, Path, Path, Path]:
+        cache = PortfolioTests()._cache()
+        snap = PortfolioTests()._snapshot()
+        snap_path = directory / "snapshot.json"
+        bench_path = directory / "benchmarks.json"
+        budget_path = directory / "budget.yaml"
+        config_path = directory / "config.yaml"
+        change = directory / "change"
+        change.mkdir()
+        snapshot.save(snap, snap_path)
+        benchmarks_mod.save(cache, bench_path)
+        calibration.save_budget(self._budget(), budget_path)
+        config_path.write_text(
+            'model:\n  default: "deepseek-v4.1-flash-1017"\n', encoding="utf-8"
+        )
+        (change / "tasks.md").write_text(
+            """- [ ] 1.1 Add a flag [type: feature] [verify: pytest tests/a.py -q]
+- [ ] 1.2 Fix a bug [type: bugfix] [verify: pytest tests/b.py -q]
+""",
+            encoding="utf-8",
+        )
+        return snap_path, budget_path, bench_path, config_path, change
+
+    def _run(self, directory: Path, *extra: str) -> dict:
+        snap, budget, bench, config, change = self._fixture(directory)
+        out = directory / "report"
+        argv = [
+            "plan",
+            "--change",
+            str(change),
+            "--snapshot",
+            str(snap),
+            "--budget",
+            str(budget),
+            "--benchmarks",
+            str(bench),
+            "--profile-config",
+            str(config),
+            "--out",
+            str(out),
+            *extra,
+        ]
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = cli.main(argv)
+        self.assertEqual(code, 0)
+        return json.loads((out / "report.json").read_text(encoding="utf-8"))
+
+    def test_without_a_budget_the_reviewer_is_the_builder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = self._run(Path(tmp))
+        roles = {row["role"]: row["model"] for row in payload["portfolio"]}
+        self.assertEqual(roles["reviewer"], "deepseek-v4.1-flash-1017")
+        self.assertEqual(roles["runner"], "deepseek-v4.1-flash-1017")
+        bugfix = next(task for task in payload["tasks"] if task["id"] == "1.2")
+        feature = next(task for task in payload["tasks"] if task["id"] == "1.1")
+        self.assertEqual(bugfix["reviewer"], "deepseek-v4.1-flash-1017")
+        self.assertIsNone(feature["reviewer"])
+
+    def test_the_review_budget_flag_reaches_the_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = self._run(Path(tmp), "--review-budget", "80")
+        roles = {row["role"]: row["model"] for row in payload["portfolio"]}
+        self.assertEqual(roles["reviewer"], "gpt-6.2-sol")
+        self.assertEqual(payload["policy"]["review_budget_usd"], 80.0)
+
+    def test_invalid_policy_flags_exit_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw)
+            snap, budget, bench, config, change = self._fixture(directory)
+            base = [
+                "plan",
+                "--change", str(change),
+                "--snapshot", str(snap),
+                "--budget", str(budget),
+                "--benchmarks", str(bench),
+                "--profile-config", str(config),
+                "--out", str(directory / "report"),
+            ]
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(cli.main(base + ["--min-gain", "2"]), 1)
+                self.assertEqual(cli.main(base + ["--review-budget", "-1"]), 1)
+
+    def test_an_expired_snapshot_is_refused_unless_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw)
+            snap_path, budget, bench, config, change = self._fixture(directory)
+            snap = snapshot.load(snap_path)
+            stale = Snapshot(
+                provider=snap.provider,
+                base_url=snap.base_url,
+                fetched_at=datetime.now(timezone.utc) - timedelta(days=8),
+                capabilities=snap.capabilities,
+                models=snap.models,
+            )
+            snapshot.save(stale, snap_path)
+            argv = [
+                "plan",
+                "--change",
+                str(change),
+                "--snapshot",
+                str(snap_path),
+                "--budget",
+                str(budget),
+                "--benchmarks",
+                str(bench),
+                "--profile-config",
+                str(config),
+                "--out",
+                str(directory / "report"),
+            ]
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(cli.main(argv), 1)
+                self.assertEqual(cli.main(argv + ["--accept-stale"]), 0)
 
 
 if __name__ == "__main__":

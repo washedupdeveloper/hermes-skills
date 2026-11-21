@@ -70,6 +70,24 @@ def resolve(
     )
 
 
+def hermes_home(env: dict[str, str] | None = None, *, windows: bool | None = None) -> Path:
+    """Resolve Hermes' home without assuming a POSIX layout.
+
+    `HERMES_HOME` wins. On Windows the default is `%LOCALAPPDATA%\\hermes`,
+    not `~/.hermes`; on other platforms it is `~/.hermes`.
+    """
+    source = os.environ if env is None else env
+    configured = source.get("HERMES_HOME")
+    if configured:
+        return Path(configured).expanduser()
+    is_windows = os.name == "nt" if windows is None else windows
+    if is_windows:
+        local = source.get("LOCALAPPDATA")
+        base = Path(local) if local else Path.home() / "AppData" / "Local"
+        return base / "hermes"
+    return Path.home() / ".hermes"
+
+
 def active_profile_config(hermes_home: str | Path, profile: str | None = None) -> Path:
     home = Path(hermes_home)
     if profile:

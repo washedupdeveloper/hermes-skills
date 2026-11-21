@@ -33,17 +33,6 @@ class CalibrationError(RuntimeError):
     """The database cannot be read or does not carry the expected table."""
 
 
-def _percentile(values: list[float], fraction: float) -> float:
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    position = (len(ordered) - 1) * fraction
-    lower = int(position)
-    upper = min(lower + 1, len(ordered) - 1)
-    weight = position - lower
-    return ordered[lower] + (ordered[upper] - ordered[lower]) * weight
-
-
 def _tokens_from_rows(rows: Iterable[tuple]) -> list[Tokens]:
     result: list[Tokens] = []
     for _session, input_tokens, output_tokens, cache_read, reasoning, calls in rows:
@@ -60,32 +49,38 @@ def _tokens_from_rows(rows: Iterable[tuple]) -> list[Tokens]:
 
 
 def _percentiles(values: list[Tokens], scale: float = 1.0) -> Percentiles:
-    def field(name: str) -> tuple[Tokens, Tokens]:
-        series = [getattr(item, name) * scale for item in values]
-        return (
-            Tokens(**{name: round(_percentile(series, 0.5))}),
-            Tokens(**{name: round(_percentile(series, 0.9))}),
+    """The P50 and P90 token bundles, selected by each sample's total.
+
+    Summing the per-field percentiles would produce a bundle that no session
+    ever had (the P50 input plus the P50 output is not the P50 total). Sort by
+    the total instead, then interpolate every component between the two
+    sessions that straddle the percentile.
+    """
+    if not values:
+        return Percentiles(Tokens(), Tokens())
+    ordered = sorted(values, key=lambda item: item.total())
+
+    def at(fraction: float) -> Tokens:
+        position = (len(ordered) - 1) * fraction
+        lower = int(position)
+        upper = min(lower + 1, len(ordered) - 1)
+        weight = position - lower
+        left, right = ordered[lower], ordered[upper]
+
+        def blend(name: str) -> int:
+            a = getattr(left, name)
+            b = getattr(right, name)
+            return round((a + (b - a) * weight) * scale)
+
+        return Tokens(
+            input=blend("input"),
+            output=blend("output"),
+            cache_read=blend("cache_read"),
+            reasoning=blend("reasoning"),
+            calls=blend("calls"),
         )
 
-    p50 = Tokens()
-    p90 = Tokens()
-    for name in ("input", "output", "cache_read", "reasoning", "calls"):
-        low, high = field(name)
-        p50 = Tokens(
-            input=p50.input + low.input,
-            output=p50.output + low.output,
-            cache_read=p50.cache_read + low.cache_read,
-            reasoning=p50.reasoning + low.reasoning,
-            calls=p50.calls + low.calls,
-        )
-        p90 = Tokens(
-            input=p90.input + high.input,
-            output=p90.output + high.output,
-            cache_read=p90.cache_read + high.cache_read,
-            reasoning=p90.reasoning + high.reasoning,
-            calls=p90.calls + high.calls,
-        )
-    return Percentiles(p50=p50, p90=p90)
+    return Percentiles(p50=at(0.5), p90=at(0.9))
 
 
 def measure(
@@ -97,6 +92,11 @@ def measure(
 ) -> RoleCalibration:
     """Read one profile's sessions and return its measured budget.
 
+    `per_call` is the distribution of *session-average* call size, not of
+    individual calls: the usage table stores session sums, and inventing a
+    per-call distribution from them would be a different measurement wearing
+    the same name. It is useful for sizing one call; it is not a P90 call.
+
     Raises CalibrationError when the file is absent, unreadable, or lacks the
     usage table. A missing table is a schema change, not an empty month.
     """
@@ -106,8 +106,9 @@ def measure(
     now = now or datetime.now(timezone.utc)
     cutoff = now.timestamp() - window_days * 86400
     try:
-        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    except sqlite3.Error as exc:
+        uri = path.resolve().as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True)
+    except (sqlite3.Error, OSError, ValueError) as exc:
         raise CalibrationError(f"cannot open {path}: {exc}") from exc
     try:
         check = connection.execute(

@@ -119,7 +119,10 @@ def from_dict(data: dict) -> Snapshot:
         fetched = fetched.replace(tzinfo=timezone.utc)
     models = {}
     for key, value in (data.get("models") or {}).items():
-        models[key] = _market_from_dict(value)
+        try:
+            models[key] = _market_from_dict(value)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SnapshotError(f"model {key!r} is malformed: {exc}") from exc
     return Snapshot(
         provider=str(data.get("provider", "unknown")),
         base_url=str(data.get("base_url", "")),
@@ -153,4 +156,8 @@ def load(path: str | Path) -> Snapshot:
     source = Path(path)
     if not source.is_file():
         raise SnapshotError(f"no snapshot at {source}")
-    return from_dict(json.loads(source.read_text(encoding="utf-8")))
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise SnapshotError(f"{source} is not valid JSON: {exc}") from exc
+    return from_dict(data)
