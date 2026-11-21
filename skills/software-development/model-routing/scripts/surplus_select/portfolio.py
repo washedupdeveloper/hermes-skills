@@ -171,7 +171,7 @@ def choose(
         if item[1].best is not None
         and (
             min_discount <= 0
-            or (item[1].realised_discount or 0) >= min_discount
+            or (item[1].best_discount or 0) >= min_discount
         )
     ]
     if not priced:

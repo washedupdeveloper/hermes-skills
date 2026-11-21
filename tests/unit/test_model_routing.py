@@ -584,22 +584,23 @@ class PortfolioTests(unittest.TestCase):
     def _snapshot(self) -> Snapshot:
         now = datetime.now(timezone.utc)
 
-        def market(model_id, name, list_in, list_out, best_in, best_out, realised):
+        def market(model_id, name, list_in, list_out, best_in, best_out, realised, best_discount=None):
             return ModelMarket(
                 model_id=model_id,
                 name=name,
                 context=1_000_000,
                 list_price=Price(list_in, list_out),
                 best=Price(best_in, best_out),
+                best_discount=realised if best_discount is None else best_discount,
                 realised_discount=realised,
             )
 
         models = [
             market("deepseek-v4.1-flash-1017", "DeepSeek", 0.147, 0.60, 0.0097, 0.0396, 93.4),
-            market("gpt-6.1-terra", "Terra", 1.00, 5.00, 0.226, 1.13, 77.4),
-            market("gpt-6.2-sol", "Sol", 2.00, 10.00, 0.548, 2.74, 72.6),
+            market("gpt-6.1-terra", "Terra", 1.00, 5.00, 0.226, 1.13, 77.4, 84.0),
+            market("gpt-6.2-sol", "Sol", 2.00, 10.00, 0.548, 2.74, 72.6, 84.0),
             market("qwen4-max", "Qwen4 Max", 1.43, 4.28, 0.1916, 0.5735, 86.6),
-            market("gpt-6.2-astra", "Astra", 8.00, 40.00, 2.096, 10.48, 73.8),
+            market("gpt-6.2-astra", "Astra", 8.00, 40.00, 2.096, 10.48, 73.8, 84.1),
             market("claude-fable-5.2", "Fable", 8.00, 40.00, 3.328, 16.64, 58.4),
         ]
         return Snapshot(
@@ -806,16 +807,18 @@ class PortfolioTests(unittest.TestCase):
                 choose(cache, snap, "deepseek-v4.1-flash-1017", **kwargs)
 
     def test_discount_floor_excludes_low_discount_models(self) -> None:
+        tokens = Tokens(input=75_000_000, output=8_000_000)
         portfolio = choose(
             self._cache(),
             self._snapshot(),
             "deepseek-v4.1-flash-1017",
             min_discount=75,
+            review_budget_usd=80,
+            review_tokens=tokens,
         )
         selected = set(portfolio.model_ids())
         self.assertNotIn("claude-fable-5.2", selected)
-        self.assertNotIn("gpt-6.2-sol", selected)
-        self.assertEqual(portfolio.get("judge").model_id, "gpt-6.1-terra")
+        self.assertIn("gpt-6.2-sol", selected)
 
     def test_portfolio_refuses_an_unscored_market(self) -> None:
         empty = benchmarks_mod.BenchmarkCache(
