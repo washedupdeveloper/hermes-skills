@@ -92,7 +92,7 @@ one from `tasks.md` by tagging each task. It writes `report.json` and
 
 | Role | Rule | What it is allowed to do |
 |---|---|---|
-| **judge** | Best combined coding and hard-reasoning score on the frontier; price is not a tie-breaker | Architecture decisions only. Never implements. |
+| **judge** | Best `0.6*coding + 0.4*mean(HLE-Diamond, FrontierMath)` on the frontier; price is not a tie-breaker | Architecture decisions only. Never implements. |
 | **reviewer** | The builder model by default. A different model only when `--review-budget` is set, it is at least 5% better on coding, its measured monthly cost fits that budget, and it is the cheapest model that clears both gates | Checks and plans. Never writes the patch. |
 | **builder** | The ambient baseline when it is in the market | Implements every task. |
 | **runner** | The builder model unless a cheaper non-dominated model clears 65 | Mechanical and test work. |
@@ -286,6 +286,13 @@ runs in the bundled Hermes environment.
 - **Reasoning is already inside output.** `output_tokens` in the Hermes usage
   table includes `reasoning_tokens`; adding both double-bills the model. The
   formula is checked against Hermes's own recorded estimate.
+- **The judge weight is a policy, not a measurement.** `0.6*coding + 0.4*hard
+  reasoning` is a stated default. If your work is more reasoning-heavy, change
+  the constants and record the change; do not present the ranking as objective.
+- **Cache reads carry an assumption.** The provider page gives a list cache
+  price and one realised discount; the selector applies that discount to cache
+  as well. No separate cache invoice is available to confirm it. If Surplus
+  bills cache at list, every cache-heavy role is understated.
 - **The reviewer sharing the builder is not independence.** It is a second read
   of the same diff by the same weights; say so in the report rather than letting
   the role name imply an independent check.

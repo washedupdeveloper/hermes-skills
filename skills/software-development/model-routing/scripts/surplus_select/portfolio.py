@@ -32,6 +32,8 @@ from .model import ModelMarket, Price, Snapshot, Tokens
 
 DEFAULT_MIN_GAIN = 0.05
 RUNNER_FLOOR = 65.0
+JUDGE_CODING_WEIGHT = 0.6
+JUDGE_REASONING_WEIGHT = 0.4
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,7 +157,10 @@ def choose(
 
     def judge_key(item: tuple[str, ModelMarket, Benchmark]) -> float:
         bench = item[2]
-        return (bench.coding or 0) * 0.6 + _reasoning(bench) * 0.4
+        return (
+            (bench.coding or 0) * JUDGE_CODING_WEIGHT
+            + _reasoning(bench) * JUDGE_REASONING_WEIGHT
+        )
 
     # The judge is chosen from every live model, not the review frontier: a
     # model can be expensive at review volume and still be the best decision

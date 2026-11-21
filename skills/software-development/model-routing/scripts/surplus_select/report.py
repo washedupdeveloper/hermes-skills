@@ -407,6 +407,7 @@ def build(
             "headline": "live best offer",
             "budget": "seven-day realised average",
             "reference": "list price (never used in a cost calculation)",
+            "cache": "discounted at the same realised rate as input; no separate cache invoice",
         },
         "baseline": {"model": baseline, "source": baseline_source},
         "budget": {
@@ -433,6 +434,7 @@ def build(
             "review_budget_usd": review_budget_usd,
             "dominance": "a model is removed when another scores at least as high for at least as low a price",
             "materiality": "a different reviewer must beat the builder by this relative coding gain",
+            "judge_score": "0.6*coding + 0.4*mean(HLE-Diamond, FrontierMath)",
         },
         "frontier": frontier,
         "review_volume": (
