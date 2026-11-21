@@ -131,6 +131,7 @@ def choose(
     min_gain: float = DEFAULT_MIN_GAIN,
     runner_floor: float = RUNNER_FLOOR,
     builder_floor: float = BUILDER_FLOOR,
+    min_discount: float = 0.0,
     judge_coding_weight: float = JUDGE_CODING_WEIGHT,
     hle_weight: float = HLE_WEIGHT,
     blend_output_share: float = BLEND_OUTPUT_SHARE,
@@ -141,6 +142,8 @@ def choose(
         raise ValueError("review_budget_usd must be non-negative")
     if min_context < 0:
         raise ValueError("min_context must be non-negative")
+    if min_discount < 0 or min_discount > 100:
+        raise ValueError("min_discount must be between 0 and 100")
     for name, value in (("runner_floor", runner_floor), ("builder_floor", builder_floor)):
         if value < 0 or value > 100:
             raise ValueError(f"{name} must be between 0 and 100")
@@ -162,9 +165,19 @@ def choose(
     if not candidates:
         raise ValueError("no model has both a market price and a coding score")
 
-    priced = [item for item in candidates if item[1].best is not None]
+    priced = [
+        item
+        for item in candidates
+        if item[1].best is not None
+        and (
+            min_discount <= 0
+            or (item[1].realised_discount or 0) >= min_discount
+        )
+    ]
     if not priced:
-        raise ValueError("no model has a live offer; refresh the market snapshot")
+        raise ValueError(
+            f"no model has a live offer at or above the {min_discount:g}% discount floor"
+        )
 
     def cost(item: tuple[str, ModelMarket, Benchmark], tokens: Tokens | None) -> float:
         if tokens is not None and tokens.total() > 0:

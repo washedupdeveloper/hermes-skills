@@ -283,6 +283,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         runner_floor=args.runner_floor,
         builder_floor=args.builder_floor,
         min_context=args.min_context,
+        min_discount=args.min_discount,
         judge_coding_weight=args.judge_coding_weight,
         hle_weight=args.hle_weight,
         blend_output_share=args.blend_output_share,
@@ -325,6 +326,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         runner_floor=args.runner_floor,
         builder_floor=args.builder_floor,
         min_context=args.min_context,
+        min_discount=args.min_discount,
         judge_coding_weight=args.judge_coding_weight,
         hle_weight=args.hle_weight,
         blend_output_share=args.blend_output_share,
@@ -451,6 +453,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="relative coding improvement required for a reviewer upgrade",
     )
     plan.add_argument("--min-context", type=int, default=128_000)
+    plan.add_argument("--min-discount", type=float, default=0.0)
     plan.add_argument("--runner-floor", type=float, default=65.0)
     plan.add_argument("--builder-floor", type=float, default=70.0)
     plan.add_argument("--judge-coding-weight", type=float, default=0.6)

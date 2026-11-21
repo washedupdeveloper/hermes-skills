@@ -799,10 +799,23 @@ class PortfolioTests(unittest.TestCase):
             {"builder_floor": 101},
             {"judge_coding_weight": 1.1},
             {"hle_weight": -0.1},
+            {"min_discount": 101},
             {"blend_output_share": -0.1},
         ):
             with self.assertRaises(ValueError):
                 choose(cache, snap, "deepseek-v4.1-flash-1017", **kwargs)
+
+    def test_discount_floor_excludes_low_discount_models(self) -> None:
+        portfolio = choose(
+            self._cache(),
+            self._snapshot(),
+            "deepseek-v4.1-flash-1017",
+            min_discount=75,
+        )
+        selected = set(portfolio.model_ids())
+        self.assertNotIn("claude-fable-5.2", selected)
+        self.assertNotIn("gpt-6.2-sol", selected)
+        self.assertEqual(portfolio.get("judge").model_id, "gpt-6.1-terra")
 
     def test_portfolio_refuses_an_unscored_market(self) -> None:
         empty = benchmarks_mod.BenchmarkCache(
@@ -1016,6 +1029,7 @@ class CliPlanTests(unittest.TestCase):
                 "--runner-floor", "80",
                 "--builder-floor", "60",
                 "--min-context", "500000",
+                "--min-discount", "75",
                 "--judge-coding-weight", "0.25",
                 "--hle-weight", "0.75",
                 "--blend-output-share", "0.4",
@@ -1032,6 +1046,7 @@ class CliPlanTests(unittest.TestCase):
         self.assertEqual(policy["runner_floor"], 80.0)
         self.assertEqual(policy["builder_floor"], 60.0)
         self.assertEqual(policy["min_context"], 500000)
+        self.assertEqual(policy["min_discount"], 75.0)
         self.assertEqual(policy["judge_coding_weight"], 0.25)
         self.assertEqual(policy["hle_weight"], 0.75)
         self.assertEqual(policy["blend_output_share"], 0.4)
@@ -1059,6 +1074,7 @@ class CliPlanTests(unittest.TestCase):
             "--runner-floor",
             "--builder-floor",
             "--min-context",
+            "--min-discount",
             "--judge-coding-weight",
             "--hle-weight",
             "--blend-output-share",
@@ -1166,6 +1182,7 @@ class CliPlanTests(unittest.TestCase):
                 self.assertEqual(cli.main(base + ["--min-gain", "2"]), 1)
                 self.assertEqual(cli.main(base + ["--review-budget", "-1"]), 1)
                 self.assertEqual(cli.main(base + ["--runner-floor", "101"]), 1)
+                self.assertEqual(cli.main(base + ["--min-discount", "101"]), 1)
                 self.assertEqual(cli.main(base + ["--judge-coding-weight", "1.1"]), 1)
                 self.assertEqual(cli.main(base + ["--callout-multiple", "0"]), 1)
                 self.assertEqual(cli.main(base + ["--review-share-alert", "1.1"]), 1)

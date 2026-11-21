@@ -122,7 +122,7 @@ benchmark age under `benchmarks`, so a run records the policy it used.
 
 | Role | Rule | What it is allowed to do |
 |---|---|---|
-| **judge** | Best `w*coding + (1-w)*mean(HLE-Diamond, FrontierMath)` with `w=--judge-coding-weight` (0.6); price is not a tie-breaker | Architecture decisions only. Never implements. |
+| **judge** | Best `w*coding + (1-w)*(h*HLE-Diamond + (1-h)*FrontierMath)` with `w=--judge-coding-weight` (0.6) and `h=--hle-weight` (0.5); price is not a tie-breaker | Architecture decisions only. Never implements. |
 | **reviewer** | The builder model by default. A different model only when `--review-budget` is set, it beats `--min-gain` (5%), fits that budget, and is the cheapest model that clears both gates | Checks and plans. Never writes the patch. |
 | **builder** | The ambient baseline when it is in the market | Implements every task. |
 | **runner** | The builder model unless a cheaper non-dominated model clears `--runner-floor` (65) | Mechanical and test work. |
@@ -249,8 +249,8 @@ silently counted.
 
 The budget keeps three separate quantities; do not collapse them:
 
-- `monthly_total` — the **sum** over the window, normalised to 30 days. This is
-  the only input to monthly cost.
+- `monthly_total` — the **sum** over the window, normalised to `--month-days`
+  (30 by default). This is the only input to monthly cost.
 - `per_session.p50/p90` — the size of one session; used to size one task.
 - `per_call.p50/p90` — the size of one model call.
 
@@ -318,9 +318,17 @@ runs in the bundled Hermes environment.
 - **Reasoning is already inside output.** `output_tokens` in the Hermes usage
   table includes `reasoning_tokens`; adding both double-bills the model. The
   formula is checked against Hermes's own recorded estimate.
-- **The judge weight is a policy, not a measurement.** `0.6*coding + 0.4*hard
-  reasoning` is a stated default. If your work is more reasoning-heavy, change
-  the constants and record the change; do not present the ranking as objective.
+- **The judge weight is a policy, not a measurement.** `--judge-coding-weight`
+  and `--hle-weight` expose the weighting; the defaults are not objective. Change
+  them when the work is more reasoning-heavy, and record the changed values.
+- **A flag in `--help` is not a wired flag.** Drive the CLI as a subprocess and
+  assert the non-default value appears in `report.json`; a unit test that calls
+  the helper directly can pass while `main()` still uses the old argument. Pair
+  it with an invalid-value case and a `--help` assertion.
+- **A black-box e2e must pin the expected output.** `total > 0` passes a
+  zero-cost run, a wrong role map, or a build that silently fell back to the
+  builder. Compute the expected total from the fixture's measured tokens and
+  prices, then assert the exact role map and total.
 - **Cache reads carry an assumption.** The provider page gives a list cache
   price and one realised discount; the selector applies that discount to cache
   as well. No separate cache invoice is available to confirm it. If Surplus
