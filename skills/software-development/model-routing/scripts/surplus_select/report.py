@@ -11,10 +11,28 @@ import html
 from datetime import datetime, timezone
 from typing import Iterable
 
-from .benchmarks import BenchmarkCache
+from .benchmarks import BenchmarkCache, DEFAULT_MAX_AGE_DAYS
 from .calibration import Budget
-from .model import Decision, Price, RoutingMap, Snapshot, Tokens
-from .portfolio import Portfolio, Role
+from .model import (
+    DEFAULT_AGING_HOURS,
+    DEFAULT_FRESH_HOURS,
+    DEFAULT_PROVISIONAL_HOURS,
+    Decision,
+    Price,
+    RoutingMap,
+    Snapshot,
+    Tokens,
+)
+from .portfolio import (
+    BLEND_OUTPUT_SHARE,
+    BUILDER_FLOOR,
+    DEFAULT_MIN_GAIN,
+    JUDGE_CODING_WEIGHT,
+    MIN_CONTEXT,
+    RUNNER_FLOOR,
+    Portfolio,
+    Role,
+)
 from .snapshot import digest
 
 
@@ -68,6 +86,13 @@ def collect_callouts(
     budget: Budget,
     portfolio: Portfolio,
     cache: BenchmarkCache,
+    generated: datetime,
+    *,
+    fresh_hours: float = DEFAULT_FRESH_HOURS,
+    aging_hours: float = DEFAULT_AGING_HOURS,
+    provisional_hours: float = DEFAULT_PROVISIONAL_HOURS,
+    benchmark_max_age_days: float = DEFAULT_MAX_AGE_DAYS,
+    blend_output_share: float = BLEND_OUTPUT_SHARE,
 ) -> list[dict]:
     callouts: list[dict] = []
     review_tokens = (
@@ -87,14 +112,32 @@ def collect_callouts(
                 ),
             }
         )
-    if not snapshot.allows_profile_writes():
+    if not snapshot.allows_profile_writes(
+        generated,
+        fresh_hours=fresh_hours,
+        aging_hours=aging_hours,
+        provisional_hours=provisional_hours,
+    ):
         callouts.append(
             {
                 "kind": "warn",
                 "title": "The snapshot is stale",
                 "body": (
-                    f"The market snapshot is {snapshot.age_hours():.1f} hours old. "
-                    "The report is provisional and profile writes are blocked until refresh."
+                    f"The market snapshot is {snapshot.age_hours(generated):.1f} hours old. "
+                    "The market snapshot is stale; the report is provisional. Refresh before relying on the ranking."
+                ),
+            }
+        )
+    benchmark_age = cache.age_days(generated)
+    if benchmark_age > benchmark_max_age_days:
+        callouts.append(
+            {
+                "kind": "warn",
+                "title": "The benchmark cache is stale",
+                "body": (
+                    f"Benchmark scores are {benchmark_age:.1f} days old; the "
+                    f"limit is {benchmark_max_age_days:.0f} days. Role choices still "
+                    "use them, so refresh the cache before treating the ranking as current."
                 ),
             }
         )
@@ -167,8 +210,8 @@ def collect_callouts(
     if scored:
         market, bench = max(scored, key=lambda item: item[1].coding or 0)
         builder_role = portfolio.get("builder")
-        if builder_role and builder_role.realised.blended() > 0:
-            multiple = market.realised().blended() / builder_role.realised.blended()
+        if builder_role and builder_role.realised.blended(blend_output_share) > 0:
+            multiple = market.realised().blended(blend_output_share) / builder_role.realised.blended(blend_output_share)
             if multiple >= 5:
                 callouts.append(
                     {
@@ -259,6 +302,7 @@ def _frontier_rows(
     portfolio: Portfolio,
     review_tokens: Tokens | None,
     min_gain: float,
+    blend_output_share: float = BLEND_OUTPUT_SHARE,
 ) -> list[dict]:
     """Every scored model with the number that decides its fate."""
     builder = portfolio.get("builder")
@@ -283,7 +327,7 @@ def _frontier_rows(
                     "model": model_id,
                     "name": market.name,
                     "coding": coding,
-                    "blend": market.realised().blended(0.2),
+                    "blend": market.realised().blended(blend_output_share),
                     "review_cost": 0.0,
                     "delta": round(gain, 1),
                     "delta_pct": round(gain / builder_coding * 100, 1) if builder_coding else None,
@@ -336,7 +380,7 @@ def _frontier_rows(
                 "model": model_id,
                 "name": market.name,
                 "coding": bench.coding,
-                "blend": realised.blended(0.2),
+                "blend": realised.blended(blend_output_share),
                 "review_cost": round(cost, 2),
                 "delta": round(gain, 1),
                 "delta_pct": round(gain / builder_coding * 100, 1) if builder_coding else None,
@@ -363,7 +407,16 @@ def build(
     sources: list[dict] | None = None,
     review_tokens: "Tokens | None" = None,
     review_budget_usd: float = 0.0,
-    min_gain: float = 0.05,
+    min_gain: float = DEFAULT_MIN_GAIN,
+    runner_floor: float = RUNNER_FLOOR,
+    builder_floor: float = BUILDER_FLOOR,
+    min_context: int = MIN_CONTEXT,
+    judge_coding_weight: float = JUDGE_CODING_WEIGHT,
+    blend_output_share: float = BLEND_OUTPUT_SHARE,
+    benchmark_max_age_days: float = DEFAULT_MAX_AGE_DAYS,
+    fresh_hours: float = DEFAULT_FRESH_HOURS,
+    aging_hours: float = DEFAULT_AGING_HOURS,
+    provisional_hours: float = DEFAULT_PROVISIONAL_HOURS,
 ) -> dict:
     generated = generated_at or datetime.now(timezone.utc)
     decisions = list(decisions)
@@ -389,7 +442,9 @@ def build(
             }
         )
     market_rows.sort(key=lambda row: (-(row["coding"] or -1), row["realised"][0]))
-    frontier = _frontier_rows(snapshot, cache, portfolio, review_tokens, min_gain)
+    frontier = _frontier_rows(
+        snapshot, cache, portfolio, review_tokens, min_gain, blend_output_share
+    )
     costs = {role.name: round(_monthly_cost(role, budget), 2) for role in portfolio.roles}
     return {
         "schema_version": 1,
@@ -400,7 +455,12 @@ def build(
         "snapshot": {
             "fetched_at": snapshot.fetched_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
             "age_hours": round(snapshot.age_hours(generated), 2),
-            "freshness": snapshot.freshness(generated),
+            "freshness": snapshot.freshness(
+                generated,
+                fresh_hours=fresh_hours,
+                aging_hours=aging_hours,
+                provisional_hours=provisional_hours,
+            ),
             "digest": digest(snapshot),
         },
         "pricing_basis": {
@@ -432,9 +492,27 @@ def build(
         "policy": {
             "min_gain": min_gain,
             "review_budget_usd": review_budget_usd,
+            "runner_floor": runner_floor,
+            "builder_floor": builder_floor,
+            "min_context": min_context,
+            "judge_coding_weight": judge_coding_weight,
+            "blend_output_share": blend_output_share,
+            "benchmark_max_age_days": benchmark_max_age_days,
+            "fresh_hours": fresh_hours,
+            "aging_hours": aging_hours,
+            "provisional_hours": provisional_hours,
             "dominance": "a model is removed when another scores at least as high for at least as low a price",
             "materiality": "a different reviewer must beat the builder by this relative coding gain",
-            "judge_score": "0.6*coding + 0.4*mean(HLE-Diamond, FrontierMath)",
+            "judge_score": (
+                f"{judge_coding_weight:g}*coding + "
+                f"{1 - judge_coding_weight:g}*mean(HLE-Diamond, FrontierMath)"
+            ),
+        },
+        "benchmarks": {
+            "source": cache.source,
+            "fetched_at": cache.fetched_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "age_days": round(cache.age_days(generated), 2),
+            "max_age_days": benchmark_max_age_days,
         },
         "frontier": frontier,
         "review_volume": (
@@ -468,7 +546,18 @@ def build(
             for decision in decisions
         ],
         "market": market_rows,
-        "callouts": collect_callouts(snapshot, budget, portfolio, cache),
+        "callouts": collect_callouts(
+            snapshot,
+            budget,
+            portfolio,
+            cache,
+            generated,
+            fresh_hours=fresh_hours,
+            aging_hours=aging_hours,
+            provisional_hours=provisional_hours,
+            benchmark_max_age_days=benchmark_max_age_days,
+            blend_output_share=blend_output_share,
+        ),
         "sources": sources or [],
         "method": (
             "Prices are the live best offer (headline) and the request-weighted seven-day "

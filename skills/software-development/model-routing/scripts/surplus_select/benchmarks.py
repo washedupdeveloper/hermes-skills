@@ -17,6 +17,8 @@ from .providers import Http, ProviderError, UrllibHttp
 
 BENCHLM_CODING = "https://benchlm.ai/coding"
 DEFAULT_PATH = Path(__file__).resolve().parents[2] / "assets" / "benchmarks.json"
+DEFAULT_MAX_AGE_DAYS = 30.0
+MIN_REFRESH_ROWS = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,14 +158,19 @@ def parse_benchlm_coding(markup: str) -> dict[str, Benchmark]:
     return models
 
 
-def refresh(cache: BenchmarkCache, http: Http | None = None) -> BenchmarkCache:
+def refresh(
+    cache: BenchmarkCache,
+    http: Http | None = None,
+    *,
+    url: str = BENCHLM_CODING,
+) -> BenchmarkCache:
     client = http or UrllibHttp()
     try:
-        markup = client.get(BENCHLM_CODING, timeout=45.0)
+        markup = client.get(url)
     except ProviderError:
         raise
     fresh = parse_benchlm_coding(markup)
-    if len(fresh) < 20:
+    if len(fresh) < MIN_REFRESH_ROWS:
         raise ProviderError(
             f"BenchLM returned only {len(fresh)} ranked rows; the page shape changed"
         )

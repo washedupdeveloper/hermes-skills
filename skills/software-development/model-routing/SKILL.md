@@ -88,14 +88,39 @@ python3 "$S/scripts/run.py" plan \
 one from `tasks.md` by tagging each task. It writes `report.json` and
 `report.html`. The JSON is the record; the HTML is the shareable rendering.
 
+## Policy defaults are flags
+
+No decision value is fixed in code. `plan` exposes:
+
+| Flag | Default | What it controls |
+|---|---:|---|
+| `--min-gain` | 0.05 | reviewer materiality |
+| `--review-budget` | 0 | independent reviewer cap (USD/month) |
+| `--runner-floor` | 65 | minimum coding score for a separate runner |
+| `--builder-floor` | 70 | fallback builder floor when the baseline is absent |
+| `--judge-coding-weight` | 0.6 | judge score = w*coding + (1-w)*reasoning |
+| `--min-context` | 128000 | context floor for candidates |
+| `--blend-output-share` | 0.2 | display-only 80/20 price blend |
+| `--benchmark-max-age-days` | 30 | stale-benchmark banner |
+| `--fresh-hours` | 12 | fresh → aging boundary |
+| `--aging-hours` | 48 | aging → provisional boundary |
+| `--expired-hours` | 168 | ranking refusal boundary |
+| `--sources` | built-in | JSON list of `{title,url}` source rows |
+
+`refresh` exposes `--timeout 30`, `--retries 3`, `--workers 6`; `refresh-benchmarks`
+adds `--url`; `calibrate` exposes `--window 30` and `--month-days 30`. The direct
+adapter reads `COUNCIL_DIRECT_TEMPERATURE` (0–2) beside its other `COUNCIL_DIRECT_*`
+settings. Policy values are echoed into `report.json` under `policy`, and the
+benchmark age under `benchmarks`, so a run records the policy it used.
+
 ## The four roles
 
 | Role | Rule | What it is allowed to do |
 |---|---|---|
-| **judge** | Best `0.6*coding + 0.4*mean(HLE-Diamond, FrontierMath)` on the frontier; price is not a tie-breaker | Architecture decisions only. Never implements. |
-| **reviewer** | The builder model by default. A different model only when `--review-budget` is set, it is at least 5% better on coding, its measured monthly cost fits that budget, and it is the cheapest model that clears both gates | Checks and plans. Never writes the patch. |
+| **judge** | Best `w*coding + (1-w)*mean(HLE-Diamond, FrontierMath)` with `w=--judge-coding-weight` (0.6); price is not a tie-breaker | Architecture decisions only. Never implements. |
+| **reviewer** | The builder model by default. A different model only when `--review-budget` is set, it beats `--min-gain` (5%), fits that budget, and is the cheapest model that clears both gates | Checks and plans. Never writes the patch. |
 | **builder** | The ambient baseline when it is in the market | Implements every task. |
-| **runner** | The builder model unless a cheaper non-dominated model clears 65 | Mechanical and test work. |
+| **runner** | The builder model unless a cheaper non-dominated model clears `--runner-floor` (65) | Mechanical and test work. |
 
 ### Dominance and materiality
 
@@ -142,10 +167,10 @@ sellable; one with 0 is not.
 
 | Age | State | Effect |
 |---|---|---|
-| ≤ 12 h | fresh | Full report; profile writes allowed |
-| 12–48 h | aging | One-line note; profile writes allowed |
-| 48 h–7 d | provisional | Report is provisional; no profile writes |
-| > 7 d | expired | Refuses to rank unless `--accept-stale` |
+| ≤ `--fresh-hours` (12 h) | fresh | Full report |
+| `--fresh-hours`–`--aging-hours` (48 h) | aging | One-line note |
+| `--aging-hours`–`--expired-hours` (168 h) | provisional | Report is provisional |
+| > `--expired-hours` | expired | Refuses to rank unless `--accept-stale` |
 
 `plan` refuses an expired snapshot by default. `status` prints the age, digest
 and calibration in one screen.
@@ -246,7 +271,7 @@ understates the sum by an order of magnitude.
 ## Verification
 
 ```bash
-python3 tests/unit/test_model_routing.py        # 56 tests, stdlib only
+python3 tests/unit/test_model_routing.py        # 65 tests, stdlib only
 python3 -m surplus_select status --snapshot <file> --budget <file>
 ```
 

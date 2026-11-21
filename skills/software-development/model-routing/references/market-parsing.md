@@ -9,8 +9,16 @@ actually sells for.
 - `data[].pricing.prompt` and `.completion` are **per token**. Multiply by
   `1e6` before storing a `Price`; storing the raw value makes every model look
   1,000,000x too cheap.
+- **A value at or above `0.01` is not a per-token price.** Catalogs that quote
+  per million (or per thousand) produce exactly that shape. Refuse the catalog
+  with a clear error rather than multiplying it by `1e6` again; a six-order-of-
+  magnitude error looks like a cheap market, not a parse bug.
 - `pricing.input_cache_read` becomes `cache_read`, also x`1e6`. When absent,
   leave it `None`; never assume cache is free.
+- **The page replaces input/output, not cache.** A per-model page may publish
+  live in/out and omit `cacheRead`; merge the catalog's cache price into the
+  page's `list_price` and `best` instead of replacing the whole entry. Dropping
+  it bills every cache-heavy role at input or zero and understates the budget.
 - The catalog has **list prices only**. A monthly budget computed from it is
   wrong by the discount, often 70-95%.
 - Model ids are the join key. A benchmark row with an id absent from the

@@ -7,6 +7,7 @@ import io
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -126,6 +127,18 @@ class CalibrationTests(unittest.TestCase):
             self.assertGreater(role.monthly_total.input, role.per_session.p50.input * 10)
             self.assertEqual(role.per_call.p50.input, 1_000)
             self.assertFalse(role.uncalibrated)
+
+    def test_month_length_is_user_settable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._db(Path(tmp), [("one", 1_000_000, 0, 1)])
+            month = calibration.measure("builder", path, window_days=30)
+            half = calibration.measure(
+                "builder", path, window_days=30, month_days=15
+            )
+            self.assertEqual(month.monthly_total.input, 1_000_000)
+            self.assertEqual(half.monthly_total.input, 500_000)
+            with self.assertRaises(calibration.CalibrationError):
+                calibration.measure("builder", path, month_days=0)
 
     def test_percentile_bundle_total_is_a_real_session_total(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -319,6 +332,14 @@ class SnapshotTests(unittest.TestCase):
         self.assertTrue(self._snapshot(24).allows_profile_writes())
         self.assertFalse(self._snapshot(72).allows_profile_writes())
         self.assertFalse(self._snapshot(24 * 8).allows_ranking())
+
+    def test_freshness_bounds_are_user_settable(self) -> None:
+        snap = self._snapshot(20)
+        self.assertEqual(snap.freshness(), "aging")
+        self.assertEqual(snap.freshness(fresh_hours=24), "fresh")
+        self.assertEqual(snap.freshness(aging_hours=12), "provisional")
+        with self.assertRaises(ValueError):
+            snap.freshness(fresh_hours=60, aging_hours=48)
 
     def test_round_trip_and_digest(self) -> None:
         original = self._snapshot(2)
@@ -738,6 +759,42 @@ class PortfolioTests(unittest.TestCase):
                 review_budget_usd=-1,
             )
 
+    def test_policy_values_are_user_overridable(self) -> None:
+        cache = self._cache()
+        cache.models["cheap-coder"] = benchmarks_mod.Benchmark(coding=70.0)
+        snap = self._snapshot()
+        snap.models["cheap-coder"] = ModelMarket(
+            model_id="cheap-coder",
+            name="Cheap Coder",
+            context=1_000_000,
+            list_price=Price(0.01, 0.04),
+            best=Price(0.005, 0.02),
+            realised_discount=50.0,
+        )
+        self.assertEqual(
+            choose(cache, snap, "deepseek-v4.1-flash-1017").get("runner").model_id,
+            "cheap-coder",
+        )
+        self.assertEqual(
+            choose(
+                cache,
+                snap,
+                "deepseek-v4.1-flash-1017",
+                runner_floor=80,
+            ).get("runner").model_id,
+            "deepseek-v4.1-flash-1017",
+        )
+        with self.assertRaises(ValueError):
+            choose(cache, snap, "deepseek-v4.1-flash-1017", min_context=2_000_000)
+        for kwargs in (
+            {"runner_floor": -1},
+            {"builder_floor": 101},
+            {"judge_coding_weight": 1.1},
+            {"blend_output_share": -0.1},
+        ):
+            with self.assertRaises(ValueError):
+                choose(cache, snap, "deepseek-v4.1-flash-1017", **kwargs)
+
     def test_portfolio_refuses_an_unscored_market(self) -> None:
         empty = benchmarks_mod.BenchmarkCache(
             source="test", fetched_at=datetime.now(timezone.utc), models={}
@@ -800,6 +857,40 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Generated", html_text)
         self.assertIn("The portfolio", html_text)
         self.assertIn("Monthly $", html_text)
+
+    def test_stale_benchmark_cache_is_reported_and_policy_is_echoed(self) -> None:
+        cache = replace(
+            PortfolioTests()._cache(),
+            fetched_at=datetime.now(timezone.utc) - timedelta(days=60),
+        )
+        snap = PortfolioTests()._snapshot()
+        portfolio = choose(cache, snap, "deepseek-v4.1-flash-1017")
+        task = TaskSpec(
+            id="1.1",
+            title="Add a filter",
+            type="feature",
+            verify=("pytest tests/test_cli.py -q",),
+        )
+        payload = report.build(
+            snapshot=snap,
+            budget=calibration.default_budget(),
+            portfolio=portfolio,
+            routing=routing.RoutingMap(change="demo", tasks={"1.1": task}),
+            decisions=[routing.route(task, "deepseek-v4.1-flash-1017")],
+            cache=cache,
+            baseline="deepseek-v4.1-flash-1017",
+            baseline_source="test",
+            runner_floor=80,
+            judge_coding_weight=0.25,
+            benchmark_max_age_days=30,
+        )
+        self.assertEqual(payload["policy"]["runner_floor"], 80)
+        self.assertEqual(payload["policy"]["judge_coding_weight"], 0.25)
+        self.assertIn("0.25*coding + 0.75*", payload["policy"]["judge_score"])
+        self.assertGreater(payload["benchmarks"]["age_days"], 30)
+        self.assertTrue(
+            any("benchmark cache is stale" in item["title"].lower() for item in payload["callouts"])
+        )
 
     def test_html_escapes_task_titles(self) -> None:
         cache = PortfolioTests()._cache()
@@ -909,6 +1000,126 @@ class CliPlanTests(unittest.TestCase):
         self.assertEqual(roles["reviewer"], "gpt-6.2-sol")
         self.assertEqual(payload["policy"]["review_budget_usd"], 80.0)
 
+    def test_new_policy_flags_reach_the_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = self._run(
+                Path(tmp),
+                "--runner-floor", "80",
+                "--builder-floor", "60",
+                "--min-context", "500000",
+                "--judge-coding-weight", "0.25",
+                "--blend-output-share", "0.4",
+                "--benchmark-max-age-days", "60",
+                "--fresh-hours", "6",
+                "--aging-hours", "24",
+                "--expired-hours", "72",
+            )
+        policy = payload["policy"]
+        self.assertEqual(policy["runner_floor"], 80.0)
+        self.assertEqual(policy["builder_floor"], 60.0)
+        self.assertEqual(policy["min_context"], 500000)
+        self.assertEqual(policy["judge_coding_weight"], 0.25)
+        self.assertEqual(policy["blend_output_share"], 0.4)
+        self.assertEqual(policy["benchmark_max_age_days"], 60.0)
+        self.assertEqual(policy["fresh_hours"], 6.0)
+        self.assertEqual(policy["aging_hours"], 24.0)
+        self.assertEqual(policy["provisional_hours"], 72.0)
+
+    def test_help_lists_every_policy_override(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "run.py"), "plan", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for flag in (
+            "--runner-floor",
+            "--builder-floor",
+            "--min-context",
+            "--judge-coding-weight",
+            "--blend-output-share",
+            "--benchmark-max-age-days",
+            "--fresh-hours",
+            "--aging-hours",
+            "--expired-hours",
+        ):
+            self.assertIn(flag, result.stdout)
+
+    def test_network_and_calibration_flags_are_documented(self) -> None:
+        for command, flags in (
+            ("refresh", ("--timeout", "--retries", "--workers")),
+            ("refresh-benchmarks", ("--url", "--timeout", "--retries")),
+            ("calibrate", ("--window", "--month-days")),
+        ):
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "run.py"), command, "--help"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for flag in flags:
+                self.assertIn(flag, result.stdout, f"{command} is missing {flag}")
+
+    def test_plan_runs_end_to_end_as_a_subprocess(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw)
+            snap, budget, bench, config, change = self._fixture(directory)
+            out = directory / "report"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "run.py"),
+                    "plan",
+                    "--change", str(change),
+                    "--snapshot", str(snap),
+                    "--budget", str(budget),
+                    "--benchmarks", str(bench),
+                    "--profile-config", str(config),
+                    "--out", str(out),
+                    "--runner-floor", "80",
+                    "--judge-coding-weight", "0.25",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads((out / "report.json").read_text(encoding="utf-8"))
+            self.assertTrue((out / "report.html").is_file())
+        roles = {row["role"]: row["model"] for row in payload["portfolio"]}
+        self.assertEqual(roles["builder"], "deepseek-v4.1-flash-1017")
+        self.assertEqual(payload["policy"]["runner_floor"], 80.0)
+        self.assertEqual(payload["policy"]["judge_coding_weight"], 0.25)
+        self.assertEqual(roles["reviewer"], "deepseek-v4.1-flash-1017")
+        self.assertAlmostEqual(payload["costs"]["total"], 7.10, places=2)
+        self.assertIn("costs", payload)
+
+    def test_subprocess_rejects_an_invalid_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw)
+            snap, budget, bench, config, change = self._fixture(directory)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "run.py"),
+                    "plan",
+                    "--change", str(change),
+                    "--snapshot", str(snap),
+                    "--budget", str(budget),
+                    "--benchmarks", str(bench),
+                    "--profile-config", str(config),
+                    "--out", str(directory / "report"),
+                    "--runner-floor", "101",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("runner_floor", result.stderr)
+
     def test_invalid_policy_flags_exit_nonzero(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             directory = Path(raw)
@@ -925,6 +1136,11 @@ class CliPlanTests(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(cli.main(base + ["--min-gain", "2"]), 1)
                 self.assertEqual(cli.main(base + ["--review-budget", "-1"]), 1)
+                self.assertEqual(cli.main(base + ["--runner-floor", "101"]), 1)
+                self.assertEqual(cli.main(base + ["--judge-coding-weight", "1.1"]), 1)
+                self.assertEqual(
+                    cli.main(base + ["--fresh-hours", "60", "--aging-hours", "48"]), 1
+                )
 
     def test_an_expired_snapshot_is_refused_unless_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

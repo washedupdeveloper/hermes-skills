@@ -10,6 +10,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 
+DEFAULT_FRESH_HOURS = 12.0
+DEFAULT_AGING_HOURS = 48.0
+DEFAULT_PROVISIONAL_HOURS = 24 * 7
+
+
 @dataclass(frozen=True, slots=True)
 class Price:
     """US dollars per million tokens."""
@@ -111,22 +116,57 @@ class Snapshot:
             fetched = fetched.replace(tzinfo=timezone.utc)
         return (now - fetched).total_seconds() / 3600
 
-    def freshness(self, now: datetime | None = None) -> str:
-        """fresh / aging / provisional / expired, per the design's ladder."""
+    def freshness(
+        self,
+        now: datetime | None = None,
+        *,
+        fresh_hours: float = DEFAULT_FRESH_HOURS,
+        aging_hours: float = DEFAULT_AGING_HOURS,
+        provisional_hours: float = DEFAULT_PROVISIONAL_HOURS,
+    ) -> str:
+        """fresh / aging / provisional / expired, with user-settable bounds."""
+        if not (0 <= fresh_hours <= aging_hours <= provisional_hours):
+            raise ValueError(
+                "freshness bounds must satisfy 0 <= fresh_hours <= aging_hours <= provisional_hours"
+            )
         age = self.age_hours(now)
-        if age <= 12:
+        if age <= fresh_hours:
             return "fresh"
-        if age <= 48:
+        if age <= aging_hours:
             return "aging"
-        if age <= 24 * 7:
+        if age <= provisional_hours:
             return "provisional"
         return "expired"
 
-    def allows_profile_writes(self, now: datetime | None = None) -> bool:
-        return self.freshness(now) in ("fresh", "aging")
+    def allows_profile_writes(
+        self,
+        now: datetime | None = None,
+        *,
+        fresh_hours: float = DEFAULT_FRESH_HOURS,
+        aging_hours: float = DEFAULT_AGING_HOURS,
+        provisional_hours: float = DEFAULT_PROVISIONAL_HOURS,
+    ) -> bool:
+        return self.freshness(
+            now,
+            fresh_hours=fresh_hours,
+            aging_hours=aging_hours,
+            provisional_hours=provisional_hours,
+        ) in ("fresh", "aging")
 
-    def allows_ranking(self, now: datetime | None = None) -> bool:
-        return self.freshness(now) != "expired"
+    def allows_ranking(
+        self,
+        now: datetime | None = None,
+        *,
+        fresh_hours: float = DEFAULT_FRESH_HOURS,
+        aging_hours: float = DEFAULT_AGING_HOURS,
+        provisional_hours: float = DEFAULT_PROVISIONAL_HOURS,
+    ) -> bool:
+        return self.freshness(
+            now,
+            fresh_hours=fresh_hours,
+            aging_hours=aging_hours,
+            provisional_hours=provisional_hours,
+        ) != "expired"
 
 
 @dataclass(frozen=True, slots=True)

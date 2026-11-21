@@ -32,8 +32,10 @@ from .model import ModelMarket, Price, Snapshot, Tokens
 
 DEFAULT_MIN_GAIN = 0.05
 RUNNER_FLOOR = 65.0
+BUILDER_FLOOR = 70.0
 JUDGE_CODING_WEIGHT = 0.6
-JUDGE_REASONING_WEIGHT = 0.4
+MIN_CONTEXT = 128_000
+BLEND_OUTPUT_SHARE = 0.2
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,8 +66,8 @@ class Portfolio:
         return tuple(role.model_id for role in self.roles)
 
 
-def _blend(price: Price) -> float:
-    return price.blended(0.2)
+def _blend(price: Price, output_share: float = BLEND_OUTPUT_SHARE) -> float:
+    return price.blended(output_share)
 
 
 def _reasoning(bench: Benchmark) -> float:
@@ -119,18 +121,31 @@ def choose(
     snapshot: Snapshot,
     baseline: str,
     *,
-    min_context: int = 128_000,
+    min_context: int = MIN_CONTEXT,
     review_budget_usd: float | None = None,
     review_tokens: Tokens | None = None,
     runner_tokens: Tokens | None = None,
     builder_tokens: Tokens | None = None,
     judge_tokens: Tokens | None = None,
     min_gain: float = DEFAULT_MIN_GAIN,
+    runner_floor: float = RUNNER_FLOOR,
+    builder_floor: float = BUILDER_FLOOR,
+    judge_coding_weight: float = JUDGE_CODING_WEIGHT,
+    blend_output_share: float = BLEND_OUTPUT_SHARE,
 ) -> Portfolio:
     if min_gain < 0 or min_gain > 1:
         raise ValueError("min_gain must be between 0 and 1")
     if review_budget_usd is not None and review_budget_usd < 0:
         raise ValueError("review_budget_usd must be non-negative")
+    if min_context < 0:
+        raise ValueError("min_context must be non-negative")
+    for name, value in (("runner_floor", runner_floor), ("builder_floor", builder_floor)):
+        if value < 0 or value > 100:
+            raise ValueError(f"{name} must be between 0 and 100")
+    if judge_coding_weight < 0 or judge_coding_weight > 1:
+        raise ValueError("judge_coding_weight must be between 0 and 1")
+    if blend_output_share < 0 or blend_output_share > 1:
+        raise ValueError("blend_output_share must be between 0 and 1")
 
     candidates: list[tuple[str, ModelMarket, Benchmark]] = []
     for model_id, market in snapshot.models.items():
@@ -150,7 +165,7 @@ def choose(
     def cost(item: tuple[str, ModelMarket, Benchmark], tokens: Tokens | None) -> float:
         if tokens is not None and tokens.total() > 0:
             return item[1].realised().cost(tokens)
-        return _blend(item[1].realised())
+        return _blend(item[1].realised(), blend_output_share)
 
     def review_cost(item: tuple[str, ModelMarket, Benchmark]) -> float:
         return cost(item, review_tokens)
@@ -158,8 +173,8 @@ def choose(
     def judge_key(item: tuple[str, ModelMarket, Benchmark]) -> float:
         bench = item[2]
         return (
-            (bench.coding or 0) * JUDGE_CODING_WEIGHT
-            + _reasoning(bench) * JUDGE_REASONING_WEIGHT
+            (bench.coding or 0) * judge_coding_weight
+            + _reasoning(bench) * (1 - judge_coding_weight)
         )
 
     # The judge is chosen from every live model, not the review frontier: a
@@ -184,7 +199,9 @@ def choose(
         )
         builder_reason = "ambient baseline (no live offer; cost is an estimate)"
     else:
-        eligible = [item for item in frontier_items if (item[2].coding or 0) >= 70] or frontier_items
+        eligible = [
+            item for item in frontier_items if (item[2].coding or 0) >= builder_floor
+        ] or frontier_items
         builder_id, builder_market, builder_bench = min(
             eligible,
             key=lambda item: (
@@ -194,7 +211,7 @@ def choose(
                 item[0],
             ),
         )
-        builder_reason = "best coding per dollar above 70 (baseline absent from the market)"
+        builder_reason = f"best coding per dollar above {builder_floor:g} (baseline absent from the market)"
 
     builder_coding = builder_bench.coding or 0.0
     threshold = builder_coding * (1 + min_gain)
@@ -250,7 +267,7 @@ def choose(
         item
         for item in frontier_items
         if item[0] not in (builder_id, judge_id, reviewer_id)
-        and (item[2].coding or 0) >= RUNNER_FLOOR
+        and (item[2].coding or 0) >= runner_floor
         and (
             cost(item, runner_tokens) < cost(
                 (builder_id, builder_market, builder_bench), runner_tokens
@@ -266,7 +283,7 @@ def choose(
                 item[0],
             ),
         )
-        runner_reason = "cheaper at the measured runner volume, clearing 65"
+        runner_reason = f"cheaper at the measured runner volume, clearing {runner_floor:g}"
 
     def role(
         name: str,

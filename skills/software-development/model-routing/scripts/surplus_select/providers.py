@@ -37,17 +37,30 @@ class Http(Protocol):
 
 
 class UrllibHttp:
-    def __init__(self, user_agent: str = "surplus-select/0.1") -> None:
+    def __init__(
+        self,
+        user_agent: str = "surplus-select/0.1",
+        *,
+        timeout: float = 30.0,
+        retries: int = 3,
+    ) -> None:
         self.user_agent = user_agent
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+        if retries < 1:
+            raise ValueError("retries must be at least 1")
+        self.timeout = timeout
+        self.retries = retries
 
-    def get(self, url: str, timeout: float = 30.0) -> str:
+    def get(self, url: str, timeout: float | None = None) -> str:
+        effective = self.timeout if timeout is None else timeout
         last: Exception | None = None
-        for _ in range(3):
+        for _ in range(self.retries):
             request = urllib.request.Request(
                 url, headers={"User-Agent": self.user_agent, "Connection": "close"}
             )
             try:
-                with urllib.request.urlopen(request, timeout=timeout) as response:
+                with urllib.request.urlopen(request, timeout=effective) as response:
                     return response.read().decode("utf-8", "replace")
             except (
                 urllib.error.URLError,
@@ -238,10 +251,12 @@ class SurplusProvider:
         return parse_catalog(json.loads(self._catalog_raw))
 
     def fetch_market(self, model_id: str) -> dict | None:
-        markup = self.http.get(f"{self.origin}/markets/{model_id}", timeout=45.0)
+        markup = self.http.get(f"{self.origin}/markets/{model_id}")
         return parse_market_text(page_text(markup))
 
     def refresh(self, model_ids: list[str] | None = None, workers: int = 6) -> Snapshot:
+        if workers < 1:
+            raise ValueError("workers must be at least 1")
         catalog = self.fetch_catalog()
         wanted = model_ids or list(catalog)
         missing = [model for model in wanted if model not in catalog]

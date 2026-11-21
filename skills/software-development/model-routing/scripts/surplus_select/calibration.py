@@ -17,6 +17,7 @@ from . import mini_yaml
 from .model import Budget, Percentiles, RoleCalibration, Tokens
 
 SCHEMA = "session_model_usage"
+DAYS_PER_MONTH = 30.0
 
 # Only used when a role has never been measured. Marked uncalibrated; the
 # report must say so. Percentiles are zero because inventing a distribution
@@ -88,6 +89,7 @@ def measure(
     db_path: str | Path,
     *,
     window_days: int = 30,
+    month_days: float = DAYS_PER_MONTH,
     now: datetime | None = None,
 ) -> RoleCalibration:
     """Read one profile's sessions and return its measured budget.
@@ -104,6 +106,8 @@ def measure(
     if not path.is_file():
         raise CalibrationError(f"no state database at {path}")
     now = now or datetime.now(timezone.utc)
+    if month_days <= 0:
+        raise CalibrationError("month_days must be positive")
     cutoff = now.timestamp() - window_days * 86400
     try:
         uri = path.resolve().as_uri() + "?mode=ro"
@@ -143,7 +147,7 @@ def measure(
     total = Tokens()
     for session in sessions:
         total = total + session
-    scale = 30.0 / window_days if window_days else 1.0
+    scale = month_days / window_days if window_days else 1.0
     total = total.scaled(scale)
 
     per_call_values: list[Tokens] = []
