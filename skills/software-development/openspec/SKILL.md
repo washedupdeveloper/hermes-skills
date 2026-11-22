@@ -67,6 +67,12 @@ method.
   own scenario. Measured on one task: a spec that covered only the request path let `--dry-run`
   compose and print a refused base, and the implementing agent stopped exactly at the spec's
   edge, while an agent given the same requirements as prose validated that path too.
+- **A guarantee is only as strong as the shipped entry point's default.** A library rule can be
+  bypassed by the action, CLI or config default that calls it: an action that passed
+  `--samples 1` by default made a two-clean-sample requirement true in the library and absent
+  from the gate users run. Read the shipped defaults (workflow inputs, CLI defaults, profile
+  config), add a scenario for the default path, and gate it with a test; `validate --strict`
+  and a green suite will not notice.
 - **The delta only.** A change's `specs/<capability>/spec.md` holds `## ADDED Requirements`,
   `## MODIFIED Requirements` or `## REMOVED Requirements`. `openspec/specs/` is edited by
   `archive`, never by hand during a change.
@@ -103,6 +109,10 @@ When the owner asks for OpenSpec as the communication medium, use the change as 
 - The full route → profile → run → evidence loop is `references/agent-delivery.md`;
   the task-prompt skeleton is `templates/agent-task-prompt.md`. Keep `tasks.md` owned by
   the orchestrator and require every worker to write `collab/<task>.md` evidence.
+- When the owner asks to see the work, render the change artifacts — proposal, design
+  trade-off table, spec delta, tasks and evidence — into one standalone page; the archived
+  path is `openspec/changes/archive/<date>-<name>/`. Chat carries the decision table, not a
+  second copy of the spec.
 
 ## Verify
 

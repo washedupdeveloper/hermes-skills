@@ -99,6 +99,12 @@ blocked rung that needs two things names both ("merge-ready needs a satisfied ve
 observed CI result") — `blocked` alone sends the reader to the wrong problem. A rung that does
 not apply is `not_applicable`, never silently open.
 
+**"Zero failure points" means zero silent failure paths, not zero possible failures.** State
+the terminal states — proven/FAIL, unsettled/INCOMPLETE, refuted/PASS — and name the residuals
+that remain (a platform the gate did not run on, a separately installed build, an explicit
+caller escape hatch). A claim that no process can fail is false, and the false version hides
+the exact limits the reader needs.
+
 **A false alarm is a defect in the gate, not a finding about the artifact.** A gate
 that exits non-zero on a valid input teaches its reader to ignore it, and an ignored
 gate is worse than no gate because it still consumes attention. Check the checker
