@@ -16,6 +16,8 @@ side_effects: [none]
 
 # Running an OCI image without a container runtime
 
+**Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
+
 `unshare`, `mknod` and the `/nix/store` paths are the Linux guest's. On a Windows host every
 command here runs inside WSL; a native shell reports `unshare: command not found`.
 

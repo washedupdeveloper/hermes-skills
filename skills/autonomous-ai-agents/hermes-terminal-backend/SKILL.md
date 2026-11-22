@@ -17,6 +17,8 @@ side_effects: [none]
 
 # Hermes terminal backend (container sandbox)
 
+**Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
+
 The agent's own execution environment is `terminal.backend` in `config.yaml` — `local`, `docker`, `podman`, `ssh`, `modal`, `daytona`, `singularity`. When it is a container, every `terminal`, `read_file`, `search_files` and `execute_code` call runs *inside* that container, and the container's mounts decide which host paths exist for the agent.
 
 ## When to Use

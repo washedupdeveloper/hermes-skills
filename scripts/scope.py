@@ -171,6 +171,25 @@ def check_portability(skills, parsed, contract, repo, result) -> None:
                     result.notes.append(f"{where}: system path {noted} in a fenced command")
 
 
+def check_runtime(skills, parsed, contract, repo, result) -> None:
+    """This library writes for one runtime; the other is a marked fallback."""
+    runtime = contract.get("container_runtime") or {}
+    fallback = runtime.get("fallback")
+    if not fallback:
+        return
+    marker = re.compile(rf"{re.escape(runtime.get('fallback_marker') or fallback)}:\s*\S")
+    invoke = re.compile(rf"^\s*(?:sudo\s+)?{re.escape(fallback)}\s+\w")
+    for path in skills:
+        _, body = parsed[path]
+        for block in FENCE.findall(body):
+            for raw in block.splitlines():
+                if invoke.match(raw) and not marker.search(raw):
+                    result.fail(path.relative_to(repo),
+                                f"invokes {fallback}; this library writes for "
+                                f"{runtime.get('primary', 'podman')} — mark the line "
+                                f"`# {runtime.get('fallback_marker', 'fallback')}: <reason>`")
+
+
 def check_aliases(repo, skills, contract, result) -> None:
     rel = contract.get("aliases")
     if not rel:
@@ -198,4 +217,5 @@ def check_scope(skills, parsed, contract, repo, result, parse_list) -> None:
     check_domain_contracts(repo, skills, contract, result)
     check_triggers(skills, parsed, contract, result, repo)
     check_portability(skills, parsed, contract, repo, result)
+    check_runtime(skills, parsed, contract, repo, result)
     check_aliases(repo, skills, contract, result)

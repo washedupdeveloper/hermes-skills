@@ -17,6 +17,8 @@ side_effects: [none]
 
 # wizard
 
+**Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
+
 A **wizard** is a bash script that walks a human, step by step, through a manual
 procedure: tedious to do by hand, and tedious to re-explain every time. It opens each
 URL, says exactly what to click and copy, captures the values, writes them where they

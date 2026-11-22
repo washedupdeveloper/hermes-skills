@@ -16,6 +16,8 @@ side_effects: [none]
 
 # nix-flake-packaging
 
+**Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
+
 Turning a repository's own commands — Python and shell scripts — into a pinned Nix
 surface: `nix run`-able apps, packages, checks, a devShell and a formatter, all from
 one `flake.lock`.

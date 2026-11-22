@@ -17,6 +17,8 @@ side_effects: [none]
 
 # Workflow security
 
+**Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
+
 A workflow file is executable code that runs with a token, secrets and write access on a
 machine you do not administer, triggered by events you do not control. Audit the **trust
 boundary** before editing anything else: which untrusted value reaches which sink, with what

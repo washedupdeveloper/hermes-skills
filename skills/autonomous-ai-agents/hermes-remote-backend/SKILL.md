@@ -17,6 +17,8 @@ side_effects: [none]
 
 # hermes-remote-backend
 
+**Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
+
 Run a Hermes backend on another host — a WSL distro, a LAN box, a VPS — and
 attach the desktop app to it as a **Remote gateway**. The backend is `hermes
 serve`; the desktop only *attaches*, it never starts a remote backend (SSH
@@ -83,7 +85,7 @@ container sharing the host's network namespace (`--network host`) behaves like a
 host process; a VM does not.
 
 **A NixOS test VM has no outbound network** — no DNS, and the gateway is closed —
-so anything that fetches inside it (a package install, a `docker build` pulling a
+so anything that fetches inside it (a package install, a `podman build` pulling a
 base image) fails for a reason unrelated to what is being tested. Assert on WHICH
 error came back, so a network failure stays distinguishable from a real one.
 

@@ -83,5 +83,10 @@
     "background-process",
     "credential",
     "global-package"
-  ]
+  ],
+  "container_runtime": {
+    "primary": "podman",
+    "fallback": "docker",
+    "fallback_marker": "docker-fallback"
+  }
 }

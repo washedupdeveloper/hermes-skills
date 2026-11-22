@@ -31,6 +31,8 @@ CONTRACT = {
     "scope_fields": ["writes"],
     "allowed_writes": {"project": ["none", "$PROJECT", "$ARTIFACTS", "$SCRATCH"], "declared": ["$HERMES_HOME", "$SYSTEM"]},
     "side_effects": ["none", "systemd", "port", "cron", "background-process"],
+    "container_runtime": {"primary": "podman", "fallback": "docker",
+                         "fallback_marker": "docker-fallback"},
     "fhs_fail_prefixes": ["/home"],
     "fhs_note_prefixes": ["/usr"],
     "domain_contract": "CATEGORY.md",
@@ -344,3 +346,19 @@ def test_an_unknown_side_effect_is_named():
     with tempfile.TemporaryDirectory() as d:
         out = check(scope_repo(d, front="writes: [none]\nside_effects: [daemon-thing]"))
         assert any("not in [" in v for v in out), out
+
+
+def test_an_unmarked_docker_command_is_caught():
+    """Docker is the substitute, not the default; an unmarked call drifts."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front="writes: [none]",
+                               body="```sh\ndocker ps\n```\n"))
+        assert any("writes for podman" in v for v in out), out
+
+
+def test_a_marked_docker_fallback_passes():
+    """The control for the control: the same line, with its reason, is allowed."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front="writes: [none]",
+                               body="```sh\ndocker ps   # docker-fallback: host has no podman\n```\n"))
+        assert not any("writes for podman" in v for v in out), out

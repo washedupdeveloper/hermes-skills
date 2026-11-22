@@ -16,6 +16,8 @@ side_effects: [none]
 
 # nixos-clan-flake
 
+**Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
+
 Maintaining a NixOS + Clan.lol flake whose repository lives inside a WSL2 distro
 while Hermes runs on the Windows host. Covers reaching the repo, editing it, and
 the part that decides whether the work is done: proving the change with the repo's
@@ -128,7 +130,7 @@ are different trees, and the right one is the tree whose content the consumer ne
 the attribute whose name sounds like the product.
 
 **A background process does not survive a WSL invocation — start the daemon and
-use it in the SAME script.** `nohup dockerd &` followed by the shell exiting leaves
+use it in the SAME script.** `nohup podman system service &` followed by the shell exiting leaves
 no daemon and often no log: the session teardown takes the process with it, so the
 next `wsl.exe` call finds nothing and the log is empty. Write one script that starts
 the daemon, waits for its socket, does the work, and kills it, then run that single
@@ -166,7 +168,7 @@ ships no `sed` and no `awk`, and its `/bin` holds only `sh`. Nothing before it c
 catch that, because a Dockerfile only *parses* until it runs — "the Dockerfile is
 valid" is a different claim from "the image builds", and only the second one matters.
 Enumerate what the base actually has
-(`docker run --rm <img> sh -c 'for t in sed grep tar find readlink …; do command -v $t || echo MISS-$t; done'`)
+(`podman run --rm <img> sh -c 'for t in sed grep tar find readlink …; do command -v $t || echo MISS-$t; done'`)
 and take the rest from nixpkgs, so the step depends on the pin rather than on a base
 image's incidental contents. `nixos/nix` was measured to have `bash cat chmod cp cut
 find grep head ls mkdir mv nix nix-store readlink rm sh sort tail tar wc xargs`, and

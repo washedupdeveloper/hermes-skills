@@ -16,6 +16,8 @@ side_effects: [none]
 
 # Versioning and releasing
 
+**Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
+
 This user wants Semantic Versioning followed **properly, in every project, for all future
 work** — not interpreted case by case. So the policy is written down in the repository
 (`docs/VERSIONING.md`), the definitions are concrete enough to apply without judgement,
@@ -140,7 +142,7 @@ passes in both the bold and plain spellings, and a historical mention does not t
 because a prose check with no negative fixture is a regex you merely hope is right.
 
 **A shipped artifact's file name is a version copy as well.** `tool-1.2.3-py3-none-any.whl`
-in an install line, an image tag in a `docker run`, a download URL — each is the version
+in an install line, an image tag in a `podman run`, a download URL — each is the version
 written into prose, and a bump that renames the artifact but not the line ships a command
 that 404s. Add every artifact-name shape the docs quote to the same extractor and the same
 rewrite path; the `Current release` regex alone will not see them.
@@ -232,7 +234,7 @@ chain and say which link you checked:
   here is a test of the *derivation* standing in for a test of the *attached file*: a VM
   can load and exercise the image build while the asset a downloader receives is built
   from a different commit, or is missing a layer, and nothing looks. Download the real
-  asset, unpack it, and check what `docker load` checks first — one `manifest.json` entry,
+  asset, unpack it, and check what `podman load` checks first — one `manifest.json` entry,
   its `RepoTags` naming the image the docs tell people to run, the `Config` file present,
   and every path in `Layers` existing. Read the config for the entrypoint, `Cmd`, `User`
   and `WorkingDir` the docs claim. That is structure, not execution: say which of the two
