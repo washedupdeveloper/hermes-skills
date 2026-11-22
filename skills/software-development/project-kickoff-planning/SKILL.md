@@ -9,6 +9,7 @@ category: software-development
 metadata:
   hermes:
     tags: [planning, kickoff, greenfield, research, milestones, interview, scaffold]
+writes: [none]
 ---
 
 # Project Kickoff Planning

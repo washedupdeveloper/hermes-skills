@@ -11,6 +11,7 @@ metadata:
     tags: [documentation, api, jsdoc, docstrings, public-surface]
     source: effect@t3code-vendored (.repos/effect/.agents/skills/jsdocs), pinned via pingdotgg/t3code@e5d757f51b342a5ebc50312790e39a1baca61194
     related_skills: [writing-for-agents, domain-modeling, two-axis-review]
+writes: [none]
 ---
 
 # API documentation

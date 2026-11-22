@@ -11,6 +11,7 @@ metadata:
     tags: [wizard, setup, credentials, onboarding, bash, handoff]
     source: mattpocock/skills@v1.3.1
     related_skills: [handoff]
+writes: [none]
 ---
 
 # wizard

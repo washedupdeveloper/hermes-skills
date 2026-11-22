@@ -11,6 +11,7 @@ metadata:
     tags: [tokens, context, memory, compression]
     related_skills: [caveman, ultracave]
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
+writes: [none]
 ---
 
 # caveman-compress

@@ -11,6 +11,7 @@ metadata:
     tags: [state-machine, concurrency, retries, invariants, audit, transitions]
     related_skills: [defensive-patterns, systematic-debugging, verify-and-stop]
     source: distilled from a full CLI/run-engine state-machine audit
+writes: [none]
 ---
 
 # State Machine Audit

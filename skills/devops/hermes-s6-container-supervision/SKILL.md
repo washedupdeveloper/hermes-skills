@@ -12,6 +12,7 @@ metadata:
   hermes:
     tags: [docker, s6, supervision, gateway, profiles]
     related_skills: [hermes-agent, hermes-profile-fleet]
+writes: [none]
 ---
 
 # Hermes s6-overlay Container Supervision

@@ -11,6 +11,7 @@ metadata:
     tags: [incident, postmortem, root-cause, guardrails, evidence]
     related_skills: [systematic-debugging, defensive-patterns, verify-and-stop, writing-for-agents]
     source: DeepSeek Harness (deepseek-ai/deepseek-harness) docs/postmortem, distilled
+writes: [none]
 ---
 
 # postmortem

@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [models, routing, pricing, coding, benchmarks, openspec, council]
     related_skills: [technology-selection, verify-and-stop, critical-verdict]
+writes: [none]
 ---
 
 # Model routing selector

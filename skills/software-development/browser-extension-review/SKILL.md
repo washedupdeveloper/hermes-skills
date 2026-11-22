@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [code-review, webextension, mv3, chrome, firefox, background-script, extension]
     related_skills: [defensive-patterns, critical-verdict, web-app-security]
+writes: [none]
 ---
 
 # browser-extension-review

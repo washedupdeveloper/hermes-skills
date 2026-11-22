@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [review, evaluation, verdict, evidence, sources, bias, self-assessment]
     related_skills: [grounded-citations, requesting-code-review, deterministic-quality-gates]
+writes: [none]
 ---
 
 # critical-verdict
@@ -313,7 +314,9 @@ and "fixing" it to match a reference is a regression.
 - `references/decisive-experiment.md` — designing and running the experiment that
   settles the verdict: pre-registering the decision rule, equal-cost arms, ground
   truth, blind labelling, counting distinct defects rather than matched findings, and
-  repeating the run so a single pass cannot invert the result.
+  repeating the run so a single pass cannot invert the result. §10 covers a **challenger
+  against the incumbent you already run** — a vendor memory or context system — where the
+  vendor's baseline, not the product, is usually the variable.
 - `references/applying-review-findings.md` — acting on a review's output: verifying each
   claim against the running system, testing a prescribed remedy before applying it,
   assertion-checked edits, proving the change rather than asserting it, and reporting

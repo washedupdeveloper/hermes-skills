@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [docker, oci, containers, nix, unshare]
     related_skills: [nix-flake-packaging, hermes-remote-backend]
+writes: [none]
 ---
 
 # Running an OCI image without a container runtime

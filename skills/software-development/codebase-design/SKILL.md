@@ -11,6 +11,7 @@ metadata:
     tags: [architecture, modules, seams, refactor, vocabulary]
     source: mattpocock/skills@main (adapted from the published summary and glossary)
     related_skills: [improve-codebase-architecture, domain-modeling, request-refactor-plan]
+writes: [none]
 ---
 
 # Codebase Design

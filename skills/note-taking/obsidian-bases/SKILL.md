@@ -11,6 +11,7 @@ metadata:
     tags: [obsidian, bases, views, kanban, dashboard, verification, cdp]
     category: note-taking
     related_skills: [obsidian, hermes-knowledge-pipeline]
+writes: [none]
 ---
 
 # Obsidian Bases views

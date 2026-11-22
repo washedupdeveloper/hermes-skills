@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [openspec, spec, requirements, planning]
     related_skills: [to-spec, to-tickets]
+writes: [none]
 ---
 
 # OpenSpec

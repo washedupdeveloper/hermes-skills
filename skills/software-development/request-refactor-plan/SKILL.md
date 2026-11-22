@@ -11,6 +11,7 @@ metadata:
     tags: [refactor, planning, scope, commits, interview]
     source: mattpocock/skills@main
     related_skills: [grill-me, to-spec, to-tickets, codebase-design]
+writes: [none]
 ---
 
 # Request Refactor Plan

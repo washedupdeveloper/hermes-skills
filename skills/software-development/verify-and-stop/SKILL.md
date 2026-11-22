@@ -11,6 +11,7 @@ metadata:
     tags: [verification, scope, acceptance, proof]
     related_skills: [surgical-patch, deterministic-quality-gates, requesting-code-review]
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
+writes: [none]
 ---
 
 # verify-and-stop

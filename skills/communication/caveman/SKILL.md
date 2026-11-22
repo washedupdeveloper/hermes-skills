@@ -11,6 +11,7 @@ metadata:
     tags: [brevity, tokens, output-style, communication]
     related_skills: [ultracave, caveman-review, wait-what]
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
+writes: [none]
 ---
 
 # caveman

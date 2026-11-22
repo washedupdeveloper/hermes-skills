@@ -11,6 +11,7 @@ metadata:
     tags: [planning, decisions, map, fog-of-war, frontier, scoping]
     source: mattpocock/skills@v1.3.1
     related_skills: [grill-me, domain-modeling, to-spec, to-tickets]
+writes: [none]
 ---
 
 # wayfinder

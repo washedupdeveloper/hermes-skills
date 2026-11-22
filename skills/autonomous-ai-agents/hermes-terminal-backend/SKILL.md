@@ -11,6 +11,7 @@ metadata:
   hermes:
     tags: [hermes, sandbox, docker, podman, backend, troubleshooting, mounts]
     related_skills: [hermes-agent, nix-declarative-config, hermes-profile-fleet]
+writes: [none]
 ---
 
 # Hermes terminal backend (container sandbox)

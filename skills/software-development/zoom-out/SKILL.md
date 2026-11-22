@@ -11,6 +11,7 @@ metadata:
     tags: [navigation, architecture, exploration, map]
     source: mattpocock/skills@main
     related_skills: [codebase-design, domain-modeling]
+writes: [none]
 ---
 
 # Zoom Out

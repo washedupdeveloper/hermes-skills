@@ -11,6 +11,7 @@ metadata:
     tags: [pull-request, review, evidence, blast-radius, communication]
     source: mattpocock/skills@5863806dd4e15c63174bee4e7515a4256792ecfa (engineering/pr, crediting humanlayer/show-me)
     related_skills: [github, two-axis-review, verify-and-stop, release-versioning]
+writes: [none]
 ---
 
 # Pull request description

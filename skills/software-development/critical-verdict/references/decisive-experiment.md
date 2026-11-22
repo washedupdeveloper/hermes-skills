@@ -229,6 +229,40 @@ indistinguishable.
   solving a task it was never given guidance for is evidence about the model, not about
   the guide.
 
+## 10. Challenger vs the incumbent you already run
+
+A vendor's benchmark answers "is this better than the systems they chose to compare
+against", not "is this better than what I have". The incumbent is part of the experiment.
+
+- **Run the control arm on your own configuration.** A challenger's "native memory"
+  baseline is often a configuration that does not retrieve at all; if yours already does,
+  the published delta can vanish at small scale. Measured on one library: the vendor
+  claimed 24–57% for native memory, and the incumbent scored 93% on the same probe set.
+  That is not a refutation of the product — it is a refutation of the baseline.
+- **Look for the threshold, not the average.** When the incumbent has a hard capacity
+  limit, the result is a step change: parity below the limit, a widening gap above it.
+  Size the corpus to cross the limit, or run two sizes, and report where the gap opens
+  and what mechanism bounds the incumbent (a character cap, a context window, a TTL).
+  One mid-size run reports "no difference" and is true only at that size.
+- **Probe taxonomy.** Exact recall, temporal supersession (the value changed later —
+  score the current value and record whether the stale one also appears), multi-hop
+  (two facts joined), paraphrase (deliberately avoids the corpus's own vocabulary) and
+  abstention (never stated; a fabricated value is the failure). Paraphrase separates
+  retrieval from keyword matching; without it a full-text index scores as semantic recall.
+- **Score the final answer block, not the reasoning trace.** A trace recites the recalled
+  text verbatim and will credit an arm that retrieved nothing it could use.
+- **Cost the challenger in its own units.** Per-turn input tokens, p50 *and* p90 latency
+  (a recall round-trip lands in the tail even when medians tie), and background work —
+  extraction or consolidation jobs that never appear in the session's token ledger.
+- **Same history, two ingestion paths.** Both arms receive the identical corpus through
+  their own pipeline. When replaying transcripts, say so: the challenger stamps its own
+  wall-clock date, so a temporal claim is then about the text, not the timestamps.
+- **Audit each claim separately.** A claim can be true about the architecture and false
+  about your install. Mark each one reproduce / refuted / confirmed / untested, and put
+  the untested ones in the verdict rather than letting them disappear.
+- **A narrower result is still a result.** "Buys immunity to the cap, not better recall"
+  is the kind of finding that survives a repeat; "the product is good" is not.
+
 ## Pitfalls
 
 - **Choosing the rule after seeing the numbers.** The experiment cannot fail, so it has
@@ -273,6 +307,12 @@ indistinguishable.
   look fine. Match non-exclusively.
 - **A distance that ignores the path.** A finding then matches a defect in another file,
   reporting zero false positives for every arm.
+- **A benefit measured at one corpus size.** When the incumbent has a capacity limit, a
+  single mid-size run reports parity that holds only below the limit.
+- **Comparing against the vendor's stated baseline instead of running the control.** The
+  baseline is the variable, and it is usually weaker than yours.
+- **Scoring reasoning traces.** They recite what was retrieved and turn recall into a
+  tautology.
 - **One pass per arm.** The arm with the widest spread is the one that looks perfect on
   a single run, and the conclusion drawn from it can invert on the repeat.
 - **An aggregation step that materialises empty artifacts.** When nothing was readable, a

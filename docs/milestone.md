@@ -19,14 +19,14 @@ From a clean clone of `origin/main`:
 | the specs validate | `openspec validate --all --strict` |
 | every path a spec names exists | `python3 -m pytest tests/unit/test_docs.py` |
 | the layout the README declares is the layout on disk | the same suite |
-| the initializer applies the declared state | `./setup.sh --check` — exit 0 |
+| the initializer's plan matches the declared state | `./install.sh /tmp/skills-plan --copy --dry-run` — exit 0 |
 | CI enforces the above on every push | every check run green on the head of `main` |
 
 ## Status
 
 **Reached, 2026-10-26; re-measured 2026-10-28.** Every row passes. The measurement is the check-runs
 API against the head of `main`, not this sentence: `nix gate`, the three-OS test matrix, `live hermes`,
-`claim audit`, `setup.sh` e2e on two systems, `openspec validate --all --strict`, `gate mutants` and
+`claim audit`, `install.sh` e2e on two systems, `openspec validate --all --strict`, `gate mutants` and
 `cost`, all successful.
 
 Reaching it was not the end. Changes have landed since, and the list of them is

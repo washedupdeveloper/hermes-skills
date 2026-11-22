@@ -11,6 +11,7 @@ metadata:
   hermes:
     tags: [hermes, serve, backend, remote, wsl, desktop, gateway, websocket]
     related_skills: [hermes-agent, hermes-profile-fleet, nixos-clan-flake]
+writes: [none]
 ---
 
 # hermes-remote-backend

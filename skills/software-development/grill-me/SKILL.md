@@ -11,6 +11,7 @@ metadata:
     tags: [planning, interview, alignment, stateless]
     source: mattpocock/skills@main
     related_skills: [grilling, grill-with-docs]
+writes: [none]
 ---
 
 # grill-me

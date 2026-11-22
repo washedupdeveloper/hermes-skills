@@ -12,6 +12,7 @@ metadata:
     tags: [hermes-agent, knowledge-base, wiki, cron, automation, portability, obsidian, cross-platform]
     category: autonomous-ai-agents
     related_skills: [llm-wiki, obsidian, hermes-project-handoff]
+writes: [none]
 ---
 
 # Hermes Knowledge Pipeline

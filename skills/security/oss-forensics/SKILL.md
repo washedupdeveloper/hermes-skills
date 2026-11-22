@@ -16,6 +16,7 @@ metadata:
   hermes:
     tags: [Security, Forensics, GitHub, Supply-Chain]
     related_skills: []
+writes: [none]
 ---
 
 # OSS Security Forensics

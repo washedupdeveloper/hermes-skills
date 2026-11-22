@@ -11,6 +11,7 @@ metadata:
     tags: [review, lifecycle, concurrency, ownership, subprocess, migration, cli, errors]
     related_skills: [surgical-patch, verify-and-stop, deterministic-quality-gates, postmortem, agent-harness-design, state-machine-audit]
     source: DeepSeek Harness (deepseek-ai/deepseek-harness) docs/defensive-patterns, distilled
+writes: [none]
 ---
 
 # defensive-patterns

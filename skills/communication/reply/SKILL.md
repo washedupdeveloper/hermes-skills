@@ -11,6 +11,7 @@ metadata:
     tags: [reply, reporting, evidence, claims, framing]
     related_skills: [verify-and-stop, writing-for-agents, caveman]
     source: cursor/plugins pstack/skills/poteto-mode (SKILL.md, Writing the reply), adapted
+writes: [none]
 ---
 
 # reply

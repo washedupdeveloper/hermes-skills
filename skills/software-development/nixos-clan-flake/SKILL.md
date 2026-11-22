@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [nix, nixos, clan, flake, wsl, verification, reproducibility]
     related_skills: [systematic-debugging, requesting-code-review]
+writes: [none]
 ---
 
 # nixos-clan-flake
@@ -234,7 +235,7 @@ into the store, so it cannot be used to inspect what a build would actually see.
 file in the scratch dir and copy it in, stripping CR:
 
 ```sh
-tr -d '\r' < /mnt/c/<scratch>/new-file.nix > /home/<user>/<repo>/<path>
+tr -d '\r' < /mnt/c/<scratch>/new-file.nix > "$SKILL_PROJECT/<path>"
 ```
 
 `scripts/install-into-wsl.sh` does this with before/after hashes.

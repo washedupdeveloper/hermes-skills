@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [cleanup, hygiene, ephemeral, scratch, nix, wsl]
     related_skills: [nixos-clan-flake, verify-and-stop]
+writes: [none]
 ---
 
 # ephemeral-cleanup
@@ -63,6 +64,30 @@ regular-file/directory shape and writability before `mkdtemp`; if a late report
 write still fails, remove the tree in the same failure path.
 
 Sandbox recipe and the NixOS/non-NixOS matrix: `references/sandboxing.md`.
+
+## Run it, don't install it (WSL NixOS)
+
+The cheapest cleanup is the one you never have to do: if the tool never lands, there
+is nothing to remove.
+
+```bash
+nix shell nixpkgs#<tool> -c <cmd>       # one command, tool never enters the profile
+nix run nixpkgs#<tool> -- <args>        # same, for a flake app
+nix develop --command <cmd>             # a shell that needs several tools at once
+work=$(mktemp -d) && trap 'rm -rf "$work"' EXIT   # inside the distro, never /mnt/c
+```
+
+- **The workdir belongs in the guest.** `mktemp -d` on the WSL filesystem; a tree under
+  `/mnt/c` crosses 9p on every stat and outlives the task even when the sweep runs.
+- **Know which artefact is the debris.** The store path a `nix shell` uses is not debris —
+  it is GC-able and nothing references it. A **GC root** is: `nix build -o <path>`, a
+  `nix profile install`, a live `nix develop` mount. Those are what you remove.
+- **Persist the outcome, not the tree.** Anything worth keeping goes under the project that
+  owns it, in its repo; then the probe tree dies. A finding that exists only in the temp
+  directory has not been persisted at all.
+- **A host-level change is a flake edit, not an install.** `nix profile add` / `nix-env -i`
+  on the distro is the anti-pattern this section exists to prevent: it outlives the task
+  with no record. Put it in the host's NixOS flake and rebuild.
 
 ## What counts as ephemeral
 

@@ -21,6 +21,8 @@ import re
 import sys
 from pathlib import Path
 
+from scope import check_scope
+
 REPO = Path(__file__).resolve().parent.parent
 SKILLS = "skills"
 SUPPORT_FALLBACK = ("references", "templates", "assets", "scripts", "examples")
@@ -431,6 +433,8 @@ def validate(repo: Path = REPO, extra_roots: list[Path] | None = None,
     check_layout(repo, skills, contract, result)
     check_host_table(repo, skills, result)
     check_upstream_ledger(repo, skills, result)
+    parsed = {p: parse_frontmatter(read_raw(p))[::2] for p in skills}
+    check_scope(skills, parsed, contract, repo, result, parse_list)
     return result
 
 

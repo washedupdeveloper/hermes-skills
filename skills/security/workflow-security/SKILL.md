@@ -11,6 +11,7 @@ metadata:
     tags: [ci, github-actions, permissions, supply-chain, secrets, trust-boundary]
     source: effect@t3code-vendored (.repos/effect/.agents/skills/ci-maintenance), pinned via pingdotgg/t3code@e5d757f51b342a5ebc50312790e39a1baca61194
     related_skills: [defensive-patterns, oss-forensics, git-history-sanitisation]
+writes: [none]
 ---
 
 # Workflow security

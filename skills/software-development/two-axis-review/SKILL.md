@@ -11,6 +11,7 @@ metadata:
     tags: [review, standards, spec, code-smells, delegation]
     source: mattpocock/skills@5863806dd4e15c63174bee4e7515a4256792ecfa (engineering/code-review)
     related_skills: [requesting-code-review, to-spec, verify-and-stop]
+writes: [none]
 ---
 
 # Two-axis review

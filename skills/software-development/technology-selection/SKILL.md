@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [architecture, evaluation, tradeoffs, embedded, toolchain, decision, llm, model-selection, cost]
     related_skills: [project-kickoff-planning, to-spec, domain-modeling]
+writes: [none]
 ---
 
 # Technology Selection

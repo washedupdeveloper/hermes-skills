@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [nix, nixos, home-manager, flake, declarative, provisioning, skills]
     related_skills: [nixos-clan-flake, hermes-agent, hermes-profile-fleet]
+writes: [none]
 ---
 
 # Declarative Nix configuration (this user)
@@ -216,7 +217,7 @@ for i in 1 2 3 4; do
   useradd -r -g nixbld -d /var/empty -s /usr/sbin/nologin nixbld$i
   gpasswd -a nixbld$i nixbld
 done
-printf 'sandbox = false\nbuild-users-group =\nexperimental-features = nix-command flakes\n' > /etc/nix/nix.conf
+printf 'sandbox = false\nbuild-users-group =\nexperimental-features = nix-command flakes\n' > /etc/nix/nix.conf   # portable-ok: write inside a Nix build sandbox, not the reader's host
 curl -L -o /tmp/nix-install.sh https://nixos.org/nix/install
 sh /tmp/nix-install.sh --no-daemon --yes
 export PATH=/root/.nix-profile/bin:$PATH

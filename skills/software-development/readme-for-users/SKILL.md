@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [readme, documentation, cli, user-guide, onboarding]
     related_skills: [writing-for-agents, release-versioning, handoff]
+writes: [none]
 ---
 
 # readme-for-users

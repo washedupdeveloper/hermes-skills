@@ -14,6 +14,7 @@ metadata:
       - diagnostics
     related_skills:
       - hermes-wsl-backend
+writes: [none]
 ---
 
 # WireGuard mesh triage

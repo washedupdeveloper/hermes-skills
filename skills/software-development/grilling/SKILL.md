@@ -11,6 +11,7 @@ metadata:
     tags: [planning, interview, decision-tree, alignment, adversarial]
     source: mattpocock/skills@main
     related_skills: [grill-me, grill-with-docs, domain-modeling]
+writes: [none]
 ---
 
 # grilling

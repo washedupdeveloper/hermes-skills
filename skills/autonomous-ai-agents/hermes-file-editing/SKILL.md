@@ -11,6 +11,7 @@ metadata:
   hermes:
     tags: [hermes, file-tools, write_file, patch, staleness, guard, workflow]
     related_skills: [hermes-agent]
+writes: [none]
 ---
 
 # hermes-file-editing
@@ -65,7 +66,7 @@ reading cannot help, and retrying in a loop spends the turn.
 scratch directory the tools can reach, then move it into place from inside the guest:
 
 ```bash
-tr -d '\r' < /mnt/c/.../scratch/stage/SKILL.md > /home/<user>/projects/<repo>/skills/<cat>/<name>/SKILL.md
+tr -d '\r' < /mnt/c/.../scratch/stage/SKILL.md > "$SKILL_PROJECT/skills/<cat>/<name>/SKILL.md"
 ```
 
 `tr -d '\r'` is not decoration: a Windows-side write can carry CRLF into an LF-only tree, and the

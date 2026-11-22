@@ -11,6 +11,7 @@ metadata:
     tags: [security, web, owasp, review, hardening, ssrf, llm]
     related_skills: [reviewer-security, oss-forensics]
     source: https://github.com/addyosmani/agent-skills (security-and-hardening, MIT)
+writes: [none]
 ---
 
 # web-app-security

@@ -11,6 +11,7 @@ metadata:
     tags: [planning, interview, glossary, adr, domain-modeling]
     source: mattpocock/skills@main
     related_skills: [grilling, domain-modeling, grill-me]
+writes: [none]
 ---
 
 # grill-with-docs

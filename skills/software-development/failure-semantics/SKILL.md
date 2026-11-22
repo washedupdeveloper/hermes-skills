@@ -11,6 +11,7 @@ metadata:
     tags: [errors, exit-codes, retries, recovery, catch, contracts]
     source: deepseek-harness@39163dd30f703a79079e2d2446545cff3c453738 (.agents/skills/dsh-error-handling)
     related_skills: [defensive-patterns, agent-harness-design, postmortem]
+writes: [none]
 ---
 
 # Failure semantics

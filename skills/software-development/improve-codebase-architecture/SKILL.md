@@ -11,6 +11,7 @@ metadata:
     tags: [architecture, refactor, deep-modules, design-alternatives, rfc]
     source: mattpocock/skills@main
     related_skills: [codebase-design, zoom-out, request-refactor-plan]
+writes: [none]
 ---
 
 # Improve Codebase Architecture

@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [quality, scoring, calibration, gates, metrics, verification]
     related_skills: [requesting-code-review, systematic-debugging]
+writes: [none]
 ---
 
 # deterministic-quality-gates

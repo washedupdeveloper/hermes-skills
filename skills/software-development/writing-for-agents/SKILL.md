@@ -11,6 +11,7 @@ metadata:
     tags: [writing, context, pointers, skills, agents-md, pruning]
     source: mattpocock/skills@v1.3.1
     related_skills: [retro, hermes-agent-skill-authoring]
+writes: [none]
 ---
 
 # writing-for-agents

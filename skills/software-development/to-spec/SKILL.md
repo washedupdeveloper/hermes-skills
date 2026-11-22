@@ -11,6 +11,7 @@ metadata:
     tags: [spec, planning, synthesis, seams, requirements]
     source: mattpocock/skills@v1.3.1
     related_skills: [to-tickets, domain-modeling, grill-me]
+writes: [none]
 ---
 
 # to-spec

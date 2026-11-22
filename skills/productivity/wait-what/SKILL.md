@@ -11,6 +11,7 @@ metadata:
     tags: [communication, clarity, plain-language, re-pitch]
     source: mattpocock/skills@v1.3.1
     related_skills: [domain-modeling]
+writes: [none]
 ---
 
 # wait-what

@@ -11,6 +11,7 @@ metadata:
     tags: [handoff, context, session, continuity, summary]
     source: mattpocock/skills@v1.3.1
     related_skills: [to-spec, domain-modeling]
+writes: [none]
 ---
 
 # handoff

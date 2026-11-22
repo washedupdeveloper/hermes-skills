@@ -1,7 +1,14 @@
 {
-  "schema": "skill-contract/v2",
+  "schema": "skill-contract/v3",
   "description_window": 57,
-  "required_frontmatter": ["name", "description", "version", "author", "license", "platforms"],
+  "required_frontmatter": [
+    "name",
+    "description",
+    "version",
+    "author",
+    "license",
+    "platforms"
+  ],
   "categories": [
     "autonomous-ai-agents",
     "communication",
@@ -11,8 +18,21 @@
     "security",
     "software-development"
   ],
-  "support_dirs": ["assets", "references", "templates", "scripts", "examples"],
-  "hosts": ["hermes", "claude", "codex", "opencode", "cursor", "gemini"],
+  "support_dirs": [
+    "assets",
+    "references",
+    "templates",
+    "scripts",
+    "examples"
+  ],
+  "hosts": [
+    "hermes",
+    "claude",
+    "codex",
+    "opencode",
+    "cursor",
+    "gemini"
+  ],
   "external_skills": [
     "github",
     "grounded-citations",
@@ -26,5 +46,27 @@
     "test-driven-development"
   ],
   "gate_command": "python3 scripts/validate.py",
-  "_why": "One home for the values every enforcer reads: scripts/validate.py (the gate, standard library only) and nix/checks.nix (the optional wrapper). Nothing in this file is Hermes-specific; `hosts` names the agents a skill may declare itself scoped to, and `external_skills` the skills it may point at outside this repository."
+  "_why": "One home for the values every enforcer reads: scripts/validate.py (the gate, standard library only) and nix/checks.nix (the optional wrapper). Nothing in this file is Hermes-specific; `hosts` names the agents a skill may declare itself scoped to, and `external_skills` the skills it may point at outside this repository.",
+  "scope_fields": [
+    "writes"
+  ],
+  "allowed_writes": [
+    "none",
+    "$PROJECT",
+    "$SCRATCH",
+    "$ARTIFACTS",
+    "$REPO"
+  ],
+  "domain_contract": "CATEGORY.md",
+  "aliases": "library/aliases.json",
+  "fhs_fail_prefixes": [
+    "/home"
+  ],
+  "fhs_note_prefixes": [
+    "/usr",
+    "/etc",
+    "/var",
+    "/opt",
+    "/srv"
+  ]
 }

@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [nix, flake, packaging, apps, checks, cli]
     related_skills: [nixos-clan-flake, deterministic-quality-gates]
+writes: [none]
 ---
 
 # nix-flake-packaging

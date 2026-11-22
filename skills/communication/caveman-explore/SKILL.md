@@ -11,6 +11,7 @@ metadata:
     tags: [search, localization, delegation, brevity, tokens]
     related_skills: [cavecrew, caveman]
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
+writes: [none]
 ---
 
 # caveman-explore

@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [skills, curation, refactoring, overlap, provenance, audit]
     related_skills: [hermes-agent-skill-authoring, writing-for-agents]
+writes: [none]
 ---
 
 # Skill Library Curation
@@ -171,7 +172,7 @@ git clone <repo> /tmp/independent/lib && cd /tmp/independent/lib
 python3 scripts/validate.py && python3 -m pytest tests/ -q && python3 scripts/claim-audit.py
 ./install.sh /tmp/independent/agent-skills --nested   # the install path, not only the gate
 nix flake check                                       # the optional second engine
-grep -rn 'R\.parent\|/home/\|/Users/\|~\(/projects\)' --include='*.py' --include='*.sh' .
+grep -rn 'R\.parent\|/home/\|/Users/\|~\(/projects\)' --include='*.py' --include='*.sh' .   # portable-ok: the pattern is the subject of the search
 grep -rln '<other-project>' --include='*.py' --include='*.sh' --include='*.nix' .
 ```
 
@@ -241,6 +242,17 @@ whole; every other skill that needs it names that skill. A pointer costs one lin
 copy costs a future stale rule. Aim for skills that behave like pure functions —
 near-zero overlap, no hidden side effects — and where a skill genuinely depends on
 another, say so in its `## When to Use` or intro so the dependency is visible.
+
+**A rule that must fire unprompted cannot live only in a skill.** The index shows a name
+and a description, and selection is the model's own choice — which loses to exploration.
+Measured: a skill whose description matched the failure exactly was still not consulted;
+the session read source for five minutes instead. A one-line pointer in always-on context
+("X traps → skill `y`; load it before debugging X") had it loaded in under two seconds and
+answered in one turn. So the **signpost** stays in MEMORY.md or the system prompt and the
+**payload** lives in the skill; the pointer names the trigger and the action ("load it
+before…"), not the topic. Corollary: a skill nothing points at is a skill that will be
+rediscovered by hand, so when a new skill encodes an operational rule, add the pointer in
+the same commit.
 
 ## Step 4 — Resolve conflicts against the source of truth
 
@@ -636,6 +648,33 @@ proves nothing either way.
   `.md/.sh/.py/.json` misses `.vbs`, `.service`, `.toml` and a shebang-less template, and
   each miss is one more round-trip.
 
+## Domain scope is a partition, not a folder
+
+A **domain** is the question a skill answers, and the tree is the only place that
+partition is visible. A skill has exactly one home.
+
+- **Assign by the consumer of the output, never by the tools mentioned.** A PR-body skill
+  belongs to delivery even though it invokes git and a review pass; a CVE-triage skill whose
+  output is a security decision belongs to security even though it reads like debugging.
+- **If the trigger set needs "and also", it is two skills or its scope is wrong.** Never put
+  one file in two domains, and never add `common/` or `misc/` — an unassigned skill is a
+  decision nobody made, and it will attract every future orphan.
+- **Target 4–12 skills per domain.** Past ~15 the category header stops discriminating: one
+  library held 39 of 70 skills in a single bucket, which is a junk drawer with a name. Below 3
+  the domain is a folder for one authoring session, not a class.
+- **Cross-domain need has three legal expressions, in this order:** `related_skills` (soft
+  link), an `out_of_scope:` line naming the sibling ("fixing it → `surgical-patch`"), and a
+  `references/` slice carrying the payload. The payload travels with the consumer.
+- **Every domain ships a `CATEGORY.md`**: its trigger ("use these when…"), its boundary, and a
+  "not here — use X" list whose targets the gate resolves. The loader shows the directory name
+  and a host-generated blurb; nothing in the tree authors that blurb, so the domain's real
+  contract has to live beside the skills.
+- **Choose the map from data, not from taste.** Dump the catalog, histogram it by category, and
+  cluster by question. `scripts/domain-audit.py <skills-root>` prints the histogram, every
+  description past the window, the top overlapping description pairs and the cross-name
+  mentions. A 0.25 Jaccard cut over 2,415 pairs surfaced three real conflicts and about four
+  lexical false positives — so **similarity is a report and trigger collision is the gate**.
+
 ## Host scope is a label, not a directory
 
 A library that runs anywhere still holds members that only make sense inside one host. Keep them in
@@ -928,6 +967,18 @@ is a false positive, a command in a code block is a dead instruction — unless 
 table registers it as a hidden or dev verb, which `--help` never lists, so read the table
 before calling it dead. Replace it with the verb that exists (`hermes update`), then re-grep
 for the retired string.
+- **A `skill_manage` edit against an LF-only repo arrives CRLF.** Editing from a Windows host
+  writes CRLF into every touched file; the repo's own check reports each one ("CRLF line
+  endings; this tree is LF-only") and the batch reads as content drift. Normalise by content
+  (`tr -d '\r'` over the changed files), re-run the gate, commit after it passes.
+- **`git diff --summary` before committing a skill edit — the write path can drop the
+  executable bit.** A `scripts/*.sh` rewritten through the skill layer comes back mode 100644
+  from 100755, which no content check sees and which breaks the script for every clone.
+  Restore `chmod +x` in the same commit or the mode change ships silently.
+- **"Commit the tracked files" still carries the untracked target of a new reference.** A
+  modified `SKILL.md` that cites `references/<new>.md` fails the dead-reference gate when the
+  new file is left behind, so the commit includes the target and the report says so. The
+  instruction is about not sweeping unrelated work in, not about leaving a dangling pointer.
 - **Descriptions over 60 characters.** The window and its cost belong to
   `hermes-agent-skill-authoring` (the index truncates); past it, a trigger never fires.
 - **`related_skills` naming a skill that does not exist** in the scanned tree — a
