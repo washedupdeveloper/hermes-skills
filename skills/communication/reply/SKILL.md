@@ -12,6 +12,7 @@ metadata:
     related_skills: [verify-and-stop, writing-for-agents, caveman]
     source: cursor/plugins pstack/skills/poteto-mode (SKILL.md, Writing the reply), adapted
 writes: [none]
+side_effects: [none]
 ---
 
 # reply

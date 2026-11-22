@@ -11,6 +11,7 @@ metadata:
     tags: [cleanup, hygiene, ephemeral, scratch, nix, wsl]
     related_skills: [nixos-clan-flake, verify-and-stop]
 writes: [none]
+side_effects: [none]
 ---
 
 # ephemeral-cleanup

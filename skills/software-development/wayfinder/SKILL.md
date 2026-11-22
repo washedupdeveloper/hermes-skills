@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@v1.3.1
     related_skills: [grill-me, domain-modeling, to-spec, to-tickets]
 writes: [none]
+side_effects: [none]
 ---
 
 # wayfinder

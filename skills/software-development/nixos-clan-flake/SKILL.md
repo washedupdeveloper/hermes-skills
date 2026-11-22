@@ -11,6 +11,7 @@ metadata:
     tags: [nix, nixos, clan, flake, wsl, verification, reproducibility]
     related_skills: [systematic-debugging, requesting-code-review]
 writes: [none]
+side_effects: [none]
 ---
 
 # nixos-clan-flake

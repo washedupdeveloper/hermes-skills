@@ -12,6 +12,7 @@ metadata:
     related_skills: [reviewer-security, oss-forensics]
     source: https://github.com/addyosmani/agent-skills (security-and-hardening, MIT)
 writes: [none]
+side_effects: [none]
 ---
 
 # web-app-security

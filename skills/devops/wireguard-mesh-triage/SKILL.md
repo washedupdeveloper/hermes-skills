@@ -15,6 +15,7 @@ metadata:
     related_skills:
       - hermes-wsl-backend
 writes: [none]
+side_effects: [none]
 ---
 
 # WireGuard mesh triage

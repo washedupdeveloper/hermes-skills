@@ -39,12 +39,24 @@ def _contains_prefix(line: str, prefixes: list[str]) -> str | None:
     return None
 
 
+ANNOUNCE = re.compile(r"\*\*Heads-up\.\*\*", re.I)
+
+
+def _write_tiers(contract: dict) -> tuple[set[str], set[str]]:
+    raw = contract.get("allowed_writes") or {}
+    if isinstance(raw, list):          # a v3 contract predates the tier split
+        return set(raw), set()
+    return set(raw.get("project") or ()), set(raw.get("declared") or ())
+
+
 def check_writes(skills, parsed, contract, repo, result, parse_list) -> None:
-    allowed = set(contract.get("allowed_writes") or ("none",))
+    project, declared = _write_tiers(contract)
+    vocabulary = set(contract.get("side_effects") or ())
     for path in skills:
         fields, body = parsed[path]
-        raw = (fields.get("writes") or "").strip()
         where = path.relative_to(repo)
+
+        raw = (fields.get("writes") or "").strip()
         if not raw:
             result.fail(where, "frontmatter is missing `writes`; use `[none]` when the skill "
                                "changes nothing on disk")
@@ -54,12 +66,32 @@ def check_writes(skills, parsed, contract, repo, result, parse_list) -> None:
             result.fail(where, f"`writes: {raw}` names nothing; use `[none]` or a root")
             continue
         for target in targets:
-            if target not in allowed:
+            if target not in project | declared:
                 result.fail(where, f"`writes` names `{target}`, not one of "
-                                   f"{sorted(allowed)} — absolute paths are not portable")
+                                   f"{sorted(project | declared)} — absolute paths are not portable")
+
+        effects_raw = (fields.get("side_effects") or "").strip()
+        if not effects_raw:
+            result.fail(where, "frontmatter is missing `side_effects`; use `[none]` when the "
+                               "skill spawns nothing the user must know about")
+            continue
+        effects = parse_list(effects_raw)
+        unknown = [e for e in effects if e not in vocabulary]
+        if unknown:
+            result.fail(where, f"`side_effects` names {unknown}, not in {sorted(vocabulary)}")
+        active = [e for e in effects if e != "none"]
+        outside = [t for t in targets if t in declared]
+
+        if outside or active:
+            if not ANNOUNCE.search(body):
+                what = ", ".join(outside + active) or "a declared root"
+                result.fail(where, f"declares {what} outside the project but never tells the "
+                                   "reader — add a `**Heads-up.**` paragraph")
         if targets != ["none"] and PREAMBLE not in body:
-            result.fail(where, "`writes` is not `none` but the body has no root preamble; "
-                               "open with `: \"${SKILL_PROJECT:=...}\"` so a user can redirect it")
+            result.fail(where, "`writes` is not `none` but the body has no root preamble; open "
+                               "with `: \"${SKILL_PROJECT:=...}\"` so a user can redirect it")
+        if targets != ["none"] and not (fields.get("leaves") or "").strip():
+            result.fail(where, "`writes` is not `none` but `leaves` does not say what remains")
 
 
 def check_domain_contracts(repo, skills, contract, result) -> None:

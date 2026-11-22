@@ -12,6 +12,7 @@ metadata:
     tags: [hermes, kanban, swarm, durable, orchestration, multi-agent, dispatcher]
     related_skills: [hermes-wsl-backend, nix-flake-packaging, hermes-bot-authoring]
 writes: [none]
+side_effects: [none]
 ---
 
 # hermes-kanban-orchestration

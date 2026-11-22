@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@main
     related_skills: [codebase-design, domain-modeling]
 writes: [none]
+side_effects: [none]
 ---
 
 # Zoom Out

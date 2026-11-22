@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@main
     related_skills: [grill-me, to-spec, to-tickets, codebase-design]
 writes: [none]
+side_effects: [none]
 ---
 
 # Request Refactor Plan

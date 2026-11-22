@@ -12,6 +12,7 @@ metadata:
     related_skills: [verify-and-stop, systematic-debugging, test-driven-development]
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
+side_effects: [none]
 ---
 
 # surgical-patch

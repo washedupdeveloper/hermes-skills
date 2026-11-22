@@ -17,6 +17,7 @@ metadata:
     tags: [Security, Forensics, GitHub, Supply-Chain]
     related_skills: []
 writes: [none]
+side_effects: [none]
 ---
 
 # OSS Security Forensics

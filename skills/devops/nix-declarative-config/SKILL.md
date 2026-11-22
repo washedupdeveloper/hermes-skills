@@ -11,6 +11,7 @@ metadata:
     tags: [nix, nixos, home-manager, flake, declarative, provisioning, skills]
     related_skills: [nixos-clan-flake, hermes-agent, hermes-profile-fleet]
 writes: [none]
+side_effects: [none]
 ---
 
 # Declarative Nix configuration (this user)

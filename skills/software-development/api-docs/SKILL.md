@@ -12,6 +12,7 @@ metadata:
     source: effect@t3code-vendored (.repos/effect/.agents/skills/jsdocs), pinned via pingdotgg/t3code@e5d757f51b342a5ebc50312790e39a1baca61194
     related_skills: [writing-for-agents, domain-modeling, two-axis-review]
 writes: [none]
+side_effects: [none]
 ---
 
 # API documentation

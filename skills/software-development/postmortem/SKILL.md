@@ -12,6 +12,7 @@ metadata:
     related_skills: [systematic-debugging, defensive-patterns, verify-and-stop, writing-for-agents]
     source: DeepSeek Harness (deepseek-ai/deepseek-harness) docs/postmortem, distilled
 writes: [none]
+side_effects: [none]
 ---
 
 # postmortem

@@ -11,6 +11,7 @@ metadata:
     tags: [nix, flake, checks, assertions, ci, eval]
     related_skills: [nix-flake-packaging, deterministic-quality-gates, cross-platform-test-portability]
 writes: [none]
+side_effects: [none]
 ---
 
 # Writing a flake's checks

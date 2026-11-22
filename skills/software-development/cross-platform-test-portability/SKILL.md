@@ -11,6 +11,7 @@ metadata:
     tags: [testing, ci, portability, windows, macos, pytest]
     related_skills: [deterministic-quality-gates, surgical-patch, verify-and-stop]
 writes: [none]
+side_effects: [none]
 ---
 
 # Making a test suite pass on every OS

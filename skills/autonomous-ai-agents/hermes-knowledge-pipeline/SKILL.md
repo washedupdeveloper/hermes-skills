@@ -13,6 +13,7 @@ metadata:
     category: autonomous-ai-agents
     related_skills: [llm-wiki, obsidian, hermes-project-handoff]
 writes: [none]
+side_effects: [none]
 ---
 
 # Hermes Knowledge Pipeline

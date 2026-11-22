@@ -11,6 +11,7 @@ metadata:
     tags: [skills, curation, refactoring, overlap, provenance, audit]
     related_skills: [hermes-agent-skill-authoring, writing-for-agents]
 writes: [none]
+side_effects: [none]
 ---
 
 # Skill Library Curation

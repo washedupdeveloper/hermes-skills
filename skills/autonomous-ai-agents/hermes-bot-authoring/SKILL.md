@@ -12,6 +12,7 @@ metadata:
     tags: [hermes-agent, bots, profiles, personas, soul-md, capabilities, toolsets, multi-agent]
     related_skills: [project-kickoff-planning]
 writes: [none]
+side_effects: [none]
 ---
 
 # Authoring Hermes Bots

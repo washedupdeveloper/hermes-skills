@@ -11,6 +11,7 @@ metadata:
     tags: [quality, scoring, calibration, gates, metrics, verification]
     related_skills: [requesting-code-review, systematic-debugging]
 writes: [none]
+side_effects: [none]
 ---
 
 # deterministic-quality-gates

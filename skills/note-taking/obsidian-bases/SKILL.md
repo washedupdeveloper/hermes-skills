@@ -12,6 +12,7 @@ metadata:
     category: note-taking
     related_skills: [obsidian, hermes-knowledge-pipeline]
 writes: [none]
+side_effects: [none]
 ---
 
 # Obsidian Bases views

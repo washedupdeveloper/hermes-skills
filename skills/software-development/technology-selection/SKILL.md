@@ -11,6 +11,7 @@ metadata:
     tags: [architecture, evaluation, tradeoffs, embedded, toolchain, decision, llm, model-selection, cost]
     related_skills: [project-kickoff-planning, to-spec, domain-modeling]
 writes: [none]
+side_effects: [none]
 ---
 
 # Technology Selection

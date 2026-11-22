@@ -11,6 +11,7 @@ metadata:
     tags: [harness, plugins, seams, registries, audit, composition]
     related_skills: [deterministic-quality-gates, writing-for-agents, hermes-agent, defensive-patterns, postmortem]
 writes: [none]
+side_effects: [none]
 ---
 
 # agent-harness-design

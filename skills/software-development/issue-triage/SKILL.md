@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@5863806dd4e15c63174bee4e7515a4256792ecfa (engineering/triage)
     related_skills: [github, grilling, domain-modeling, to-tickets]
 writes: [none]
+side_effects: [none]
 ---
 
 # Issue triage

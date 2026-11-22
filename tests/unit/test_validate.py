@@ -29,7 +29,8 @@ CONTRACT = {
     "hosts": ["hermes"],
     "external_skills": ["github"],
     "scope_fields": ["writes"],
-    "allowed_writes": ["none", "$PROJECT"],
+    "allowed_writes": {"project": ["none", "$PROJECT", "$ARTIFACTS", "$SCRATCH"], "declared": ["$HERMES_HOME", "$SYSTEM"]},
+    "side_effects": ["none", "systemd", "port", "cron", "background-process"],
     "fhs_fail_prefixes": ["/home"],
     "fhs_note_prefixes": ["/usr"],
     "domain_contract": "CATEGORY.md",
@@ -42,6 +43,7 @@ version: 1.0.0
 author: test
 license: MIT
 platforms: [linux]
+side_effects: [none]
 {extra}---
 
 # {name}
@@ -318,3 +320,27 @@ def test_scope_contract_allows_a_reported_system_path():
         out = check(scope_repo(d, front="writes: [none]",
                                body="```\nEnvironment=PATH=/usr/bin:/bin\n```\n"))
         assert not any("hardcodes" in v or "writes to" in v for v in out), out
+
+
+def test_a_declared_root_without_a_heads_up_is_caught():
+    """Writing outside the project is allowed, but only if the reader is told."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front="writes: [$HERMES_HOME]",
+                               body=': "${SKILL_PROJECT:=.}"\n\nBody.\n'))
+        assert any("never tells the reader" in v for v in out), out
+
+
+def test_a_declared_root_with_a_heads_up_passes():
+    """The control for the control: the same skill, announced, is clean."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front="writes: [$HERMES_HOME]\nleaves: one config file",
+                               body=': "${SKILL_PROJECT:=.}"\n\n'
+                                    '**Heads-up.** This writes one file under your Hermes home.\n'))
+        assert not any("never tells the reader" in v for v in out), out
+
+
+def test_an_unknown_side_effect_is_named():
+    """A free-form token would let a skill hide a systemd unit behind a typo."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front="writes: [none]\nside_effects: [daemon-thing]"))
+        assert any("not in [" in v for v in out), out

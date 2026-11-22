@@ -12,6 +12,7 @@ metadata:
     tags: [hermes-agent, handoff, export, bundle, profiles, portability, migration]
     related_skills: [hermes-bot-authoring, project-kickoff-planning]
 writes: [none]
+side_effects: [none]
 ---
 
 # Hermes Project Handoff

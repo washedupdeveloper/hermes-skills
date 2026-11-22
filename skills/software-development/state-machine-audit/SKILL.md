@@ -12,6 +12,7 @@ metadata:
     related_skills: [defensive-patterns, systematic-debugging, verify-and-stop]
     source: distilled from a full CLI/run-engine state-machine audit
 writes: [none]
+side_effects: [none]
 ---
 
 # State Machine Audit

@@ -11,6 +11,7 @@ metadata:
     tags: [cross-platform, portability, windows, paths, encoding, comparison]
     related_skills: [nixos-clan-flake, deterministic-quality-gates]
 writes: [none]
+side_effects: [none]
 ---
 
 # cross-platform-correctness

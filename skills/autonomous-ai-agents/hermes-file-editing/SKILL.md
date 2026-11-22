@@ -12,6 +12,7 @@ metadata:
     tags: [hermes, file-tools, write_file, patch, staleness, guard, workflow]
     related_skills: [hermes-agent]
 writes: [none]
+side_effects: [none]
 ---
 
 # hermes-file-editing

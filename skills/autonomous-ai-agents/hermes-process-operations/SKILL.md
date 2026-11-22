@@ -12,6 +12,7 @@ metadata:
     tags: [hermes, subprocess, spawning, background, provenance, argv, diagnosis]
     related_skills: [hermes-agent, hermes-terminal-backend]
 writes: [none]
+side_effects: [none]
 ---
 
 # Hermes process operations

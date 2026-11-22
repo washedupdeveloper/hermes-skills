@@ -11,6 +11,7 @@ metadata:
     tags: [nix, flake, packaging, apps, checks, cli]
     related_skills: [nixos-clan-flake, deterministic-quality-gates]
 writes: [none]
+side_effects: [none]
 ---
 
 # nix-flake-packaging

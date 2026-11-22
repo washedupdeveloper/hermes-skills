@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@main
     related_skills: [grilling, domain-modeling, grill-me]
 writes: [none]
+side_effects: [none]
 ---
 
 # grill-with-docs

@@ -11,6 +11,7 @@ metadata:
     tags: [git, secrets, history-rewrite, publishing, audit]
     related_skills: [oss-forensics, github, web-app-security]
 writes: [none]
+side_effects: [none]
 ---
 
 # Sanitising a git history before publishing

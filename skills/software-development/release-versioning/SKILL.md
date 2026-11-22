@@ -11,6 +11,7 @@ metadata:
     tags: [semver, release, changelog, versioning, tagging, packaging]
     related_skills: [github, verify-and-stop, deterministic-quality-gates, nix-declarative-config]
 writes: [none]
+side_effects: [none]
 ---
 
 # Versioning and releasing

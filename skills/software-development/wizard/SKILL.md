@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@v1.3.1
     related_skills: [handoff]
 writes: [none]
+side_effects: [none]
 ---
 
 # wizard

@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@v1.3.1
     related_skills: [to-spec, domain-modeling]
 writes: [none]
+side_effects: [none]
 ---
 
 # handoff

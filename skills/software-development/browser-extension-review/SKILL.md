@@ -11,6 +11,7 @@ metadata:
     tags: [code-review, webextension, mv3, chrome, firefox, background-script, extension]
     related_skills: [defensive-patterns, critical-verdict, web-app-security]
 writes: [none]
+side_effects: [none]
 ---
 
 # browser-extension-review

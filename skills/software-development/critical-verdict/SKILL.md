@@ -11,6 +11,7 @@ metadata:
     tags: [review, evaluation, verdict, evidence, sources, bias, self-assessment]
     related_skills: [grounded-citations, requesting-code-review, deterministic-quality-gates]
 writes: [none]
+side_effects: [none]
 ---
 
 # critical-verdict

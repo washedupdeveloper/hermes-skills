@@ -12,6 +12,7 @@ metadata:
     tags: [hermes, profiles, multi-agent, packaging, portability, installation, orchestration]
     related_skills: [hermes-agent]
 writes: [none]
+side_effects: [none]
 ---
 
 # hermes-profile-fleet

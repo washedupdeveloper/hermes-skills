@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@main
     related_skills: [codebase-design, zoom-out, request-refactor-plan]
 writes: [none]
+side_effects: [none]
 ---
 
 # Improve Codebase Architecture

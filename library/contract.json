@@ -50,13 +50,18 @@
   "scope_fields": [
     "writes"
   ],
-  "allowed_writes": [
-    "none",
-    "$PROJECT",
-    "$SCRATCH",
-    "$ARTIFACTS",
-    "$REPO"
-  ],
+  "allowed_writes": {
+    "project": [
+      "none",
+      "$PROJECT",
+      "$ARTIFACTS",
+      "$SCRATCH"
+    ],
+    "declared": [
+      "$HERMES_HOME",
+      "$SYSTEM"
+    ]
+  },
   "domain_contract": "CATEGORY.md",
   "aliases": "library/aliases.json",
   "fhs_fail_prefixes": [
@@ -68,5 +73,15 @@
     "/var",
     "/opt",
     "/srv"
+  ],
+  "side_effects": [
+    "none",
+    "systemd",
+    "container",
+    "port",
+    "cron",
+    "background-process",
+    "credential",
+    "global-package"
   ]
 }

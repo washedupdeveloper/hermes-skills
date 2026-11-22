@@ -10,6 +10,7 @@ metadata:
   hermes:
     tags: [planning, kickoff, greenfield, research, milestones, interview, scaffold]
 writes: [none]
+side_effects: [none]
 ---
 
 # Project Kickoff Planning

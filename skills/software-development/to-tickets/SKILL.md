@@ -12,6 +12,7 @@ metadata:
     source: mattpocock/skills@v1.3.1
     related_skills: [to-spec, wayfinder, handoff]
 writes: [none]
+side_effects: [none]
 ---
 
 # to-tickets
