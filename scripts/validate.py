@@ -21,7 +21,8 @@ import re
 import sys
 from pathlib import Path
 
-from scope import check_scope
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scope import check_scope  # noqa: E402 — path set on the line above
 
 REPO = Path(__file__).resolve().parent.parent
 SKILLS = "skills"

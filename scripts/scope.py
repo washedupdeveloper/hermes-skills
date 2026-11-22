@@ -160,6 +160,8 @@ def check_aliases(repo, skills, contract, result) -> None:
 
 
 def check_scope(skills, parsed, contract, repo, result, parse_list) -> None:
+    if not contract.get("scope_fields"):
+        return  # a v2 contract predates these rules
     check_writes(skills, parsed, contract, repo, result, parse_list)
     check_domain_contracts(repo, skills, contract, result)
     check_triggers(skills, parsed, contract, result, repo)

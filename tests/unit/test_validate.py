@@ -28,6 +28,11 @@ CONTRACT = {
     "support_dirs": ["references", "templates", "assets", "scripts"],
     "hosts": ["hermes"],
     "external_skills": ["github"],
+    "scope_fields": ["writes"],
+    "allowed_writes": ["none", "$PROJECT"],
+    "fhs_fail_prefixes": ["/home"],
+    "fhs_note_prefixes": ["/usr"],
+    "domain_contract": "CATEGORY.md",
 }
 
 SKILL = """---
@@ -269,3 +274,47 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+# ── the scope contract ───────────────────────────────────────────────────────
+
+DOMAIN = "**Question.** Does the probe work?\n\n**Not here.** nothing\n"
+
+
+def scope_repo(d: str, front: str, body: str = "Body.\n") -> Path:
+    """A one-skill repo whose contract carries the scope keys."""
+    extra = front if not front or front.endswith("\n") else front + "\n"
+    text = frontmatter(extra=extra).replace("Body.", body)
+    return fixture(Path(d), {
+        "skills/alpha/probe/SKILL.md": text,
+        "skills/alpha/CATEGORY.md": DOMAIN,
+    })
+
+
+def test_scope_contract_requires_writes():
+    """A skill that does not say what it writes cannot be reviewed for purity."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front=""))
+        assert any("missing `writes`" in v for v in out), out
+
+
+def test_scope_contract_rejects_an_absolute_write_root():
+    """A user's own path in `writes` is the thing the contract exists to stop."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front="writes: [/home/someone/projects]"))
+        assert any("not one of" in v for v in out), out
+
+
+def test_scope_contract_rejects_a_user_path_in_a_fenced_command():
+    """The control for the control: `/usr` is only reported, `/home` fails."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front="writes: [none]",
+                               body="```bash\ncp x /home/someone/y\n```\n"))
+        assert any("hardcodes /home" in v for v in out), out
+
+
+def test_scope_contract_allows_a_reported_system_path():
+    """A systemd unit's PATH is the system being described, not the reader's space."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front="writes: [none]",
+                               body="```\nEnvironment=PATH=/usr/bin:/bin\n```\n"))
+        assert not any("hardcodes" in v or "writes to" in v for v in out), out
