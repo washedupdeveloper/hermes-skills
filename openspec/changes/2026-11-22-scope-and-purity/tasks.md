@@ -29,3 +29,15 @@
   and add their `**Heads-up.**` paragraphs.
 - [ ] 12. Add `install.sh --check`.
 - [ ] 13. Archive this change once 8-12 are done.
+
+## Found while running the gate
+
+- [x] 14. Enforce LF in three places rather than by habit: `.editorconfig` (the
+  editor), `.githooks/pre-commit` (refuses a staged CRLF file by name) and
+  `scripts/dev-setup.sh` (the per-clone keys in one command).
+- [x] 15. Adopt `openspec/SKILL.md` into `pins.openspecCliSites` so its pinned
+  version is checked against `pins.nix`, write its two invocations as exact
+  versions in a fence, and backtick the bare `npx` that the installer rule read
+  as a package spec.
+- [x] 16. Drop the invalid escape in `tests/e2e/test_gate_mutants.py`
+  (`"\${{"`), which was a `SyntaxWarning` and a future error.
