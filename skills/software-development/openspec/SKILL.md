@@ -39,10 +39,13 @@ openspec validate <name> --strict      # before code, and again before archive
 `openspec archive <name> --yes`          # merges the delta into openspec/specs/
 ```
 
-When the CLI is not on PATH, run the same pinned command through `npx`
-(`npx -y @fission-ai/openspec@1.15.0 …`) rather than skipping validation. On a
-Nix host with no Node on PATH, borrow one for the command:
-`nix shell nixpkgs#nodejs -c npx -y @fission-ai/openspec@1.15.0 validate <name> --strict`.
+When the CLI is not on PATH, run the same pinned command through `npx` rather than
+skipping validation. On a Nix host with no Node on PATH, borrow one for it:
+
+```sh
+npx -y @fission-ai/openspec@1.15.0 validate <name> --strict
+nix shell nixpkgs#nodejs -c npx -y @fission-ai/openspec@1.15.0 validate <name> --strict
+```
 
 After `archive`, a **new capability** gets a placeholder `## Purpose`. Replace it
 by editing `openspec/specs/<capability>/spec.md` directly; a `## Purpose` in a

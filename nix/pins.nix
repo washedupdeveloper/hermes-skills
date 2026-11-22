@@ -11,6 +11,7 @@
 
   openspecCliSites = [
     "AGENTS.md"
+    "skills/software-development/openspec/SKILL.md"
     "skills/software-development/openspec/scripts/bootstrap.sh"
     "skills/software-development/openspec/templates/ci-job.yml"
   ];
