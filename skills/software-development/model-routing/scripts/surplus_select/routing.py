@@ -195,7 +195,7 @@ def load_routing(path: str | Path) -> RoutingMap:
     )
 
 
-def save_routing(routing: RoutingMap, path: str | Path) -> None:
+def render_routing(routing: RoutingMap) -> str:
     payload = {
         "schema": 1,
         "change": routing.change,
@@ -209,7 +209,11 @@ def save_routing(routing: RoutingMap, path: str | Path) -> None:
             for identifier, task in routing.tasks.items()
         },
     }
-    Path(path).write_text(mini_yaml.dumps(payload), encoding="utf-8")
+    return mini_yaml.dumps(payload)
+
+
+def save_routing(routing: RoutingMap, path: str | Path) -> None:
+    Path(path).write_text(render_routing(routing), encoding="utf-8")
 
 
 def route(

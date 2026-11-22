@@ -1,10 +1,11 @@
 """Command line surface.
 
-Four verbs, each one plane:
+Five verbs, each one plane:
 
   status     read the snapshot and budget, change nothing
   calibrate  read Hermes state databases, write budget.yaml
   refresh    read the provider, write snapshot.json
+  draft      read tasks.md, write or merge routing.yaml
   plan       read snapshot + budget + change, write report.json and report.html
 
 Nothing here decides anything; the pure modules do. This file only resolves
@@ -14,6 +15,7 @@ paths, parses arguments and prints.
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
 import sys
@@ -22,7 +24,7 @@ from pathlib import Path
 
 from . import baseline as baseline_mod
 from . import benchmarks as benchmarks_mod
-from . import calibration, providers, report, routing, snapshot as snapshot_mod
+from . import calibration, profiles, providers, report, routing, snapshot as snapshot_mod
 from .benchmarks import BenchmarkCache
 from .calibration import Budget
 from .model import Decision, Snapshot
@@ -358,6 +360,25 @@ def cmd_plan(args: argparse.Namespace) -> int:
         f"{snap.freshness(fresh_hours=args.fresh_hours, aging_hours=args.aging_hours, provisional_hours=args.expired_hours)}"
         f"  {snap.age_hours():.1f}h  {snapshot_mod.digest(snap)}"
     )
+    if args.emit_profiles or args.create_profiles:
+        changes = profiles.emit(
+            portfolio,
+            snap,
+            Path(args.profiles_dir).expanduser(),
+            create=args.create_profiles,
+            dry_run=args.dry_run,
+            force=args.force,
+            reasoning=args.profile_reasoning,
+            ambient=Path(args.profile_config),
+        )
+        for change in changes:
+            print(f"profile {change.role}: {change.path}")
+            if change.command:
+                print(f"   would run: {change.command}")
+            if change.diff:
+                print(change.diff, end="")
+            if change.backup:
+                print(f"   backup {change.backup}")
     print("portfolio")
     for role in portfolio.roles:
         print(f"  {role.name:<9} {role.model_id:<32} coding {role.coding or 0:>5.1f}  {report._price(role.realised)}")
@@ -391,6 +412,39 @@ def _add_network(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workers", type=int, default=6)
 
 
+def cmd_draft(args: argparse.Namespace) -> int:
+    change = Path(args.change).expanduser()
+    if not change.is_dir():
+        print(f"error: no change directory at {change}", file=sys.stderr)
+        return 1
+    draft = routing.draft_routing(change)
+    path = change / "routing.yaml"
+    existing = routing.load_routing(path) if path.is_file() else None
+    if existing is not None and not args.force:
+        tasks = dict(draft.tasks)
+        tasks.update(existing.tasks)
+        merged = routing.RoutingMap(
+            change=existing.change or draft.change, tasks=tasks, path=str(path)
+        )
+    else:
+        merged = draft
+    before = path.read_text(encoding="utf-8") if path.is_file() else ""
+    after = routing.render_routing(merged)
+    diff = "".join(
+        difflib.unified_diff(
+            before.splitlines(True), after.splitlines(True),
+            fromfile=str(path), tofile=str(path),
+        )
+    )
+    if diff:
+        print(diff, end="")
+    else:
+        print(f"{path} is unchanged")
+    if not args.dry_run:
+        routing.save_routing(merged, path)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="surplus-select",
@@ -400,6 +454,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--budget", default=str(DEFAULT_STATE / "budget.yaml"))
     parser.add_argument("--benchmarks", default=str(benchmarks_mod.DEFAULT_PATH))
     sub = parser.add_subparsers(dest="command", required=True)
+
+    draft = sub.add_parser("draft", help="draft or merge routing.yaml from tasks.md")
+    draft.add_argument("--change", required=True)
+    draft.add_argument("--force", action="store_true", help="replace existing entries")
+    draft.add_argument("--dry-run", action="store_true")
+    draft.set_defaults(func=cmd_draft)
 
     status = sub.add_parser("status", help="show the snapshot and budget")
     _add_paths(status)
@@ -465,6 +525,29 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--benchmark-max-age-days", type=float, default=30.0)
     plan.add_argument("--sources", default="", help="JSON list of {title,url} source rows")
     plan.add_argument(
+        "--emit-profiles",
+        action="store_true",
+        help="write the selected model into each role's Hermes profile",
+    )
+    plan.add_argument(
+        "--create-profiles",
+        action="store_true",
+        help="create missing role profiles before emitting",
+    )
+    plan.add_argument(
+        "--profiles-dir",
+        default=str(DEFAULT_HOME / "profiles"),
+        help="Hermes profiles directory (default: ~/.hermes/profiles)",
+    )
+    plan.add_argument(
+        "--profile-reasoning",
+        default=None,
+        choices=("none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"),
+        help="optional model.reasoning_effort to write",
+    )
+    plan.add_argument("--dry-run", action="store_true", help="show profile diffs without writing")
+    plan.add_argument("--force", action="store_true", help="allow rewriting the ambient profile")
+    plan.add_argument(
         "--review-types",
         default="bugfix,refactor,security,architecture",
         help="comma-separated task types that require review",
@@ -479,6 +562,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "plan" and not args.out:
         args.out = str(Path(args.change) / "routing-report")
+    if args.command == "plan" and args.create_profiles:
+        args.emit_profiles = True
     try:
         return int(args.func(args))
     except (

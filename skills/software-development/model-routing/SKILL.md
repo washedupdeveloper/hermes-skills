@@ -114,6 +114,12 @@ No decision value is fixed in code. `plan` exposes:
 | `--expired-hours` | 168 | ranking refusal boundary |
 | `--sources` | built-in | JSON list of `{title,url}` source rows |
 | `--review-types` | bugfix, refactor, security, architecture | task types that require review |
+| `--emit-profiles` | off | write each selected role into its Hermes profile |
+| `--create-profiles` | off | create missing role profiles before emitting |
+| `--profiles-dir` | `~/.hermes/profiles` | Hermes profiles root |
+| `--profile-reasoning` | unchanged | optional `model.reasoning_effort` to write |
+| `--dry-run` | off | show profile diffs without writing |
+| `--force` | off | allow rewriting the ambient profile |
 
 `refresh` exposes `--timeout 30`, `--retries 3`, `--workers 6`; `refresh-benchmarks`
 adds `--url`; `calibrate` exposes `--window 30` and `--month-days 30`. The direct
@@ -128,6 +134,23 @@ button: the body names the key's floor and the best eligible discount, so a
 model below the floor cannot succeed on a second attempt. Diagnose with a
 one-token request before planning; `references/market-parsing.md` has the
 request and the decision table.
+
+## Profile emission
+
+`plan --emit-profiles` patches only `model.default`, `model.provider`,
+`model.base_url` and, when `--profile-reasoning` is set,
+`model.reasoning_effort`. Every other line, comment and persona file is
+left untouched. Names are `builder-baseline`, `council-judge`,
+`council-reviewer` and `council-runner`.
+
+A timestamped backup is written, a unified diff is printed, and the file is
+replaced atomically. A missing profile is refused unless `--create-profiles`
+is set; creation goes through `hermes profile create`. The ambient profile
+is protected: `--force` is required to rewrite it. `--dry-run` prints the
+diff and writes nothing.
+
+`draft --change <dir>` writes `routing.yaml`; an existing file is preserved
+unless `--force` is passed, so owner edits survive a re-draft.
 
 ## The four roles
 

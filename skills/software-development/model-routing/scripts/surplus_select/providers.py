@@ -305,6 +305,34 @@ class SurplusProvider:
         )
 
 
+class OpenRouterProvider:
+    name = "openrouter"
+    capabilities = {"discounts": False, "availability": False}
+
+    def __init__(self, base_url: str, http: Http | None = None) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.http = http or UrllibHttp()
+
+    def fetch_catalog(self) -> dict[str, ModelMarket]:
+        payload = json.loads(self.http.get(f"{self.base_url}/models"))
+        return parse_catalog(payload)
+
+    def fetch_market(self, model_id: str) -> dict | None:
+        return None
+
+    def refresh(self, model_ids: list[str] | None = None, workers: int = 6) -> Snapshot:
+        catalog = self.fetch_catalog()
+        wanted = model_ids or list(catalog)
+        return Snapshot(
+            provider=self.name,
+            base_url=self.base_url,
+            fetched_at=datetime.now(timezone.utc),
+            capabilities=dict(self.capabilities),
+            models={key: catalog[key] for key in wanted if key in catalog},
+            source_hashes={},
+        )
+
+
 class GenericProvider:
     name = "generic-openai"
     capabilities = {"discounts": False, "availability": False}
@@ -337,4 +365,6 @@ def provider_for(base_url: str, http: Http | None = None) -> Provider:
     host = urlparse(base_url).netloc.lower()
     if "surplusintelligence.ai" in host:
         return SurplusProvider(base_url, http)
+    if "openrouter.ai" in host:
+        return OpenRouterProvider(base_url, http)
     return GenericProvider(base_url, http)

@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,6 +27,7 @@ from surplus_select import (  # noqa: E402
     calibration,
     cli,
     mini_yaml,
+    profiles,
     providers,
     report,
     routing,
@@ -527,7 +529,7 @@ Route|p50 latency|p95 latency|Throughput|Success rate|Share|
         )
         self.assertEqual(
             providers.provider_for("https://openrouter.ai/api/v1").name,
-            "generic-openai",
+            "openrouter",
         )
 
 
@@ -1229,3 +1231,259 @@ class CliPlanTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProfileEmissionTests(unittest.TestCase):
+    def _portfolio(self):
+        return choose(
+            PortfolioTests()._cache(),
+            PortfolioTests()._snapshot(),
+            "deepseek-v4.1-flash-1017",
+        )
+
+    def _home(self, directory: Path) -> Path:
+        home = directory / "hermes"
+        for role in self._portfolio().roles:
+            path = profiles.profile_path(home / "profiles", role.name)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                "# profile comment\nmodel:\n  # keep\n  default: old\n"
+                "  provider: old\n  base_url: old\npersona:\n  name: council\n",
+                encoding="utf-8",
+            )
+        return home
+
+    def test_patch_changes_only_the_model_keys_and_keeps_comments(self) -> None:
+        text = (
+            "# profile comment\nmodel:\n  # keep\n  default: old\n"
+            "  provider: old\n  base_url: old\npersona:\n  name: council\n"
+        )
+        after = profiles.patch_model(
+            text,
+            model="deepseek-v4.1-flash-1017",
+            provider="custom:example.test",
+            base_url="https://example.test",
+            reasoning="medium",
+        )
+        self.assertIn("# profile comment", after)
+        self.assertIn("# keep", after)
+        self.assertIn("persona:", after)
+        self.assertIn("default: deepseek-v4.1-flash-1017", after)
+        self.assertIn("provider: custom:example.test", after)
+        self.assertIn("base_url: https://example.test", after)
+        self.assertIn("reasoning_effort: medium", after)
+
+    def test_a_config_without_a_model_block_is_refused(self) -> None:
+        with self.assertRaises(profiles.ProfileError):
+            profiles.patch_model(
+                "persona:\n  name: council\n",
+                model="m",
+                provider="p",
+                base_url="u",
+            )
+
+    def test_emit_writes_each_role_profile_with_a_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp))
+            changes = profiles.emit(
+                self._portfolio(), PortfolioTests()._snapshot(), home / "profiles"
+            )
+            self.assertEqual(len(changes), 4)
+            roles = {role.name: role for role in self._portfolio().roles}
+            for change in changes:
+                self.assertTrue(change.changed)
+                self.assertTrue(change.backup is not None and change.backup.is_file())
+                text = change.path.read_text(encoding="utf-8")
+                self.assertIn("# keep", text)
+                self.assertIn("persona:", text)
+                self.assertIn(f"default: {profiles._value(roles[change.role].model_id)}", text)
+                self.assertIn("provider: custom:example.test", text)
+
+    def test_emit_refuses_a_missing_profile_without_create(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "hermes"
+            with self.assertRaises(profiles.ProfileError) as caught:
+                profiles.emit(
+                    self._portfolio(), PortfolioTests()._snapshot(), home / "profiles"
+                )
+            self.assertIn("hermes profile create", str(caught.exception))
+            self.assertFalse((home / "profiles").exists())
+
+    def test_emit_dry_run_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp))
+            before = {
+                change.path: change.path.read_text(encoding="utf-8")
+                for change in profiles.emit(
+                    self._portfolio(), PortfolioTests()._snapshot(), home / "profiles",
+                    dry_run=True,
+                )
+            }
+            changes = profiles.emit(
+                self._portfolio(), PortfolioTests()._snapshot(), home / "profiles",
+                dry_run=True,
+            )
+            self.assertTrue(any(change.diff for change in changes))
+            self.assertFalse(any(change.backup for change in changes))
+            for change in changes:
+                self.assertEqual(change.path.read_text(encoding="utf-8"), before[change.path])
+
+    def test_emit_protects_the_ambient_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp))
+            ambient = profiles.profile_path(home / "profiles", "builder")
+            with self.assertRaises(profiles.ProfileError) as caught:
+                profiles.emit(
+                    self._portfolio(), PortfolioTests()._snapshot(), home / "profiles",
+                    ambient=ambient,
+                )
+            self.assertIn("ambient", str(caught.exception))
+            profiles.emit(
+                self._portfolio(), PortfolioTests()._snapshot(), home / "profiles",
+                ambient=ambient, force=True,
+            )
+
+    def test_emit_create_calls_hermes_for_each_missing_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "hermes"
+
+            def create(name: str, root: Path, binary: str | None) -> None:
+                path = root / "profiles" / name / "config.yaml"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("model:\n  default: old\n", encoding="utf-8")
+
+            with mock.patch.object(profiles, "_create", side_effect=create) as called:
+                changes = profiles.emit(
+                    self._portfolio(), PortfolioTests()._snapshot(), home / "profiles",
+                    create=True,
+                )
+            self.assertEqual(called.call_count, 4)
+            self.assertTrue(all(change.created for change in changes))
+            self.assertTrue(all(change.changed for change in changes))
+
+    def test_help_lists_the_profile_flags(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "run.py"), "plan", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for flag in (
+            "--emit-profiles",
+            "--create-profiles",
+            "--profiles-dir",
+            "--profile-reasoning",
+            "--dry-run",
+            "--force",
+        ):
+            self.assertIn(flag, result.stdout)
+
+
+class RoutingDraftTests(unittest.TestCase):
+    def _change(self, directory: Path, body: str) -> Path:
+        change = directory / "change"
+        change.mkdir()
+        (change / "tasks.md").write_text(body, encoding="utf-8")
+        return change
+
+    def test_draft_creates_routing_yaml_from_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            change = self._change(
+                Path(tmp),
+                "- [ ] 1.1 Add a flag [type: feature] [verify: pytest tests/a.py -q]\n"
+                "- [ ] 1.2 Fix a bug [type: bugfix] [verify: pytest tests/b.py -q]\n",
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(["draft", "--change", str(change)]), 0)
+            data = mini_yaml.loads((change / "routing.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(data["tasks"]["1.1"]["type"], "feature")
+        self.assertEqual(data["tasks"]["1.2"]["type"], "bugfix")
+
+    def test_draft_preserves_existing_entries_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            change = self._change(
+                Path(tmp),
+                "- [ ] 1.1 Add a flag [type: feature] [verify: pytest tests/a.py -q]\n"
+                "- [ ] 1.2 Fix a bug [type: bugfix] [verify: pytest tests/b.py -q]\n",
+            )
+            (change / "routing.yaml").write_text(
+                "schema: 1\nchange: demo\ntasks:\n  \"1.1\":\n    type: test\n",
+                encoding="utf-8",
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(["draft", "--change", str(change)]), 0)
+            data = mini_yaml.loads((change / "routing.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(data["tasks"]["1.1"]["type"], "test")
+        self.assertEqual(data["tasks"]["1.2"]["type"], "bugfix")
+
+    def test_draft_force_replaces_existing_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            change = self._change(
+                Path(tmp),
+                "- [ ] 1.1 Add a flag [type: feature] [verify: pytest tests/a.py -q]\n",
+            )
+            (change / "routing.yaml").write_text(
+                "schema: 1\nchange: demo\ntasks:\n  \"1.1\":\n    type: test\n",
+                encoding="utf-8",
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    cli.main(["draft", "--change", str(change), "--force"]), 0
+                )
+            data = mini_yaml.loads((change / "routing.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(data["tasks"]["1.1"]["type"], "feature")
+
+    def test_draft_dry_run_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            change = self._change(
+                Path(tmp),
+                "- [ ] 1.1 Add a flag [type: feature] [verify: pytest tests/a.py -q]\n",
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    cli.main(["draft", "--change", str(change), "--dry-run"]), 0
+                )
+            self.assertFalse((change / "routing.yaml").exists())
+
+
+class ProviderSelectionTests(unittest.TestCase):
+    def test_openrouter_is_its_own_adapter(self) -> None:
+        provider = providers.provider_for("https://openrouter.ai/api/v1")
+        self.assertEqual(provider.name, "openrouter")
+        self.assertFalse(provider.capabilities["discounts"])
+
+    def test_a_task_without_a_predicate_is_needs_scoping(self) -> None:
+        task = TaskSpec(id="1.1", title="Add a flag", type="feature", verify=())
+        decision = routing.route(task, "deepseek-v4.1-flash-1017")
+        self.assertTrue(decision.needs_scoping)
+        self.assertEqual(decision.predicate, ())
+
+
+class GoldenReportTests(unittest.TestCase):
+    def test_a_frozen_snapshot_renders_the_expected_report(self) -> None:
+        cache = PortfolioTests()._cache()
+        snap = PortfolioTests()._snapshot()
+        portfolio = choose(cache, snap, "deepseek-v4.1-flash-1017")
+        task = TaskSpec(
+            id="1.1", title="Add a flag", type="feature",
+            verify=("pytest tests/a.py -q",),
+        )
+        payload = report.build(
+            snapshot=snap,
+            budget=calibration.default_budget(),
+            portfolio=portfolio,
+            routing=routing.RoutingMap(change="demo", tasks={"1.1": task}),
+            decisions=[routing.route(task, "deepseek-v4.1-flash-1017")],
+            cache=cache,
+            baseline="deepseek-v4.1-flash-1017",
+            baseline_source="test",
+            generated_at=datetime(2026, 11, 22, tzinfo=timezone.utc),
+        )
+        self.assertEqual(payload["generated_at"], "2026-11-22T00:00:00+00:00")
+        self.assertEqual(payload["costs"]["roles"],
+                         {"judge": 3.33, "reviewer": 0.18, "builder": 2.64, "runner": 0.09})
+        self.assertEqual(payload["costs"]["total"], 6.24)
+        self.assertEqual([row["role"] for row in payload["portfolio"]],
+                         ["judge", "reviewer", "builder", "runner"])
+        self.assertEqual(payload["tasks"][0]["model"], "deepseek-v4.1-flash-1017")
