@@ -28,6 +28,18 @@ PORTABLE_OK = re.compile(r"portable-ok:\s*\S")
 WIN_HOME = re.compile(r"[A-Za-z]:\\\\Users\\\\")
 QUESTION = re.compile(r"\*\*Question\.\*\*\s*(.+)")
 NOT_HERE = re.compile(r"\*\*Not here\.\*\*\s*(.*)", re.S)
+PROVISION = re.compile(
+    r"pip3?\s+install|python3?\s+-m\s+pip\s+install|pipx\s+install|"
+    r"uv\s+(?:pip|venv|tool|add|sync)|uvx\s+\S|"
+    r"npm\s+(?:install|i|ci)\s+(?:-g|--global)|"
+    r"npx\s+[-a-zA-Z@]|"
+    r"pnpm\s+(?:add|install)\s+(?:-g|--global)|"
+    r"yarn\s+global\s+add|bun\s+(?:add|install)\s+(?:-g|--global)|"
+    r"cargo\s+install|go\s+(?:get|install)|gem\s+install|"
+    r"(?:apt|apt-get|dnf|yum|zypper|pacman|apk|snap|brew|choco|winget|scoop)\s+(?:install|add|-S)|"
+    r"(?:curl|wget)[^|\n]*\|\s*(?:ba|z)?sh"
+)
+
 PREAMBLE = ': "${SKILL_'
 WRITE_TARGET = re.compile(r"(?:^\s*(?:chown|chmod|cp|mv|mkdir|install|tee|printf|echo|cat|dd)\b)|(?:(?:^|\s)\d?>>?\s*\S)")
 
@@ -210,7 +222,33 @@ def check_aliases(repo, skills, contract, result) -> None:
             result.fail(rel, f"alias `{old}` points at `{new}`, which does not exist")
 
 
+def check_provisioning(repo, contract, result) -> None:
+    """A tool comes from Nix; installing one at run time is a second package manager.
+
+    `docs/provisioning.md` is the policy. The marker is the exception a reader can see:
+    the artifact under test, or Nix itself. A reason is required, not just the marker.
+    """
+    prov = contract.get("provisioning") or {}
+    marker = re.compile(rf"{re.escape(prov.get('marker') or 'nix-provision')}:\s*\S")
+    root = repo / "skills"
+    if not root.is_dir():
+        return
+    for path in sorted(root.rglob("*.md")):
+        if any(part in {".git", "__pycache__", "node_modules"} for part in path.parts):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for block in FENCE.findall(text):
+            hit = next((raw for raw in block.splitlines()
+                        if not raw.strip().startswith("#")
+                        and PROVISION.search(raw) and not marker.search(raw)), None)
+            if hit:
+                result.fail(path.relative_to(repo),
+                            "installs a tool at run time; use `nix shell nixpkgs#<tool> -c …` "
+                            f"or `nix run` (docs/provisioning.md): {hit.strip()[:70]}")
+
+
 def check_scope(skills, parsed, contract, repo, result, parse_list) -> None:
+    check_provisioning(repo, contract, result)
     if not contract.get("scope_fields"):
         return  # a v2 contract predates these rules
     check_writes(skills, parsed, contract, repo, result, parse_list)

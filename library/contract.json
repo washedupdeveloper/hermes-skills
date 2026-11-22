@@ -88,5 +88,9 @@
     "primary": "podman",
     "fallback": "docker",
     "fallback_marker": "docker-fallback"
+  },
+  "provisioning": {
+    "marker": "nix-provision",
+    "doc": "docs/provisioning.md"
   }
 }

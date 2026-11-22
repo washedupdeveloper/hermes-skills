@@ -14,8 +14,8 @@ ls -l "$out"; sha256sum "$out"/*.whl
 Install it into a clean environment, with no network, and run it:
 
 ```bash
-python -m venv /tmp/release-venv
-/tmp/release-venv/bin/python -m pip install --no-index "$out"/*.whl
+nix run nixpkgs#uv -- venv /tmp/release-venv
+nix run nixpkgs#uv -- pip install --no-index "$out"/*.whl  # nix-provision: the wheel under test
 /tmp/release-venv/bin/python -c "import pkg; print(pkg.__version__)"
 /tmp/release-venv/bin/pkg --help
 ```

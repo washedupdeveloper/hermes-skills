@@ -185,8 +185,16 @@ through the **same** code the gate calls and assert it is rejected — plus the 
 beside it, so a predicate stuck on `false` fails too. Exercise the boundary rather than
 inferring it: a length rule is tested at the limit and one past it, because a `>=` written
 for `>` rejects the last value that fits, and no real artifact sits on the boundary. A
-copy of the predicate written for the test proves nothing about the gate — extract it, so
+A copy of the predicate written for the test proves nothing about the gate — extract it, so
 the test and the gate call one function.
+
+**A rule that judges prose must match INVOCATIONS, not mentions.** A ban written on the bare
+token forbids the documentation that explains it: measured, an `npx` ban rejected the sentence
+"`npx` and `npm install -g` are what this replaces", so the only tree that could comply was one
+that never named the policy. Match the shape a command takes — a line-initial verb, a flag after
+the token, a line inside a fence — and exempt the files whose job is to teach the pattern, or the
+rule gets edited out of the docs rather than out of the tree. Keep a positive control beside it:
+a real invocation in each accepted position must still fail.
 
 **Every parameter that changes the verdict must be operator-settable and recorded.** A threshold, weight, floor,
 freshness bound or cost divisor buried in code is an unversioned policy: the user cannot vary it, the run cannot
@@ -791,7 +799,13 @@ re-run after it.** The mutation table is coupled to source text, so a renamed fu
 extracted helper or a moved computation turns a working mutation into a no-op without anyone
 touching the table; the gate only discovers this when it runs, and a green suite in between
 certifies nothing. Parse the failure as what it is — the pattern is stale, not the claim — and
-retarget the snippet rather than deleting the mutation. A structural check that
+retarget the snippet rather than deleting the mutation. **Replacing a rule outright is the same
+obligation at a larger scale.** Every mutant keyed on the old forbidden spelling, and every site
+list the old rule read, becomes an anchor that matches nothing: the sweep reports `ANCHOR GONE`
+or passes vacuously, and either way a green run certifies a rule that no longer exists. Retarget
+the table in the same commit, re-derive any stated count (a milestone that publishes "N mutants"
+fails the moment the harness defines fewer), and re-run the mutation gate before claiming the
+replacement works. A structural check that
 reads a source path rather than the running module cannot see a mutation at all:
 `Path("src/...")` keeps inspecting the unmutated tree while the suite reports a survivor —
 have it read `importlib.import_module(...).__file__`.

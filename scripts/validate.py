@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from scope import check_scope  # noqa: E402 — path set on the line above
+from scope import check_provisioning, check_scope  # noqa: E402 — path set on the line above
 
 REPO = Path(__file__).resolve().parent.parent
 SKILLS = "skills"
@@ -429,6 +429,7 @@ def validate(repo: Path = REPO, extra_roots: list[Path] | None = None,
     check_crlf(repo, result)
     check_dead_references(skills, repo, result)
     check_fenced_commands(repo, result)
+    check_provisioning(repo, contract, result)
     check_related_skills(skills, contract, extra_roots or [], repo, result)
     readme_counts(repo, skills, contract, result)
     check_layout(repo, skills, contract, result)

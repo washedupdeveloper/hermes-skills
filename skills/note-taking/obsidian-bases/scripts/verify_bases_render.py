@@ -14,7 +14,7 @@ port, so the debug endpoint does not outlive the check.
     python verify_bases_render.py <vault> [--port 9222] [--timeout 90] [--keep-open]
 
 Exit 0 = every base rendered clean. Exit 1 = a base failed, or a formula errored, or Obsidian
-could not be driven. Requires a websockets client (`pip install websockets`) and Obsidian
+could not be driven. Requires a websockets client and Obsidian
 installed. Process control uses tasklist/taskkill on Windows and pgrep/pkill elsewhere.
 """
 from __future__ import annotations
@@ -298,7 +298,7 @@ def main() -> int:
         import websockets  # noqa: F401
     except ImportError:
         print("verify_bases_render: needs a websockets client "
-              "(`pip install websockets`)", file=sys.stderr)
+              "(`nix shell nixpkgs#python3Packages.websockets -c python verify_bases_render.py`)", file=sys.stderr)
         return 1
     exe = obsidian_exe()
     if exe is None:

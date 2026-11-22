@@ -73,6 +73,8 @@ jobs:
         run: |
           PY=python3
           python3 --version >/dev/null 2>&1 || PY=python
+          # The no-Nix leg: this job exists to prove the gate needs no Nix, so provisioning
+          # pytest with Nix here would delete the thing being tested (docs/provisioning.md).
           "$PY" -m pip install --quiet pytest
           "$PY" -m pytest tests/ -q -p no:cacheprovider
 

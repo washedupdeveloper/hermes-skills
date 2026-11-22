@@ -9,3 +9,8 @@
   failure rather than a silent change.
 - [x] 5. Re-point the e2e mutants at the new rule and the new command sites.
 - [x] 6. Record the rule in `nix-flake-packaging`, the domain skill that owns it.
+- [x] 7. Hold the rest of the library to the same rule: `check_provisioning` fails a fenced
+  `pip`/`uv`/`npm`/`npx`/`cargo`/`apt`/`curl | sh` line unless it carries
+  `# nix-provision: <reason>`.
+- [x] 8. Write the policy down in `docs/provisioning.md` and name it in `AGENTS.md`, so the
+  rule is a decision a reader can find rather than a gate they have to reverse-engineer.

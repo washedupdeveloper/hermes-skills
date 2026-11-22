@@ -157,7 +157,7 @@ Then:
 | command | answers | needs |
 |---|---|---|
 | `python3 scripts/validate.py` | is every skill valid, and are the documents still true of the tree | a Python 3 standard library |
-| `python3 -m pytest tests/ -q` | does the code the skills ship still work | `pip install pytest` |
+| `python3 -m pytest tests/ -q` | does the code the skills ship still work | `nix shell nixpkgs#python3Packages.pytest -c pytest` |
 | `python3 scripts/claim-audit.py` | is every mechanical claim in the prose true | nothing |
 | `nix flake check` | all of the above under a pinned toolchain, plus the formatter and this repository's own CI assertions | Nix |
 

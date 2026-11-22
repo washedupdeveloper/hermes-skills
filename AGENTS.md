@@ -20,6 +20,10 @@ a mount it declares once (`external_dirs`, a symlinked skills directory), or a c
 5. **The contract is one file.** `library/contract.json` holds the required frontmatter, the index
    window, the category set, the hosts and the external skills. `scripts/validate.py` reads it; no
    other file restates it. Change a rule there, never in two places.
+6. **A tool comes from Nix.** No `pip install`, `uv pip install`, `npm install -g`, `npx`,
+   `cargo install`, `apt install` or `curl … | sh` in a skill: it is a package manager the
+   declaration does not describe. Use `nix shell nixpkgs#<tool> -c …` or `nix run`; the
+   exceptions are marked `# nix-provision: <reason>`. Policy: `docs/provisioning.md`.
 
 ## Line endings
 

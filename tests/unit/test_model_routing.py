@@ -1298,6 +1298,8 @@ class ProfileEmissionTests(unittest.TestCase):
                 self.assertIn("persona:", text)
                 self.assertIn(f"default: {profiles._value(roles[change.role].model_id)}", text)
                 self.assertIn("provider: custom:example.test", text)
+                self.assertIn("+++", change.diff)
+                self.assertFalse(change.path.with_name(f".{change.path.name}.tmp").exists())
 
     def test_emit_refuses_a_missing_profile_without_create(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

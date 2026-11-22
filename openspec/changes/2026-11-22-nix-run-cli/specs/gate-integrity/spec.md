@@ -44,3 +44,28 @@ SHALL fail the gate rather than silently changing the tool that validates the sp
 
 - **WHEN** `pkgs.openspec.version` is not the value in `pins.openspecCli`
 - **THEN** `nix flake check` fails, naming both values
+
+### Requirement: A skill provisions its tools through Nix
+
+A fenced command in a skill SHALL NOT install a tool at run time: `pip`, `python -m pip`, `uv`,
+`pipx`, `npm -g`, `npx`, `pnpm`, `yarn`, `bun`, `cargo`, `go`, `gem`, the system package
+managers and `curl … | sh` all resolve outside the declaration. The line SHALL name
+`nix shell nixpkgs#<tool> -c …`, `nix run`, or an app of a flake instead.
+
+A line that must install something SHALL carry `# nix-provision: <reason>`. The marker without a
+reason SHALL NOT satisfy the rule.
+
+#### Scenario: A skill installs a module
+
+- **WHEN** a fenced line reads `pip install websockets`
+- **THEN** the gate fails, naming the file and the line
+
+#### Scenario: The artifact under test
+
+- **WHEN** the line reads `uv pip install --no-index …` with `# nix-provision: the wheel under test`
+- **THEN** the check accepts it, and a bare `# nix-provision:` is rejected
+
+#### Scenario: A comment names an attack
+
+- **WHEN** an injection example appears as a comment line in a fenced block
+- **THEN** the check passes: a comment installs nothing

@@ -19,8 +19,11 @@ invocation describes nothing.
   `nix run .#openspec`, and an `npx` or `npm install` invocation fails wherever it sits.
 - `pins.openspecCli` stays, as the version the flake is expected to provide, asserted against
   `pkgs.openspec.version` so a nixpkgs bump fails the gate instead of silently changing the CLI.
-- The nix domain skills gain the rule they were missing: a Node CLI is a package and an app,
-  never `npx`.
+- The nix domain skills gain the rule they were missing: a tool is a package and an app, never
+  an install at run time — Python, Node or anything else.
+- The same rule now covers the whole library: `check_provisioning` fails a fenced `pip`, `uv`,
+  `npm`, `npx`, `cargo`, `apt` or `curl | sh` line unless it carries
+  `# nix-provision: <reason>`. `docs/provisioning.md` is the policy.
 
 ## Impact
 

