@@ -1,0 +1,17 @@
+# https://editorconfig.org
+# The editor half of the LF rule in AGENTS.md: an editor that honours this writes
+# LF on Windows too, so the file is correct before git or the gate sees it.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Markdown uses two trailing spaces for a hard break; leave them alone.
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{png,jpg,jpeg,gif,webp,ico,pdf,zip,gz,mp3,mp4,woff,woff2}]
+insert_final_newline = false

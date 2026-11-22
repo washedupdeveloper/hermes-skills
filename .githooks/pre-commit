@@ -1,0 +1,28 @@
+#!/bin/sh
+# Refuse a CRLF file at commit time, for a clone that has run
+# `scripts/dev-setup.sh` (which points core.hooksPath here) but not set
+# core.safecrlf. The rule is AGENTS.md's: fix the file, never the check, so this
+# names the file and the command instead of normalising it for you.
+#
+# Written for POSIX sh: no $'...' escapes, and the binary decision is git's own
+# (a `-` in --numstat), not a second extension list to keep in sync.
+set -eu
+
+CR=$(printf '\r')
+bad=""
+
+for f in $(git diff --cached --numstat | awk '$1 != "-" {print $3}'); do
+    [ -f "$f" ] || continue
+    if LC_ALL=C grep -q "$CR" "$f" 2>/dev/null; then
+        bad="$bad $f"
+    fi
+done
+
+[ -z "$bad" ] && exit 0
+
+printf 'pre-commit: CRLF line endings in:\n'
+for f in $bad; do printf '  %s\n' "$f"; done
+printf '\nfix each one, then stage it again:\n'
+printf '  for f in%s; do tr -d "\\r" < "$f" > "$f.lf" && mv "$f.lf" "$f"; git add -- "$f"; done\n' "$bad"
+printf '\nSee AGENTS.md, "Line endings".\n'
+exit 1

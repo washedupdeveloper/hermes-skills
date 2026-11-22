@@ -27,9 +27,11 @@ LF everywhere — in the repository and in the working tree, on every host. The 
 WSL and Linux, where a CRLF shebang fails as `bad interpreter: …^M`, and a CRLF/LF pair reports
 drift that is not there.
 
-`.gitattributes` (`* text=auto eol=lf`) is the tracked half: it overrides `core.autocrlf`, so a
-Windows checkout is byte-identical to a Linux one. The other half is per clone, because git does not
-track its own config:
+`.gitattributes` (`* text=auto eol=lf`) and `.editorconfig` are the tracked half: git stores LF and
+every editor that honours EditorConfig writes LF, so a Windows checkout is byte-identical to a Linux
+one. The other half is per clone, because git does not track its own config — `scripts/dev-setup.sh`
+sets all four keys and points `core.hooksPath` at `.githooks`, whose `pre-commit` refuses a CRLF file
+by name. The keys it sets are:
 
 ```bash
 git config core.autocrlf false
@@ -43,8 +45,9 @@ staged. Without it the blob is normalised, `git status` goes clean, and the file
 CRLF — the failure this repository has hit twice, invisible until a script breaks in WSL. Fix the
 file (`tr -d '\r' < f > f.lf && mv f.lf f`), never the check.
 
-The gate cannot do this job: `nix flake check` and CI both read a git-tracked tree, which is already
-LF, so worktree CRLF is visible to neither.
+CI cannot do this job: `nix flake check` reads a git-tracked copy, which is already LF. The local gate
+can, and does — `python3 scripts/validate.py` walks the working tree — so CRLF is caught before it is
+staged, on the machine that wrote it.
 
 ## Adding a skill
 
