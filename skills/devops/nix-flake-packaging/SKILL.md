@@ -277,6 +277,33 @@ rules:
   of a Dockerfile, the `dockerTools` traps that fail at build time, and what a
   read-only store does to a toolchain that resolves itself.
 
+## A Node CLI is a package, never `npx`
+
+`npx` resolves a package at run time, from the network, at whatever version the registry serves
+that day. On a Nix host that is a second, unrecorded pin: `flake.lock` describes the system, the
+`npx` invocation describes nothing, and the tool it runs is not in the store.
+
+Check nixpkgs first -- `pkgs.<tool>` -- and expose it as an app, so the command is a flake output
+rather than a package manager:
+
+```nix
+packages = forAllSystems (pkgs: { openspec = pkgs.openspec; });
+apps = forAllSystems (pkgs: {
+  openspec = { type = "app"; program = "${pkgs.openspec}/bin/openspec"; };
+});
+```
+
+```sh
+nix run .#openspec -- validate --all --strict
+```
+
+Only when nixpkgs has no expression is packaging the tool the answer: `buildNpmPackage` with a
+lockfile and an `npmDepsHash`, or `fetchFromGitHub` plus `pnpm.fetchDeps` for a pnpm repository.
+Both are pinned, offline after the first fetch, and cached -- `npx` is none of those.
+
+A version literal earns its place only as an assertion against the flake (`pkgs.<tool>.version`),
+so a nixpkgs bump fails the gate instead of silently changing the tool that runs.
+
 ## Pitfalls
 
 - **Every flake output — `nix build`, `nix run`, `nix flake check` — reads the git-TRACKED

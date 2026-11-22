@@ -29,6 +29,21 @@
         }
       );
 
+      # The CLI this repository's own specs are validated with. It is a package of the flake
+      # rather than a thing installed at run time: `nix run .#openspec` resolves through
+      # `flake.lock`, so the version moves when the lock moves and nowhere else.
+      packages = forAllSystems (pkgs: {
+        openspec = pkgs.openspec;
+      });
+
+      apps = forAllSystems (pkgs: {
+        openspec = {
+          type = "app";
+          program = "${pkgs.openspec}/bin/openspec";
+          meta.description = "Validate and archive the spec tree under openspec/";
+        };
+      });
+
       devShells = forAllSystems (pkgs: {
         # What `scripts/ci-local.sh` needs: the interpreter the gate runs on, pytest for
         # the suite, actionlint for the workflow, nixfmt for the formatter.
@@ -38,6 +53,7 @@
             pkgs.python3Packages.pytest
             pkgs.actionlint
             pkgs.nixfmt
+            pkgs.openspec
           ];
         };
       });

@@ -125,5 +125,5 @@ delta and tasks. A behaviour change to the gate or the layout starts there. The 
 `@1` is the mutable reference ADR-0005 rejects.
 
 ```bash
-nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 validate --all --strict
+nix run .#openspec -- validate --all --strict
 ```

@@ -31,21 +31,27 @@ a spec delta, written before the code and merged when the work lands.
 ## The loop
 
 ```
-openspec list --specs                  # what the repo already promises
-openspec new change <kebab-name>       # creates openspec/changes/<name>/
-openspec instructions proposal --change <name>
-openspec status --change <name>        # the DAG: proposal -> specs + design -> tasks
-openspec validate <name> --strict      # before code, and again before archive
-`openspec archive <name> --yes`          # merges the delta into openspec/specs/
+nix run .#openspec -- list --specs                 # what the repo already promises
+nix run .#openspec -- new change <kebab-name>      # creates openspec/changes/<name>/
+nix run .#openspec -- instructions proposal --change <name>
+nix run .#openspec -- status --change <name>       # the DAG: proposal -> specs + design -> tasks
+nix run .#openspec -- validate <name> --strict     # before code, and again before archive
+nix run .#openspec -- archive <name> --yes         # merges the delta into openspec/specs/
 ```
 
-When the CLI is not on PATH, run the same pinned command through `npx` rather than
-skipping validation. On a Nix host with no Node on PATH, borrow one for it:
+Run it through the flake. `nix run .#openspec` resolves the CLI from `flake.lock`, so the
+version is the one this repository locked and nothing is installed into a profile:
 
 ```sh
-npx -y @fission-ai/openspec@1.15.0 validate <name> --strict
-nix shell nixpkgs#nodejs -c npx -y @fission-ai/openspec@1.15.0 validate <name> --strict
+nix run .#openspec -- validate <name> --strict
+nix run .#openspec -- validate --all --strict
 ```
+
+`npx` and `npm install -g` are what this replaces, not a fallback for it: they resolve outside
+the lock, fetch from the network at run time, and leave a second version on PATH that the
+lockfile does not describe. The flake exposes the app as `packages.openspec` for exactly that
+reason — see `nix-flake-packaging`. A repository without the app gets one before it gets the
+CLI.
 
 After `archive`, a **new capability** gets a placeholder `## Purpose`. Replace it
 by editing `openspec/specs/<capability>/spec.md` directly; a `## Purpose` in a

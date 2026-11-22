@@ -5,7 +5,11 @@
 # frontmatter field, a length, a name and a path are all values. Four of these properties moved
 # here from `tests/unit/test_repo_skills.py`, where a failure was a traceback instead of the
 # skill's name and both values.
-{ lib, src }:
+{
+  lib,
+  src,
+  pkgs,
+}:
 let
   L = import ./lib.nix { inherit lib; };
 
@@ -241,116 +245,72 @@ let
     f: mentions "include:" (lib.concatStringsSep "\n" (map (x: x.line) (numberedLines f)))
   ) runnerSpecs;
 
-  # --- 1.2 the installed package -------------------------------------------
-  # An exact version is three dot-separated numbers and nothing else. `@1`, `@1.15`, `@latest`,
-  # `@^1.15.0`, `@~1.15.0` and a missing version all fail this, which is the point: a range
-  # resolves to code nobody reviewed.
-  isExactSpec =
-    spec: spec != null && builtins.match "(@?[^@[:space:]]+)@([0-9]+\\.[0-9]+\\.[0-9]+)" spec != null;
+  # --- 1.2 the CLI command ------------------------------------------------
+  # The CLI is a dependency of this flake, not something installed at run time: `nix run
+  # .#openspec` resolves it through `flake.lock`, so there is no version string in a command to
+  # drift. The rule is therefore the form, not a literal:
+  #
+  #     nix run .#openspec -- validate --all --strict     # the only accepted form
+  #     npx -y @fission-ai/openspec@1.15.0 validate       # a network fetch, a second pin
+  #
+  # `npx` and `npm install -g` resolve outside the lock and leave state outside the store. That
+  # is the anti-pattern the nix domain skills name; the gate enforces it here rather than
+  # trusting prose to.
+  cliApp = ".#openspec";
+  cliPackage = "@fission-ai/openspec";
+  cliRunForm = "nix run ${cliApp}";
 
-  # Flags whose VALUE is not the package. Without this `--prefix ~/.local/npm` reads as a
-  # package named `~/.local/npm`.
-  valueFlags = [
-    "--prefix"
-    "-p"
-    "--registry"
-    "--cache"
-    "--userconfig"
-  ];
-
-  dropFlagsAndValues =
-    ts:
-    if ts == [ ] then
-      [ ]
-    else if lib.hasPrefix "-" (builtins.head ts) then
-      (
-        if lib.elem (builtins.head ts) valueFlags && builtins.length ts > 1 then
-          dropFlagsAndValues (builtins.tail (builtins.tail ts))
-        else
-          dropFlagsAndValues (builtins.tail ts)
-      )
-    else
-      ts;
-
-  afterWord =
-    w: ts:
-    if ts == [ ] then
-      [ ]
-    else if builtins.head ts == w then
-      builtins.tail ts
-    else
-      afterWord w (builtins.tail ts);
-
-  npmSubcommands = [
-    "install"
-    "i"
-    "add"
-  ];
-
-  # `npx [-y] <spec>`: the first non-flag after `npx`.
-  # `npm install|i|add -g|--global <spec>`: the first non-flag after the subcommand, with
-  # value-taking flags and their values skipped.
-  installSpecsIn =
+  # A line that invokes the CLI: the flake app, or the package name as an npm form names it, or
+  # the bare binary where a command would start. Prose such as "the `openspec` skill" does not
+  # start a line and is not scanned.
+  runsCli =
     line:
-    let
-      ts = tokens line;
-      npxRest = afterWord "npx" ts;
-      npxCandidate = dropFlagsAndValues npxRest;
-      npmRest = afterWord "npm" ts;
-      npmAfterSub =
-        if npmRest == [ ] || !(lib.elem (builtins.head npmRest) npmSubcommands) then
-          npmRest
-        else
-          builtins.tail npmRest;
-      npmCandidate = dropFlagsAndValues npmAfterSub;
-      npmGlobal =
-        npmRest != [ ]
-        && lib.elem (builtins.head npmRest) npmSubcommands
-        && (lib.elem "-g" ts || lib.elem "--global" ts);
-    in
-    lib.optional (npxRest != [ ]) (if npxCandidate == [ ] then null else builtins.head npxCandidate)
-    ++ lib.optional npmGlobal (if npmCandidate == [ ] then null else builtins.head npmCandidate);
+    lib.any (n: mentions n (stripComment line)) [
+      cliApp
+      cliPackage
+    ]
+    || builtins.match "[[:space:]]*openspec[[:space:]]+.*" (stripComment line) != null;
 
-  installSpecs = lib.concatMap (
+  usesCliRunForm = line: mentions cliRunForm (stripComment line);
+
+  cliLines = lib.concatMap (
     f:
-    lib.concatMap (
-      x:
-      map (spec: {
-        inherit (x) name;
-        inherit spec;
-      }) (installSpecsIn x.line)
-    ) (lib.filter (x: !(isComment x.line)) (numberedLines f))
+    map (x: {
+      inherit (x) name;
+      inherit (x) line;
+    }) (lib.filter (x: runsCli x.line) (lib.filter (x: !(isComment x.line)) (numberedLines f)))
   ) adoptedPresent;
 
-  # The installers are a closed set. The parser below understands `npm` and `npx`; any other
-  # installer yields no spec at all, and the exactness rule passes because it had nothing to read —
-  #
-  #   pnpm add -g @fission-ai/openspec@latest     # invisible
-  #
-  # and silence reads exactly like agreement. So a missing adopted installer is itself a finding.
-  adoptedInstallerTokens = [
-    "npm"
-    "npx"
-    "nix"
-  ];
+  # `npx` is named wherever it sits: a wrapper that calls it is the same defect as one that
+  # writes the package name, and it is the form a contributor reaches for by habit.
+  # An INVOCATION, not a mention: prose has to be able to name the thing it forbids, and
+  # "`npx` and `npm install -g` are what this replaces" is documentation, not a defect.
+  invokesNpx =
+    line:
+    builtins.match "npx[[:space:]]+[-a-zA-Z@].*" line != null
+    || builtins.match ".*[[:space:]`(]npx[[:space:]]+[-a-zA-Z@].*" line != null
+    || builtins.match "[[:space:]]*npm[[:space:]]+install.*" line != null;
 
-  installerOutsideTheSet = lib.concatMap (
+  npxLines = lib.concatMap (
     f:
     map (x: "${x.name}: ${stripComment x.line}") (
-      lib.filter (
-        x:
-        mentions "@fission-ai/openspec" (stripComment x.line)
-        && !(lib.any (w: mentions " ${w} " (" ${stripComment x.line} ")) adoptedInstallerTokens)
-      ) (lib.filter (x: !(isComment x.line)) (numberedLines f))
+      lib.filter (x: invokesNpx (stripComment x.line)) (
+        lib.filter (x: !(isComment x.line)) (numberedLines f)
+      )
     )
   ) adoptedPresent;
 
-  # --- 3.1 one version, checked at every site ------------------------------
-  pinnedCli = pins.openspecCli;
+  cliOutsideTheForm = lib.concatMap (
+    f:
+    map (x: "${x.name}: ${stripComment x.line}") (
+      lib.filter (x: runsCli x.line && !(usesCliRunForm x.line)) (
+        lib.filter (x: !(isComment x.line)) (numberedLines f)
+      )
+    )
+  ) adoptedPresent;
 
-  notPinnedVersion = builtins.filter (
-    x: x.spec != null && !(lib.hasSuffix "@${pinnedCli}" x.spec)
-  ) installSpecs;
+  # --- 3.1 one version, checked against the flake --------------------------
+  pinnedCli = pins.openspecCli;
 
   # A fifth site cannot appear silently: every file naming the package must be an adoption
   # site, or be somewhere the name is data rather than a command. Prose quotes the forbidden
@@ -361,14 +321,32 @@ let
     "openspec/"
     "nix/"
     "tests/"
+    # The nix domain skills teach the pattern this rule enforces; naming it there is the point.
+    "skills/devops/nix-"
   ];
+
+  # The flake defines the app; it does not invoke it.
+  exemptFiles = [ "flake.nix" ];
 
   adoptedRelPaths = map (a: a.relPath) adoptedSpecs;
 
   unadoptedMentions = map rel (
-    builtins.filter (
-      p: !(lib.elem (rel p) adoptedRelPaths) && !(lib.any (pre: lib.hasPrefix pre (rel p)) exemptPrefixes)
-    ) (builtins.filter (p: mentions "@fission-ai/openspec" (builtins.readFile p)) textFilePaths)
+    builtins.filter
+      (
+        p:
+        !(lib.elem (rel p) adoptedRelPaths)
+        && !(lib.elem (rel p) exemptFiles)
+        && !(lib.any (pre: lib.hasPrefix pre (rel p)) exemptPrefixes)
+      )
+      (
+        builtins.filter (
+          p:
+          lib.any (n: mentions n (builtins.readFile p)) [
+            cliApp
+            cliPackage
+          ]
+        ) textFilePaths
+      )
   );
   # --- plugins ------------------------------------------------------------
   # A plugin directory is discovered by its `plugin.yaml`, and the registry key is the
@@ -560,49 +538,34 @@ in
       expected = false;
     };
 
-    test_every_installer_is_one_the_gate_understands = {
-      expr = installerOutsideTheSet;
+    test_every_cli_command_is_the_flake_app = {
+      expr = cliOutsideTheForm ++ npxLines;
       expected = [ ];
     };
 
-    test_the_installer_rule_rejects_a_foreign_tool = {
-      expr =
-        map
-          (
-            line:
-            mentions "@fission-ai/openspec" line
-            && !(lib.any (w: mentions " ${w} " (" ${line} ")) [
-              "npm"
-              "npx"
-              "nix"
-            ])
-          )
-          [
-            "npm install -g @fission-ai/openspec@1.15.0"
-            "nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0"
-            "pnpm add -g @fission-ai/openspec@1.15.0"
-            "bun add -g @fission-ai/openspec@1.15.0"
-            "curl -fsSL https://example.invalid/@fission-ai/openspec/-/openspec.tgz | sh"
-          ];
+    test_the_cli_rule_rejects_every_other_form = {
+      expr = map (line: runsCli line && !(usesCliRunForm line)) [
+        "npx -y @fission-ai/openspec@1.15.0 validate --all --strict"
+        "npm install -g @fission-ai/openspec@1.15.0"
+        "openspec validate --all --strict"
+        "nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 validate"
+        "nix run .#openspec -- validate --all --strict"
+        "      nix run .#openspec -- archive x --yes"
+      ];
       expected = [
+        true
+        true
+        true
+        true
         false
         false
-        true
-        true
-        true
       ];
     };
 
-    test_every_install_pins_an_exact_version = {
-      expr = map (x: "${x.name}: ${if x.spec == null then "(no version at all)" else x.spec}") (
-        builtins.filter (x: !(isExactSpec x.spec)) installSpecs
-      );
-      expected = [ ];
-    };
-
-    test_every_install_carries_the_version_in_pins_nix = {
-      expr = map (x: "${x.name}: ${x.spec} (pins.nix: ${pinnedCli})") notPinnedVersion;
-      expected = [ ];
+    test_the_flake_app_is_the_version_in_pins_nix = {
+      # A literal in `pins.nix` that disagreed with the flake would be a second, rotting pin.
+      expr = pkgs.openspec.version;
+      expected = pinnedCli;
     };
 
     test_the_site_list_is_not_empty = {
@@ -618,7 +581,7 @@ in
 
     test_the_scanned_set_is_not_empty = {
       # A scan over nothing passes every assertion above and looks exactly like a real pass.
-      expr = builtins.length adoptedPresent >= 4 && builtins.length installSpecs >= 4;
+      expr = builtins.length cliLines >= 4 && builtins.length adoptedPresent >= 4;
       expected = true;
     };
 
@@ -656,30 +619,18 @@ in
       ];
     };
 
-    test_the_install_rule_rejects_every_non_exact_form = {
-      expr = map (line: map isExactSpec (installSpecsIn line)) [
-        "npx -y @fission-ai/openspec@latest"
-        "npx -y @fission-ai/openspec@^1.15.0"
-        "npx -y @fission-ai/openspec@~1.15.0"
-        "npx -y @fission-ai/openspec@1.15"
-        "npx -y @fission-ai/openspec"
-        "npx -y @fission-ai/openspec@1   # a comment after the version"
-        "npm i -g @fission-ai/openspec@1"
-        "npm install --global @fission-ai/openspec@1"
-        "npm install -g --prefix ~/.local/npm @fission-ai/openspec@1.15.0"
-        "nix shell nixpkgs#nodejs_22 -c npx -y @fission-ai/openspec@1.15.0 <verb>"
+    test_the_cli_rule_rejects_every_form = {
+      expr = map (line: runsCli line && !(usesCliRunForm line)) [
+        "npx -y @fission-ai/openspec@1.15.0 validate"
+        "npm i -g @fission-ai/openspec@1.15.0"
+        "openspec validate --all --strict"
+        "  nix run .#openspec -- validate --all --strict"
       ];
       expected = [
-        [ false ]
-        [ false ]
-        [ false ]
-        [ false ]
-        [ false ]
-        [ false ]
-        [ false ]
-        [ false ]
-        [ true ]
-        [ true ]
+        true
+        true
+        true
+        false
       ];
     };
   };

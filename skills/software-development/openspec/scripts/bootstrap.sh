@@ -6,18 +6,23 @@ set -euo pipefail
 repo="${1:-.}"
 cd "$repo"
 
-command -v openspec >/dev/null 2>&1 || {
-  echo "openspec: not on PATH; install with: npm install -g --prefix ~/.local/npm @fission-ai/openspec@1.15.0" >&2
+# The CLI comes from the repository's flake: `nix run .#openspec`. A global install is the
+# anti-pattern this replaces -- it resolves outside the lock and leaves a second version on
+# PATH. Set OPENSPEC_CMD when a repository exposes the CLI another way.
+run_openspec() { ${OPENSPEC_CMD:-nix run .#openspec --} "$@"; }
+
+command -v nix >/dev/null 2>&1 || {
+  echo "openspec: nix is not on PATH; expose the CLI as a flake app and run 'nix run .#openspec'" >&2
   exit 1
 }
 
 if [ ! -d openspec ]; then
-  openspec init --tools none >/dev/null
+  run_openspec init --tools none >/dev/null
   echo "openspec: initialized"
 fi
 
 # OpenSpec sends anonymous command-name telemetry by default. Off for this machine.
-openspec config set telemetry.enabled false >/dev/null 2>&1 || true
+run_openspec config set telemetry.enabled false >/dev/null 2>&1 || true
 
 if [ ! -f AGENTS.md ]; then
   printf '# AGENTS.md\n\nRules for an agent working in this repository.\n' > AGENTS.md

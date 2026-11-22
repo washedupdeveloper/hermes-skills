@@ -1,11 +1,11 @@
 # Append under `jobs:` in the repository's CI workflow.
 #
-# Replace `<checkout-pin>` with the `actions/checkout` pin this repository already uses.
-# A repository that pins actions by SHA must not gain an unpinned one.
-# Node ships on the GitHub-hosted runner image, so no toolchain setup is needed. The CLI is
-# pinned to an exact version, not a range: `@1` resolves to whatever 1.x is current, so the code
-# that runs in this job would change with no commit here — the mutable reference ADR 0005 rejects.
-# The runner is an image for the same reason.
+# Replace `<checkout-pin>` and `<nix-pin>` with the pins this repository already uses. A
+# repository that pins actions by SHA must not gain an unpinned one.
+#
+# The CLI comes from the repository's flake, so CI runs the version the lockfile pins and the
+# job needs no Node toolchain. A global install would be a second pin resolved at run time --
+# the mutable reference ADR 0005 rejects. The runner is an image for the same reason.
 
   openspec:
     runs-on: ubuntu-24.04
@@ -13,7 +13,6 @@
       - uses: <checkout-pin>
         with:
           persist-credentials: false
-      - name: install the spec CLI
-        run: npm install -g --ignore-scripts @fission-ai/openspec@1.15.0
+      - uses: <nix-pin>
       - name: the specs validate
-        run: openspec validate --all --strict
+        run: nix run .#openspec -- validate --all --strict

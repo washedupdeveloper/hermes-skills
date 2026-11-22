@@ -124,10 +124,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
-        with:
-          node-version: "22"
-      - run: npx -y @fission-ai/openspec@1.15.0 validate --all --strict
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
+      # The CLI is a package of this flake, so the version is the one `flake.lock` pins.
+      - run: nix run .#openspec -- validate --all --strict
 
   # What each job took, so a gate nobody measures cannot quietly become slow.
   cost:

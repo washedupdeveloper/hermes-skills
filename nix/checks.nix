@@ -12,7 +12,7 @@
 }:
 let
   # One check per group, so `--keep-going` reports every failing group, not just the first.
-  evalGroups = import ./tests.nix { inherit lib src; };
+  evalGroups = import ./tests.nix { inherit lib src pkgs; };
 
   mkEvalCheck =
     group: tests:
