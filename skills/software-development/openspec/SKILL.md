@@ -85,6 +85,11 @@ method.
 - **The repo is the gate.** `openspec validate <name> --strict` runs in the repo's CI, not only
   by hand. A repo whose CI lacks it gets that step before its first change; the job block to
   append is `templates/ci-job.yml`, with the repository's own checkout pin.
+- **Check for an existing change before creating one.** `openspec/changes/` may already hold the
+  work: a change can be fully ticked and still unarchived, and a branch can carry its commits.
+  List the directory and read the matching `proposal.md` and `tasks.md` first; creating a second
+  change for the same behavior splits the record and loses the evidence already collected. If it
+  exists, validate it and continue from its tasks instead of restarting.
 
 ## Work communication contract
 

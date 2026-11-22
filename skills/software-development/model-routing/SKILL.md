@@ -123,7 +123,11 @@ benchmark age under `benchmarks`, so a run records the policy it used.
 
 If the provider key sets a minimum discount, pass the same value as
 `--min-discount`; otherwise the selector can recommend a model the request path
-will refuse with `minimum_discount_not_met`.
+will refuse with `minimum_discount_not_met`. Read the refusal, not the retry
+button: the body names the key's floor and the best eligible discount, so a
+model below the floor cannot succeed on a second attempt. Diagnose with a
+one-token request before planning; `references/market-parsing.md` has the
+request and the decision table.
 
 ## The four roles
 
@@ -343,7 +347,13 @@ runs in the bundled Hermes environment.
   `minimum_discount_not_met`. Pass the key's floor as `--min-discount`, match it
   against the model's **best live offer**, not its seven-day realised discount,
   and smoke-test each selected model with a one-line request before creating its
-  profile. A high realised discount does not imply a high best offer.
+  profile. A high realised discount does not imply a high best offer. The
+  refusal is deterministic: it names the key's minimum and the best eligible
+  offer, and resending the same model cannot change either. Probe once, then
+  lower the key floor or pick a model at or above it. If the response is 401
+  instead, fingerprint the credentials before blaming the floor — a stale
+  `OPENAI_API_KEY` can be a different, revoked key from the one the custom
+  provider's `key_env` resolves.
 - **The reviewer sharing the builder is not independence.** It is a second read
   of the same diff by the same weights; say so in the report rather than letting
   the role name imply an independent check.

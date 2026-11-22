@@ -68,6 +68,33 @@ Rules:
 - Refresh before a plan if the snapshot is older than 12 hours. Spot prices
   move; a report is a dated claim, not a standing price list.
 
+## Live request path
+
+`refresh` reads the public book; a request spends the key. They can disagree
+because the key carries a minimum discount. Diagnose with one token, not a
+retry loop:
+
+```bash
+curl -sS -o /tmp/floor.json -w '%{http_code}\n' \
+  "$BASE/chat/completions" \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"<model>","messages":[{"role":"user","content":"OK"}],"max_tokens":1}'
+```
+
+- `200` — the model is buyable at this key's floor.
+- `404` with `minimum_discount_not_met` — read `error.message`. It states the
+  key's minimum and the best eligible discount; the request cannot succeed
+  until one side moves. Lower the key's minimum to the printed best eligible
+  value (or below), or pick a model whose best live offer clears the floor.
+- `401 invalid_api_key` — the credential is wrong or revoked, not the floor.
+  Fingerprint the keys before changing a model: the custom provider's
+  `key_env` or inline `api_key` is the one the request uses; `OPENAI_API_KEY`
+  may be a different key.
+- Do not retry `minimum_discount_not_met`. Same key, same model, same book,
+  same refusal.
+- Record the key's floor in `--min-discount`; a report planned below it can
+  recommend a model the request path will refuse.
+
 ## Pitfalls
 
 - **Do not reuse a reference price from an earlier brief.** The same model can
