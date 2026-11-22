@@ -93,8 +93,17 @@ When the owner asks for OpenSpec as the communication medium, use the change as 
 - A subagent brief names the change and task IDs and does not add a competing prose brief.
 - A subagent returns the same IDs, the files it changed and the evidence commands it ran.
 - Pure refactors and dependency bumps use `skip_specs: true` when behavior does not change.
+- The full route → profile → run → evidence loop is `references/agent-delivery.md`;
+  the task-prompt skeleton is `templates/agent-task-prompt.md`. Keep `tasks.md` owned by
+  the orchestrator and require every worker to write `collab/<task>.md` evidence.
 
 ## Verify
 
 Before archive: `openspec validate <name> --strict`, the repo's tests, and every task ticked.
 An unticked task is unfinished work, not a note.
+
+`validate --strict` checks the delta's shape, not the checkbox state: a change with
+0/N tasks complete still validates. Read `tasks.md` and grep for each capability before
+calling the change done; "valid" is not "implemented". When the code and the delta
+disagree, repair one of them — write the delta to the shipped contract, or implement the
+delta — and never leave both standing.

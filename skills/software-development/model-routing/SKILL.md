@@ -315,6 +315,12 @@ runs in the bundled Hermes environment.
 - **A benchmark gain is a proxy for a capability step.** 3.6 points on a 76.4
   baseline is inside the noise of most baskets; that is why the materiality
   gate exists, and why it is a flag rather than a constant.
+- **A finding is pair-, effort- and harness-specific.** A result from model A
+  versus model B cannot support a claim about model A versus model C; a lead
+  smaller than the benchmark's measured run-to-run range is a tie; native-CLI
+  runs measure model plus harness. Put the exact comparator, effort and harness
+  in the same sentence or table row — if one is missing, the number is not
+  evidence for your pair.
 - **Dominance is priced at the role's measured volume.** A model can look
   cheap per input token and be dominated once output and cache reads are
   priced; a single 80/20 blend would hide that.
@@ -330,6 +336,12 @@ runs in the bundled Hermes environment.
   price and one realised discount; the selector applies that discount to cache
   as well. No separate cache invoice is available to confirm it. If Surplus
   bills cache at list, every cache-heavy role is understated.
+- **A provider discount floor is a runtime gate, not a price statistic.** The
+  selector can recommend a model that the request path refuses with
+  `minimum_discount_not_met`. Pass the key's floor as `--min-discount`, match it
+  against the model's **best live offer**, not its seven-day realised discount,
+  and smoke-test each selected model with a one-line request before creating its
+  profile. A high realised discount does not imply a high best offer.
 - **The reviewer sharing the builder is not independence.** It is a second read
   of the same diff by the same weights; say so in the report rather than letting
   the role name imply an independent check.

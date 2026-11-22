@@ -103,3 +103,11 @@ A printed `SMOKE_OK` proves the profile's credentials and model resolve.
 - Installing profiles does not install the *shell* the worker runs commands with. If
   a run reports no shell, that is a Hermes install concern (`hermes update`), not
   a fleet concern.
+- **A throwaway multi-role run needs its own Hermes home.** Point `HERMES_HOME`
+  at a scratch directory, copy `config.yaml` and `.env`, then create each role
+  with `--no-skills --no-alias`. Copy `.env` into the profile and set
+  `model.default`, `model.provider=custom:<alias>` and `model.base_url`
+  explicitly; `hermes config set` is not enough to invent a provider entry.
+  `--clone --no-skills` is rejected, and `--clone` copies the full skill set and
+  is heavy. `profile list` shows a label, not proof of its model: read
+  `hermes -p <role> config get model.default` for every role.

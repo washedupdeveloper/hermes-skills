@@ -31,7 +31,8 @@ The knowledge survives in skills and in the session record; the files do not.
 - Before calling any task done whose evidence files no longer have a reader.
 - Don't use for: things that serve a purpose by existing (repos, configs,
   deliberately named backups), caches an installed tool is actively using, or
-  the nix store itself — see "What stays".
+  the nix store itself — see "What stays". For whether such an artifact should
+  exist at all, use `artifact-retention-audit`.
 
 ## The rule (always on)
 

@@ -180,6 +180,13 @@ for `>` rejects the last value that fits, and no real artifact sits on the bound
 copy of the predicate written for the test proves nothing about the gate — extract it, so
 the test and the gate call one function.
 
+**Every parameter that changes the verdict must be operator-settable and recorded.** A threshold, weight, floor,
+freshness bound or cost divisor buried in code is an unversioned policy: the user cannot vary it, the run cannot
+record what it used, and a later comparison silently mixes two policies. Expose it as a flag, config key or
+environment variable, echo the effective value into the run artifact (`policy` block), and test that a non-default
+value changes the result. Guards that do not express a decision — a minimum row count that refuses a truncated
+page, a unit-sanity cap, display formatting — stay fixed but must be named and documented as guards.
+
 **An exemption needs two controls, not one.** A control proving something is *allowed*
 (`scripts/*.sh` is a glob, not a dead pointer) passes just as well when the rule has stopped
 firing entirely, so alone it is vacuous. Pair it with a positive control through the same

@@ -297,6 +297,23 @@ under the scratch dir and invoke it by path, passing native paths:
 wsl.exe -d <distro> -- /bin/bash /mnt/c/<scratch>/job.sh
 ```
 
+**Or pipe the script in on stdin, which needs no file on the share.** `bash -s` reads the
+program from stdin, so nothing is re-parsed by the login shell and the write-and-run ordering
+trap disappears — compose the heredoc and the pipe in one call:
+
+```bash
+cat > "$TMPDIR/scan.sh" <<'EOF'
+cd ~/projects
+for d in */; do echo "== $d"; git -C "$d" status --porcelain | head; done
+EOF
+wsl.exe -d <distro> -- bash -s < "$TMPDIR/scan.sh"
+```
+
+Quote the heredoc delimiter (`<<'EOF'`) so `$dir` and friends reach the distro intact, and
+remember stdin is the script: a `read` or any prompt inside it consumes the remaining program
+text instead of waiting. Use this for read-only scans; use the by-path form above for anything
+that must survive long enough to be re-run.
+
 **Write the script before you launch it.** A `terminal` call that is promoted to background starts
 immediately — before the `write_file` in your *next* call — so the launcher runs against a path
 that does not exist yet and exits 127 (`bash: …/job.sh: No such file or directory`). A call merely
@@ -305,7 +322,11 @@ and are indistinguishable from a real bug unless you remember the ordering. Comp
 the run in a single turn, and treat a 127 naming your own script as this, not as a missing file.
 
 **The share is one-way: read-only into the distro.** `\\wsl.localhost\<distro>\…` is a fine read
-path from Windows — `read_file`, grep, `git log` all work — and a dead write path. A `patch` or
+path from Windows — `read_file`, grep, `git log` all work — and a dead write path. It is also a
+slow path for anything that walks the tree: `du -sh *`, `find` and a recursive `ls` over the
+share stall past a 180 s timeout because every stat crosses 9p, so a scan that "timed out" says
+nothing about the size of the directory. Run recursive scans inside the distro (the piped
+invocation below) and read only the summary back. A `patch` or
 `write_file` against it dies with `mkdir: cannot create directory '//wsl.localhost': Read-only file
 system`, which looks like a permissions problem and is a mount property. To edit a distro file, write
 the edit as a script under the Windows scratch dir, run it with the invocation above, then read the

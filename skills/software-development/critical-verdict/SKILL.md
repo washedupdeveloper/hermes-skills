@@ -240,6 +240,13 @@ argues for. An estimate that survives only because nobody checked it is how a co
 nobody needs gets justified — and it is the assessor's own number, so no other rule here
 will catch it.
 
+**A formula about another system's billing is a claim about its schema.** Fit it to
+that system's own recorded charge: reconstruct `estimated_cost_usd` (or the equivalent)
+from the raw token or count columns and the published prices. The column set that
+reproduces the record exactly is the real billing shape. A field that is a subset of
+another — reasoning tokens inside completion tokens — is double-counted when added, and
+a formula checked only against its own arithmetic will never reveal it.
+
 **When asked whether your own additions degraded the artifact, measure rather than
 argue.** Four cheap measurements settle it, and the ones that count are the ones you
 do not control:
