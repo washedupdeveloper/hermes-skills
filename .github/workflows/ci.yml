@@ -32,10 +32,16 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      # macOS is not in the list until this account has macOS runners: GitHub cancels
+      # Two legs, and each one left out is named here so re-enabling it is one word.
+      #
+      # macOS: not in the list until this account has macOS runners. GitHub cancels
       # those jobs within a second, with no runner assigned and no step run, so the run
-      # reports `cancelled` without having tested anything. Add macos-14 back to both
-      # matrices when it does; the code is standard library and claimed portable either way.
+      # reports `cancelled` without having tested anything. Add macos-14 back when it
+      # does; the code is standard library and claimed portable either way.
+      #
+      # ARM Linux: no `ubuntu-24.04-arm` leg. Nothing here is architecture-specific —
+      # the gate is the standard library and `scripts/validate.py` — so the x86_64 and
+      # Windows legs carry the claim. Add `ubuntu-24.04-arm` to this list to test it.
       matrix:
         os: [ubuntu-24.04, windows-2022]
     steps:
@@ -58,10 +64,8 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      # macOS is not in the list until this account has macOS runners: GitHub cancels
-      # those jobs within a second, with no runner assigned and no step run, so the run
-      # reports `cancelled` without having tested anything. Add macos-14 back to both
-      # matrices when it does; the code is standard library and claimed portable either way.
+      # The same two legs as `validate`, left out for the same reasons; see the note there.
+      # `ubuntu-24.04-arm` would be a third, and the tests are standard library too.
       matrix:
         os: [ubuntu-24.04, windows-2022]
     steps:

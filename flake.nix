@@ -9,6 +9,9 @@
   outputs =
     { self, nixpkgs }:
     let
+      # Declared so the library evaluates on each platform it claims, which is a
+      # build contract, not a CI leg: CI runs x86_64-linux and Windows only. Darwin is
+      # declared because a consumer on a Mac evaluates this flake; it is not tested here.
       systems = [
         "x86_64-linux"
         "aarch64-linux"
