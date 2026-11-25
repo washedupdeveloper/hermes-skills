@@ -47,6 +47,31 @@ available evidence. Then patch, prove, stop.
   assumption both fixes made, and test it directly before writing a third fix that assumes it.
 - The third attempt is then a hypothesis about the premise, not another patch at the same layer.
 
+## When the findings cluster, delete the state instead of patching it
+
+A reviewer loop that keeps returning findings in one subsystem is not returning new bugs; it
+is returning the same defect wearing different masks. The signal is the count holding steady —
+seven findings, fix them, six findings in the same three functions — and the tell is that each
+fix is *invalidating something*: a cache entry, a memo, a derived index, a copy of state that
+already exists elsewhere.
+
+When you see that pattern, stop patching and ask what state has to be kept in sync. If the
+answer is "a cache I maintain by hand", delete the cache and recompute from the source of truth
+on every read. One instance fixed is a finding closed; the class removed is the loop ended. A
+handler that must invalidate itself in six places is the bug, not any one of the six.
+
+This is the one exception to "the narrowest layer": the narrowest *correct* layer can be the
+one that removes state rather than the one that adds a guard to it. Record why in the commit, so
+the deletion does not read as scope drift.
+
+## A guard you add must be proven against the legitimate case
+
+Every fix that refuses something needs two tests: the input it must reject, and the ordinary
+input it must still accept. A traversal guard written against a hand-built fixture passed while
+rejecting `tar -cf x.tar .`, because the legitimate archive carries a `.` directory header that
+no hand-built fixture contains. Read the format's own specification for what real producers emit
+before writing the rejection, and generate the accept-case with the real tool rather than by hand.
+
 ## Stop condition
 
 Run the focused proof plus the nearest affected gate. Stop when the failure is fixed

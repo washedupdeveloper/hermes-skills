@@ -85,6 +85,14 @@ method.
 - **The delta only.** A change's `specs/<capability>/spec.md` holds `## ADDED Requirements`,
   `## MODIFIED Requirements` or `## REMOVED Requirements`. `openspec/specs/` is edited by
   `archive`, never by hand during a change.
+- **A `MODIFIED` block replaces the whole requirement, so it must re-state every scenario.**
+  Editing one scenario into a delta that carries only the scenarios you touched leaves the
+  others to be dropped at archive, and `validate --strict` refuses it by name: `MODIFIED "<req>"
+  omits scenario(s) the current spec still has: "<scenario>". The modified block has N scenarios;
+  the current spec has M`. Copy the omitted scenarios into the delta verbatim. Read the current
+  `openspec/specs/<capability>/spec.md` requirement before writing the delta for it — the delta
+  is a replacement, not a patch. Same rule for the heading: it must match the current spec's
+  text exactly or the delta reads as an addition and the old requirement survives beside it.
 - **A task is a commit.** `tasks.md` checkboxes are the plan. Tick one when its code and test
   land, and let the commit body name the tasks it closes.
 - **Validate without Node when the host has none.** A container, sandbox or agent runtime that
@@ -105,6 +113,12 @@ method.
   List the directory and read the matching `proposal.md` and `tasks.md` first; creating a second
   change for the same behavior splits the record and loses the evidence already collected. If it
   exists, validate it and continue from its tasks instead of restarting.
+- **A superseded claim inside an unarchived change is stale evidence, not history.** An open
+  change's `tasks.md` evidence table records what was true when it was written; when a later
+  change reverses one of those facts (a gate that drops a system, a flag that disappears), the
+  old row becomes a false statement sitting in the tree. Correct the row in the same commit as
+  the change that invalidates it — the change is still unarchived, so its record is still
+  expected to describe the tree.
 
 ## Work communication contract
 

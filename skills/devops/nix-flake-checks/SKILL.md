@@ -1,7 +1,7 @@
 ---
 name: nix-flake-checks
 description: "Use when writing a flake's checks or eval assertions."
-version: 1.2.2
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -99,6 +99,128 @@ whole files belongs in the **run** tier, where the interpreter's engine is not t
 evaluator's. A file can also cross the size threshold long after the check was written, so a
 stack-bound check is a time bomb rather than a style choice.
 
+## Where a suite runs — `checks`, not `doCheck`
+
+The tempting simplification is `doCheck = true` on the package, so an untested artifact
+cannot be built at all. Measured on a Python package with `format = "pyproject"`, all three
+attempts fail in different directions:
+
+| Attempt | Result |
+|---|---|
+| `doCheck = true` alone | builds green and **runs no tests** — no `checkPhase` in `nix log` |
+| `+ pytestCheckHook` | runs, then dies on `ModuleNotFoundError` for dev-only SDKs the package deliberately does not ship |
+| `+ those SDKs` | 914 passed, 5 failed: the build leaves `build/` and `*.egg-info/` in the tree the tests inspect, and `HOME=/homeless-shelter` breaks every test that overlays a real home (bwrap) |
+
+The first row is the dangerous one: it reports success having measured nothing. The separate
+check tier is what makes the last row's five pass — a copied tree and `HOME=$TMPDIR` — so keep
+the suite in `checks` and link the artifact to it instead:
+
+```nix
+default = (app pkgs).overrideAttrs (prev: {
+  passthru = (prev.passthru or { }) // { tests = checks.${pkgs.stdenv.hostPlatform.system}; };
+});
+```
+
+`passthru` is excluded from the derivation, so the output path and its cache entry do not
+change, and a consumer can run `.#default.passthru.tests.<check>` to see what proves the
+build. A package that names its sibling `checks` makes the flake's output set recursive:
+a plain attrset reports `undefined variable 'checks'` pointing at the attribute, not at the
+reference, which reads as a typo rather than a missing `rec`.
+
+## Making the gate fast without making it weaker
+
+A gate slow enough to get bypassed is not a gate. Every lever below changes *when* work
+happens, never *what* is proven — that line is what keeps a speed-up from becoming a
+weaker check.
+
+**Give each check its own input set, or nothing ever hits the cache.** `nix flake check`
+already skips a check whose derivation is unchanged, but a check handed the whole tree
+hashes the whole tree, so any edit invalidates all of them and the cache never hits.
+Scope each check's `src` with `lib.fileset`:
+
+```nix
+scope = paths: lib.fileset.toSource {
+  root = ./.;
+  fileset = lib.fileset.unions (map (p: ./. + "/${p}") paths);
+};
+```
+
+Measured on a 12-check gate: a history-doc, spec or changelog edit rebuilt 11 of 12
+before and 5 after; a README edit 11 -> 6; a source edit still 11, which is correct
+because the suite reads `src`. The survivors are honest — `tests`, `claims` and
+`differential` all execute the suite, which opens the docs.
+
+**A scope that is too narrow is a check that reads less and passes.** Land the scoping
+with a test that parses the `mkCheck` calls and asserts each scope covers what its
+command opens. Without it the failure is silent: `mutations` and `differential` were
+handed the code scope and went red in the sandbox because the suite also opens `docs`,
+`.github` and the spec tree, and `claims` runs the verify script, which runs pytest.
+Any check that runs the suite needs the suite's scope, never a narrower one. Assert too
+that every `mkCheck` names a scope at all, so the next check cannot silently inherit
+the whole tree.
+
+**Carry the tool configuration in every scope.** A scoped copy without `pyproject.toml`,
+`pyrightconfig.json` or a linter allowlist checks with *different rules* than the
+checkout — measured, pyright reported type errors in the sandbox that it did not report
+locally, because its copy had no config. Config travels with the code or the check lies.
+
+**Compute the ceiling before optimising.** A gate's wall-clock floor is total work
+÷ available cores. 72 mutants × 31 s of suite = 2,232 core-seconds: 186 s on 12 cores,
+558 s on 4. If the measurement is already near that floor, no scheduling change helps and
+the only levers left are more cores or less work. Say which one you are buying;
+"parallelise more" against a gate at 87% of its ceiling is a non-answer.
+
+**A serial loop of subprocesses is startup-bound; pool it.** 263 claims each spawning an
+interpreter cost 185 s, almost none of it work: the same registry across one worker per
+core took 28 s. Same sound lever as a mutant pool — each item is an independent process,
+the runner already continues past a failure, and the report is assembled in input order
+(`ThreadPoolExecutor.map` preserves it). Expose the width as a flag (`--jobs`, 0 = one per
+core) so it is policy rather than a constant.
+
+**Pooling isolates scheduling, not state — give each item its own temp root.** pytest
+numbers and prunes its basetemp under `TMPDIR/pytest-of-<user>/pytest-N`, and
+`_pytest/pathlib.py:cleanup_numbered_dir` leaves an unclosed scandir iterator. Two pooled
+items sharing a `TMPDIR` therefore delete each other's numbered directories mid-scan, which
+surfaces as `ResourceWarning: unclosed scandir iterator` and, under `filterwarnings =
+["error"]`, as a failed test that has nothing to do with the code under test. Measured: one
+failure in six rounds of four concurrent runs on a shared root, none in ten rounds with
+private roots. Give every item its own `TMPDIR`, `TMP` and `TEMP`, plus `-p no:cacheprovider`
+for the cache file. A gate that fails once in five is worse than one that fails always — the
+failure carries no information. Apply this to **every** pooled subprocess that runs pytest,
+not only the one that flaked: a campaign of 72 suites has 72 chances per run, and there the
+symptom is worse than a red check — a suite that dies on another item's cleanup reads as a
+mutant that SURVIVED, which is a reported defect in the suite.
+
+**Tier the gate so a typo fails in seconds and the expensive check never starts.** Order
+by cost, not importance: lint and types answer in milliseconds, the suite in tens of
+seconds, a mutation campaign in minutes. A cheap tier the expensive one depends on turns
+a twelve-minute discovery into a thirty-five-second one and spends none of the expensive
+compute on a tree that cannot pass.
+
+In CI the tier has to be its own **job**, not a step: a step inside the expensive job still
+pays that job's checkout, Nix install and namespace setup before it can fail. `fast` runs
+alone; every expensive job declares `needs: fast` and they run beside each other. Measured,
+that shape took a gate from 990 s to 385 s and a red run from 257 s to 57 s. A GitHub matrix
+cannot be shared between jobs, so a duplicated matrix must be held byte-identical by a test
+— otherwise the cheap tier gates one system and the expensive tier another, and the gap is
+silent. The duplication costs the cheap tier's compute twice on a green run; measure that as
+a fraction of the gate (it was ~6%) before deciding it is not worth four minutes on a red one.
+
+**A tier invoked through an app must still print build logs.** An app that wraps `nix build`
+without `--print-build-logs` reports a failure as an aggregate — `262/263 claims hold` — with
+the item that failed nowhere in the log, and Nix's own "last N log lines" summary shows only
+whatever the check printed last. Pass the flag inside the app, not in the caller, or the next
+flake is undiagnosable by construction.
+
+**Keep `--keep-going` inside a tier.** Fail fast across *tiers* is right; fail fast
+*within* the full gate is not. Independent checks report every verdict in one pass so you
+fix them together — stopping at the first makes you fix one, wait, and find the next.
+
+Depth — the measurement recipe, the ranked levers, and the sharding design that keeps the
+union exhaustive by construction: `references/gate-performance.md`. Rebuilding the exact
+artifact a CI failure came from, and separating a flaky item from shared state:
+`references/reproducing-ci-failures.md`.
+
 ## Verify
 
 ```bash
@@ -178,6 +300,23 @@ nix flake check --keep-going          # every group reports, not just the first
   `nix eval .#packages.<system>.default.drvPath`; scope the list to what builds, or move the
   Linux-only piece behind `pkgs.stdenv.isLinux`.
 
+- **Declared, gated and tested are three different things — keep them separate on purpose.**
+  `systems` is an evaluation contract: every `perSystem` output must *evaluate* for each entry,
+  which a consumer or a machine of that platform needs. It is not a promise that anything builds
+  or runs it. So a platform can stay declared while no gate builds it: that is a legitimate state
+  as long as it is written down. `nix flake check` builds only the **current** system and says so
+  (`warning: The check omitted these incompatible systems: aarch64-linux`); `--all-systems` is
+  what builds the rest, and an emulated leg costs real minutes on every run. When scoping a leg
+  out, keep the `systems` entry, and record in the flake, the workflow and the docs which entry
+  is declared-but-ungated and what turns the gate on (`--all-systems` in one command, or one
+  matrix label). Deleting the `systems` entry to save time breaks the build contract; leaving it
+  silent makes a green gate read as coverage of a platform nothing touched.
+- **A check that reads a workflow file to assert a runner matrix must assert the pointer too.**
+  A naive `assert "<runner-label>" in workflow` keeps passing on a file where the comment is the
+  only surviving mention, so it stops guarding the leg and starts guarding a string. Assert the
+  reduced matrix **and** that the enabling label is still named, or the test cannot tell a
+  deliberate scope-down from a silent removal.
+
 - **A check body joined with `&&` can pass while its first half fails.** `set -e` does not fire
   for a non-final command in an AND-OR list, so `cmd1 && cmd2` followed by `touch $out` exits 0
   when `cmd1` fails — measured, a claims check printed `73/74 claims hold` and the derivation
@@ -195,5 +334,16 @@ nix flake check --keep-going          # every group reports, not just the first
   digest in the same commit and read the diff. The convention itself is worth a check:
   files written by an agent or a library often lack a final newline, every diff then says
   `\ No newline at end of file`, and the next append joins the last line — decode each file
-  to skip binaries, assert the scanned set is non-empty, and prove the check fails by
+  decode each file to skip binaries, assert the scanned set is non-empty, and prove the check fails by
   truncating one file.
+
+- **A broken `flake.nix` cannot be repaired from its own devshell.** `nix develop -c python
+  fix.py` evaluates the flake first, so the command never runs and the only output is the
+  evaluation error — which reads as the fix failing. Reach for a shell that does not depend on
+  the tree: `nix shell nixpkgs#python3 -c python fix.py`, or `sed`/`nixfmt`.
+
+- **Do not measure in the checkout.** A timing harness that builds in-tree (`pip wheel`,
+  `python -m build`, a tool that writes beside its source) leaves `build/` and
+  `*.egg-info/` behind, and every check that scans the tree then fails on your artifacts —
+  measured, two claims went red from a wheel a previous measurement had left. Build into a
+  temp copy or the sandbox, and clean before believing a red result.

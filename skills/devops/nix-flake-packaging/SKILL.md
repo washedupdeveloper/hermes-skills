@@ -1,7 +1,7 @@
 ---
 name: nix-flake-packaging
 description: "Use when exposing a repo's scripts as Nix apps/packages."
-version: 1.2.0
+version: 1.3.0
 author: Storm, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -320,6 +320,41 @@ was 1.14.1. Use `nix eval --raw .#packages.<system>.<name>.version` before writi
 into a pin the gate asserts, or the assertion encodes the registry's answer and fails on the
 first `nix flake check` — which is how the wrong literal was caught here.
 
+## Shipping the tests with the artifact
+
+**`doCheck = true` runs no tests unless the hook is there.** A `buildPythonApplication`
+with `format = "pyproject"` and `doCheck = true` builds green having executed nothing:
+the log carries no `checkPhase` at all. Pytest only runs through `pytestCheckHook` in
+`nativeCheckInputs`. Measured: the same package reported success with zero tests, then
+914 passed / 5 failed once the hook was added. A `doCheck` that silently proves nothing
+is worse than no `doCheck`, because it reads as coverage.
+
+**The suite may not be runnable in `doCheck` at all, and the reason is the build.** Two
+failures are properties of the package build, not of the tests: the build leaves its own
+artifacts (`build/`, `src/*.egg-info/`) in the tree the tests inspect, so a document-index
+or trailing-newline check fails on them; and Nix builds with `HOME=/homeless-shelter`, so
+a test that overlays a real `$HOME` (bwrap) refuses. A separate `runCommand` check that
+copies a clean tree and sets `HOME=$TMPDIR` passes both. Keep the suite in `checks`, not
+in `doCheck` — when a package ships an untested artifact, the gap to close is the pointer
+to the checks, not the test environment to bend.
+
+**Link the artifact to its checks with `passthru.tests`.** A consumer of
+`nix build .#default` cannot tell whether the build was proven. `passthru.tests` is the
+idiomatic pointer, and it costs nothing: `passthru` is excluded from the derivation, so
+the output path is unchanged and no cache is invalidated.
+
+```nix
+default = (app pkgs).overrideAttrs (prev: {
+  passthru = (prev.passthru or { }) // {
+    tests = checks.${pkgs.stdenv.hostPlatform.system};
+  };
+});
+```
+
+`packages` now names its sibling `checks`, which a plain attribute set cannot see — make
+the output set `rec`. Do the same on every wrapper built from the same source, so each
+artifact carries the checks that prove it.
+
 ## Pitfalls
 
 - **Every flake output — `nix build`, `nix run`, `nix flake check` — reads the git-TRACKED
@@ -364,6 +399,21 @@ derivation. Setting it only on the package leaves every app reporting "no descri
 `python3 -m pytest` dies even though the `pytest` wrapper works. Join a
 `python3.withPackages (ps: [ … ])` environment instead, and keep a check that imports
 the packages.
+- **`overrideAttrs` cannot change how a Python package is unpacked.** `overrideAttrs {
+  format = "wheel"; src = …; }` keeps the original build's hooks and dies with `do not know
+  how to unpack source archive … .whl`, because `format` selects the unpack hook when
+  `buildPythonPackage` is called, not as a derivation attribute. Swapping an sdist `src` for
+  a different version fails differently: a setuptools-scm project infers its version during
+  the build, has no git checkout to read, and a newer release may want a `vcs-versioning`
+  nixpkgs does not carry. If a package genuinely must move ahead of nixpkgs, construct it
+  explicitly (`buildPythonPackage { format = "wheel"; propagatedBuildInputs = …; }`) instead
+  of overriding `src`. When fetching the wheel, `fetchPypi` with `format = "wheel"` and no
+  `python` argument builds a `py2.py3-none-any` filename that 404s (pass `python = "py3"`),
+  and its legacy `/packages/py3/…` path 404s on PyPI as well — `fetchurl` against the exact
+  `files.pythonhosted.org` URL from the JSON API is the form that works. Prefer not moving at
+  all: when the packaged version is merely defective, the ladder in `dependency-maintenance`
+  (avoid the code path, wait for upstream) costs less than an override you re-derive on every
+  bump.
 - **A directory-by-directory mirror between two clones silently misses a directory.**
 Copying `docs scripts tests .github` and the root files looks complete and is not: the
 first pass left `skills/` behind, so the commit carried the old skill file while the
