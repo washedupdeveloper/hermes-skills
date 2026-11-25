@@ -1,7 +1,7 @@
 ---
 name: nix-declarative-config
 description: "Use when editing Nix modules, options, or overrides."
-version: 1.3.1
+version: 1.3.2
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -17,6 +17,8 @@ side_effects: [none]
 # Declarative Nix configuration (this user)
 
 The user runs NixOS. Their infrastructure is a Clan-based flake in their projects directory — the open project dir is usually it. Hermes is Nix-installed and runs user-level with `HERMES_HOME=~/.hermes`. They want third-party tooling provisioned **declaratively in Nix** — never `npx`, `npm install -g`, `pip install`, or `curl … | bash`.
+
+That holds for one-shot uses too, which is where it slips: a linter, a spec CLI, a Python module a script imports. The answer is still `pkgs.<tool>` / `python3Packages.<module>`, reached with `nix shell nixpkgs#<tool> -c …`, `nix run`, or a `packages.<tool>` + `apps.<tool>` pair of the repo's own flake. A run-time install is a second, unrecorded pin — it leaves the tool outside `flake.lock`, so nothing states the version that ran, and on NixOS it writes a profile the next `nixos-rebuild` does not describe.
 
 ## Priority order (Clan.lol -> flake-parts -> Nix3)
 
@@ -42,7 +44,7 @@ When the three disagree, the earlier wins. Apply this deliberately; a conflict i
 ## Standing rules
 
 - **Inline comments are short pointers; the reasoning lives in `docs/`.** This user has rejected verbose inline comments explicitly. An inline comment earns its place only if the code cannot be understood without it: a non-obvious requirement, a workaround, or the reason a line is written the surprising way. One or two lines. When the reasoning needs more room the comment becomes a pointer -- `See docs/<file>.md` -- and the reasoning goes in that file. Do **not** put inline: restatements of what the code or an option does, evidence trails ("verified with nix 2.35.2", "the lock carried two of each"), upstream quotes, or anything inferable from the surrounding lines. A `docs/README.md` stating the convention and indexing the documents is part of the deliverable, not optional polish. Topical documents are named for their subject (`flake-internals.md`, `hermes-agent-provisioning.md`); decisions go in `docs/adr/`; forward-looking work goes in `docs/recommendations.md`. When a comment's pointer or a document names a file, moving that code means updating the pointer and every doc that named the old location -- that update is part of the move, not polish. Do not trim comments that are commented-out config the user may still want (a `# fzf = { ... }` block) -- that is intent, not prose.
-- Answer with a Nix expression, not an imperative command list. If upstream only documents `npx <tool> add …`, translate it: pin the source, link or copy its artifact into the config dir, and say that is the replacement.
+- Answer with a Nix expression, not an imperative command list. If upstream only documents `npx <tool> add …`, translate it: pin the source, link or copy its artifact into the config dir, and say that is the replacement. Check `pkgs.<tool>` before pinning a source — most upstream CLIs are already in nixpkgs, and a package there beats a repackaged one. When the repository's own tree needs the tool, expose `packages.<tool>` and `apps.<tool>` so the command is a flake output, and assert `pkgs.<tool>.version` against the version the docs name, so a nixpkgs bump fails the gate instead of silently changing the tool.
 - Pin the *source*, not the *revision*, unless the user asks for a frozen snapshot. A `flake = false` input declared **without** `rev` still pins exactly — the resolved commit is recorded in `flake.lock` — while the input keeps tracking the branch, so `nix flake update <input>` moves it forward. Setting `rev` freezes a copy: that is the "hardcoded snapshot" to avoid whenever the user wants the thing kept current. Use `fetchFromGitHub { rev; hash; }` only when they want no new input or a deliberate freeze.
 - **Symlink rather than copy** when the target dir supports it. The link stays read-only and pinned in the Nix store; updates are `nix flake update <input>` + switch. Copies into `$HOME` drift from the declaration.
 - **An upstream defect is fixed here and pinned with a test; filing it upstream is the user's call, not a deliverable.** A consumer repo can carry a small workaround and a `checks.<system>` assertion that fails when the workaround is removed, which is cheaper than waiting on an upstream release and is what makes the workaround safe to keep across an input bump. Do not open issues, PRs or discussions on someone else's tracker on your own initiative — it is a publication under the user's identity. Instead reproduce the defect, fix it locally, and record the upstream state in the project's work list (`docs/recommendations.md`, an "upstream issues worth filing" section) with the one-line fix and the repro command, so reporting it later costs one paste. Reproduction recipe: `references/verification-discipline.md`.

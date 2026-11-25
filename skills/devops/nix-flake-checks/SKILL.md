@@ -1,7 +1,7 @@
 ---
 name: nix-flake-checks
 description: "Use when writing a flake's checks or eval assertions."
-version: 1.3.0
+version: 1.3.1
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -265,8 +265,15 @@ nix flake check --keep-going          # every group reports, not just the first
   (`if failures == [ ] then pkgs.runCommand "check-<group>" {} "touch $out" else throwTestFailures`)
   so the group's name, and all of its failures, appear in `--keep-going` output.
 - A `runCommand` that writes nothing fails for want of `$out`; the last line must `touch $out`.
-- An assertion about workflow files must skip comment lines, or a doc mention of a forbidden
-  ref fails the gate it documents.
+- **A ban must measure invocations, not mentions.** The docs a rule lives in quote the form it
+  forbids ("`npx` and `npm install -g` are what this replaces"), so a substring match fails the
+  gate that documents it — and exempting those files is worse, because the next file to
+  reintroduce the form escapes silently. Skip comment lines: a comment cannot run anything, so an
+  injection example inside one stays documentation. The converse bites too: anchored to a command
+  position only, the rule misses the form hidden behind a wrapper — `<venv>/bin/python -m pip
+  install` has no command position to anchor on, so also match the verb itself in a non-comment
+  fenced line. Prove both directions with literal fixtures: one line per spelling that must fail,
+  plus the prose sentence that must pass.
 - A `sed -i`/`patchShebangs` step in a check is a portability surface of its own: the sandbox
   has no `/usr/bin/env`, so shebangs must be patched before scripts run — or invoke the script
   through its interpreter (`bash ./script`), which needs no rewrite of the file being checked.
@@ -334,7 +341,7 @@ nix flake check --keep-going          # every group reports, not just the first
   digest in the same commit and read the diff. The convention itself is worth a check:
   files written by an agent or a library often lack a final newline, every diff then says
   `\ No newline at end of file`, and the next append joins the last line — decode each file
-  decode each file to skip binaries, assert the scanned set is non-empty, and prove the check fails by
+  to skip binaries, assert the scanned set is non-empty, and prove the check fails by
   truncating one file.
 
 - **A broken `flake.nix` cannot be repaired from its own devshell.** `nix develop -c python
@@ -347,3 +354,11 @@ nix flake check --keep-going          # every group reports, not just the first
   `*.egg-info/` behind, and every check that scans the tree then fails on your artifacts —
   measured, two claims went red from a wheel a previous measurement had left. Build into a
   temp copy or the sandbox, and clean before believing a red result.
+
+- **A version literal in a check must be compared against the flake's own `pkgs`, not the
+  registry channel.** `nix eval nixpkgs#<attr>.version` resolves the registry's `nixpkgs`, which
+  need not be the flake input: measured, the registry answered `1.13.1` while the lock's `pkgs`
+  gave `1.14.1`, so a pin written from the first was wrong for the tree it guarded. Keep the
+  expected version in one contract file and assert `pkgs.<attr>.version == pin` in the eval tier —
+  a `nix flake update` that moves the tool then fails the gate instead of silently changing what
+  the repository documents.
