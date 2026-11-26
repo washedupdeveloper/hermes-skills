@@ -27,7 +27,8 @@
 - [ ] 10. Write `scripts/routing-score.py` and record its score.
 - [ ] 11. Declare the true `side_effects` for the 11 skills that spawn something
   and add their `**Heads-up.**` paragraphs.
-- [ ] 12. Add `install.sh --check`.
+- [x] 12. Add `install.sh --check`: verify an existing install (present, pointing here,
+  not stale) and exit 1 on any problem, without writing.
 - [ ] 13. Archive this change once 8-12 are done.
 
 ## Found while running the gate
@@ -41,3 +42,30 @@
   as a package spec.
 - [x] 16. Drop the invalid escape in `tests/e2e/test_gate_mutants.py`
   (`"\${{"`), which was a `SyntaxWarning` and a future error.
+
+## Evidence
+
+Re-run on 2026-11-26 under this repository's current loop. Every row is a command that was
+run against this tree on that date, not a restatement of the original tick.
+
+| claim | command | result |
+|---|---|---|
+| the contract is v3 and the gate reads it | `grep -m1 '"schema"' library/contract.json` | `"skill-contract/v3"` |
+| every skill declares `writes` | `grep -l "^writes:" $(find skills -name SKILL.md) \| wc -l` | 70 |
+| every skill declares `side_effects` | `grep -l "^side_effects:" $(find skills -name SKILL.md) \| wc -l` | 70 |
+| all seven domains carry `CATEGORY.md` | `ls skills/*/CATEGORY.md \| wc -l` | 7 |
+| the scope rules are one module in the gate | `grep -c "from scope import" scripts/validate.py` | 1 |
+| the gate accepts the tree | `python scripts/validate.py` | `validate: 0 violation(s)` |
+| `--check` verifies and never writes | `pytest tests/e2e/test_install_check.py -q` | 3 passed |
+| a matching install passes | `sh install.sh $(mktemp -d) --check` | exit 0 |
+| a missing or foreign entry fails | the two negative scenarios in that file | exit 1, named |
+| the delta is structurally valid | `nix run .#openspec -- validate 2026-11-22-scope-and-purity --strict` | 1 passed |
+
+### What the re-run found
+
+- **Two uncommitted files were failing the validator** (CRLF in
+  `skills/devops/nix-flake-checks/`). Normalised to LF, content untouched. The gate could
+  not report 0 violations while they stood, so every evidence row above depended on it.
+- **`docs/sdd.md` did not exist when this change was proposed**; the loop it states now
+  applies to this change's remaining tasks (a test per scenario, an evidence row per task).
+- **Task 11 needs a rule before it needs edits** — see `design.md`, "Decisions still open".

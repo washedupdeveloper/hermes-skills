@@ -5,6 +5,7 @@
 #   ./install.sh ~/.hermes/skills --nested     # nested: <target>/<category>/<skill>
 #   ./install.sh /tmp/skills --copy            # copy instead of symlink
 #   ./install.sh /tmp/skills --dry-run         # print the plan, change nothing
+#   ./install.sh ~/.hermes/skills --check      # verify an install, change nothing
 #
 # A symlink keeps one home for the text: edit the repository and every agent sees it.
 # `--copy` is for hosts that will not follow a link out of their own tree.
@@ -14,15 +15,17 @@ target=""
 layout="flat"
 mode="link"
 dry=""
+check=""
 
 usage() {
   cat <<'EOF'
-usage: ./install.sh <target-dir> [--nested] [--copy] [--dry-run] [--list]
+usage: ./install.sh <target-dir> [--nested] [--copy] [--dry-run] [--check] [--list]
 
   <target-dir>  the directory an agent reads skills from
   --nested      recreate <category>/<skill> instead of a flat <skill>
   --copy        copy the skill directories instead of symlinking them
   --dry-run     print what would happen, change nothing
+  --check       verify an existing install and exit 1 if it does not match
   --list        print the skills this library ships, then exit
 EOF
 }
@@ -40,6 +43,7 @@ for arg in "$@"; do
     --nested) layout="nested" ;;
     --copy) mode="copy" ;;
     --dry-run) dry="yes" ;;
+    --check) check="yes" ;;
     --list)
       for f in "$skills_root"/*/*/SKILL.md; do
         printf '%s/%s\n' "$(basename "$(dirname "$(dirname "$f")")")" "$(basename "$(dirname "$f")")"
@@ -55,6 +59,52 @@ done
 if [ -z "$target" ]; then
   usage >&2
   exit 2
+fi
+
+if [ -n "$check" ]; then
+  # Verify, do not install: every shipped skill must be present in the target and
+  # resolve to this library. An entry that points elsewhere is the failure this exists
+  # for -- a link to an old checkout looks installed and is not.
+  ok=0
+  problems=0
+  for file in "$skills_root"/*/*/SKILL.md; do
+    [ -f "$file" ] || continue
+    skill_dir=$(dirname "$file")
+    name=$(basename "$skill_dir")
+    category=$(basename "$(dirname "$skill_dir")")
+    if [ "$layout" = "nested" ]; then
+      dest="$target/$category/$name"
+    else
+      dest="$target/$name"
+    fi
+    want=$(CDPATH= cd -- "$skill_dir" && pwd -P)
+    if [ -L "$dest" ]; then
+      got=$(CDPATH= cd -- "$dest" 2>/dev/null && pwd -P) || got=""
+      if [ "$got" = "$want" ]; then
+        ok=$((ok + 1))
+      else
+        echo "  foreign  $dest -> $(readlink "$dest")"
+        problems=$((problems + 1))
+      fi
+    elif [ -d "$dest" ]; then
+      if [ "$mode" = "copy" ] && diff -r -q -- "$skill_dir" "$dest" >/dev/null 2>&1; then
+        ok=$((ok + 1))
+      else
+        echo "  stale    $dest (a directory, not a link to this library)"
+        problems=$((problems + 1))
+      fi
+    elif [ -e "$dest" ]; then
+      echo "  foreign  $dest (not a skill directory)"
+      problems=$((problems + 1))
+    else
+      echo "  missing  $dest"
+      problems=$((problems + 1))
+    fi
+  done
+  echo
+  echo "install.sh: $ok ok, $problems problem(s), target $target"
+  [ "$problems" -eq 0 ] || exit 1
+  exit 0
 fi
 
 created=0

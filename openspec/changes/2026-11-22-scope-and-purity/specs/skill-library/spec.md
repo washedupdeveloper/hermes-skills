@@ -93,3 +93,24 @@ MUST NOT shadow a real skill name.
 
 - **WHEN** an alias targets a skill that does not exist
 - **THEN** the gate fails
+
+### Requirement: An install can be verified without changing it
+
+`install.sh --check` MUST report whether an existing target matches this library and MUST
+exit non-zero when it does not. It MUST NOT write to the target. An entry that is missing,
+points outside this library, or is a copy that no longer matches is a problem.
+
+#### Scenario: The install matches
+
+- **WHEN** every shipped skill is present in the target and resolves to this library
+- **THEN** `--check` exits 0 and names the target
+
+#### Scenario: A skill is missing
+
+- **WHEN** a shipped skill has no entry in the target
+- **THEN** `--check` exits 1 and names it
+
+#### Scenario: An entry points elsewhere
+
+- **WHEN** an entry exists but resolves outside this library
+- **THEN** `--check` exits 1 and reports it as foreign
