@@ -1,7 +1,7 @@
 ---
 name: openspec
 description: "Use when a repo has an openspec/ directory."
-version: 1.2.0
+version: 1.2.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -113,7 +113,7 @@ method.
   with Why / What Changes / Capabilities / Impact, a `# Tasks` checklist, and one
   `specs/<capability>/spec.md` per capability. A directory holding only `.openspec.yaml` is an
   empty change, not a scaffold.
-- **The CLI comes from the project's own pin.** `npx -y @fission-ai/openspec@<ver>` runs
+- **The CLI comes from the project's own pin.** The npm one-shot runner runs
   for the moment and leaves a second copy in `~/.npm` that no lockfile describes — the
   next run may resolve differently and the version in the gate stops being the version in
   the review. If the repo has a flake, add `apps.openspec` backed by `pkgs.openspec` and
