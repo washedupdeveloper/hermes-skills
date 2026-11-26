@@ -12,10 +12,12 @@ metadata:
     tags: [hermes, wsl, wsl2, backend, serve, gateway, systemd, desktop, remote]
     related_skills: [hermes-profile-fleet, hermes-project-handoff, nixos-clan-flake]
 writes: [none]
-side_effects: [none]
+side_effects: [systemd, port, background-process]
 ---
 
 # hermes-wsl-backend
+
+**Heads-up.** The steps below enable a systemd **user** unit inside the distro (so it survives a shell exit), listen on a local port, and start long jobs with `setsid nohup`. All of it lives outside the project directory.
 
 Run the Hermes **backend** inside a WSL2 distro and attach the desktop app as a
 client, so agent work executes in Linux and never crosses the Windows code-integrity

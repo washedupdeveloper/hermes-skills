@@ -11,10 +11,12 @@ metadata:
     tags: [nix, nixos, clan, flake, wsl, verification, reproducibility]
     related_skills: [systematic-debugging, requesting-code-review]
 writes: [none]
-side_effects: [none]
+side_effects: [container]
 ---
 
 # nixos-clan-flake
+
+**Heads-up.** Some steps run a container on this host to probe an image (`podman run --rm`). Each is removed on exit and writes nothing outside the project.
 
 **Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
 

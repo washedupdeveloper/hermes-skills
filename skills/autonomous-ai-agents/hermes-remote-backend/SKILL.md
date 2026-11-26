@@ -12,10 +12,12 @@ metadata:
     tags: [hermes, serve, backend, remote, wsl, desktop, gateway, websocket]
     related_skills: [hermes-agent, hermes-profile-fleet, nixos-clan-flake]
 writes: [none]
-side_effects: [none]
+side_effects: [systemd, port]
 ---
 
 # hermes-remote-backend
+
+**Heads-up.** Section 5 installs a systemd **user** unit and enables linger, so the backend keeps running after the shell that started it exits. It listens on `127.0.0.1:9119` on the host you run it on; nothing is written inside the project.
 
 **Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
 
