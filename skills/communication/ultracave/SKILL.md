@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to compress to fragments at maximum density"]
+scope_triggers: [maximum compression fragments, compress this to the bone]
+scope_out: [ordinary brevity (caveman), writing the final reply (reply)]
 ---
 
 # ultracave

@@ -443,3 +443,49 @@ def test_a_user_config_root_without_the_preamble_fails():
             body="**Heads-up.** Writes one unit file.\n",
         ))
         assert any("root preamble" in v for v in out), out
+
+# ── the scope a skill states ─────────────────────────────────────────────────
+
+SCOPED = (
+    'writes: [none]\n'
+    'scope_answers: ["what the skill settles"]\n'
+    'scope_triggers: ["settle this thing"]\n'
+    'scope_out: ["other things (other-skill)"]'
+)
+
+
+def test_a_complete_scope_passes():
+    """Answers, triggers and exclusions together are a scope."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front=SCOPED))
+        assert not any("scope" in v for v in out), out
+
+
+def test_a_partial_scope_is_a_half_answer():
+    """A trigger with no answer routes a reader to a page that never states its claim."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(d, front='writes: [none]\nscope_answers: ["what it settles"]'))
+        assert any("together" in v for v in out), out
+
+
+def test_an_overlong_answer_is_caught():
+    """An answer that runs to a paragraph is a summary, not a claim to route on."""
+    answer = "x" * 200
+    with tempfile.TemporaryDirectory() as d:
+        front = ('writes: [none]\n'
+                 f'scope_answers: ["{answer}"]\n'
+                 'scope_triggers: ["settle this thing"]\n'
+                 'scope_out: ["other things"]')
+        out = check(scope_repo(d, front=front))
+        assert any("between 3 and 160" in v for v in out), out
+
+
+def test_scope_required_flips_the_rule():
+    """The switch task 9 ends on: with it on, a skill with no scope fails."""
+    with tempfile.TemporaryDirectory() as d:
+        repo = scope_repo(d, front="writes: [none]")
+        contract = json.loads((repo / "library" / "contract.json").read_text(encoding="utf-8"))
+        contract["scope_required"] = True
+        (repo / "library" / "contract.json").write_text(json.dumps(contract), encoding="utf-8")
+        out = check(repo)
+        assert any("declares no scope" in v for v in out), out

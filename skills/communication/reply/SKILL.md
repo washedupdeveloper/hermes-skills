@@ -13,6 +13,9 @@ metadata:
     source: cursor/plugins pstack/skills/poteto-mode (SKILL.md, Writing the reply), adapted
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to write the final reply to the owner"]
+scope_triggers: [write the final reply, summarise the work for the owner]
+scope_out: [brevity to fragments (ultracave), reviewing a diff (caveman-review)]
 ---
 
 # reply

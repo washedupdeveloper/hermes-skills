@@ -13,6 +13,9 @@ metadata:
     related_skills: [domain-modeling]
 writes: [none]
 side_effects: [none]
+scope_answers: ["what the last message meant in plain English"]
+scope_triggers: [explain that again simply, plain english restatement]
+scope_out: [writing the final reply (reply), extracting action items (document-to-action-items)]
 ---
 
 # wait-what

@@ -13,6 +13,9 @@ metadata:
     related_skills: [obsidian, hermes-knowledge-pipeline]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a Base's view filter and formula fit together"]
+scope_triggers: [obsidian base view, bases filter and formula]
+scope_out: [structuring the vault itself (no skill in this domain yet), capturing agent context (hermes-knowledge-pipeline)]
 ---
 
 # Obsidian Bases views

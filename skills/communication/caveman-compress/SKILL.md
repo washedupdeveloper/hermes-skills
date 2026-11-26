@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to shrink a memory file without losing what it states"]
+scope_triggers: [shrink memory file tokens, compress a memory entry]
+scope_out: [compressing a reply (ultracave), delegating a subtask (cavecrew)]
 ---
 
 # caveman-compress

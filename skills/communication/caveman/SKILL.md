@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to answer briefly without losing the claim"]
+scope_triggers: [asked to be brief, terse answer no filler]
+scope_out: [compression to fragments (ultracave), writing the final reply (reply)]
 ---
 
 # caveman

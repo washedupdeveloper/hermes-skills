@@ -70,6 +70,27 @@ and a `**Not here.**` list whose skill names exist in the catalog.
 - **WHEN** `CATEGORY.md` names a skill that does not exist
 - **THEN** the gate fails, naming the pointer
 
+### Requirement: A skill states its answers, its triggers and its exclusions
+
+A skill that states its scope MUST state all three: `scope_answers` (at most three, each 3-160
+characters), `scope_triggers` (the phrases a reader or router arrives by) and `scope_out`
+(at most five named exclusions). Two of the three is a half-answer.
+
+#### Scenario: A trigger with no answer
+
+- **WHEN** a skill declares `scope_triggers` and not `scope_answers`
+- **THEN** the gate fails, naming the missing fields and saying a scope is all three
+
+#### Scenario: An answer that is a paragraph
+
+- **WHEN** a `scope_answers` entry is longer than 160 characters
+- **THEN** the gate fails and prints the length
+
+#### Scenario: The catalog must carry a scope everywhere
+
+- **WHEN** `scope_required` is true in the contract and a skill declares none
+- **THEN** the gate fails, naming the three fields to add
+
 ### Requirement: A trigger phrase has one owner
 
 Two skills MUST NOT declare the same normalized trigger phrase.

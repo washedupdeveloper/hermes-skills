@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
 side_effects: [none]
+scope_answers: ["what is wrong in a diff with one line per finding"]
+scope_triggers: [review a diff or pull request, one line per finding]
+scope_out: [locating code (caveman-explore), writing the final reply (reply)]
 ---
 
 # caveman-review

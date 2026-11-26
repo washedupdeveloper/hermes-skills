@@ -50,6 +50,7 @@
   "scope_fields": [
     "writes"
   ],
+  "scope_required": false,
   "allowed_writes": {
     "project": [
       "none",

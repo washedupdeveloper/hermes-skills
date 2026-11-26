@@ -22,8 +22,12 @@
 
 - [ ] 8. Move seven domains to ten: add `build`, rename the rest, update the
   README layout tree and the contract in one commit per domain.
-- [ ] 9. Populate `scope_answers`, `scope_triggers` and `scope_out`, then make
-  them required.
+- [ ] 9. Populate `scope_answers`, `scope_triggers` and `scope_out`, then make them
+  required. **Partial:** the fields, the rule and its four controls are in
+  (`scope_required: false`); nine skills carry a scope — `communication` (7),
+  `note-taking` (1), `productivity` (1). The remaining 61 are unpopulated, so the switch
+  stays off, and it cannot be turned on until they are. Which fields a long skill needs is
+  a judgement per skill, not a mechanical fill.
 - [ ] 10. Write `scripts/routing-score.py` and record its score.
 - [x] 11. Declare the true `side_effects` and `**Heads-up.**` paragraphs. The premise
   said eleven skills; audited against the tree, thirteen mention a spawning command and
@@ -60,6 +64,8 @@ run against this tree on that date, not a restatement of the original tick.
 | the scope rules are one module in the gate | `grep -c "from scope import" scripts/validate.py` | 1 |
 | the gate accepts the tree | `python scripts/validate.py` | `validate: 0 violation(s)` |
 | every effect-instruction is declared | `python scripts/validate.py` | 0 violations |
+| a scope is all three parts, or a failure | `pytest tests/unit/test_validate.py -q -k scope` | 7 passed |
+| the catalog carries a scope where populated | `grep -l scope_answers $(find skills -name SKILL.md) \| wc -l` | 9 of 70 |
 | `$XDG_CONFIG` is allowed and redirectable | `pytest tests/unit/test_validate.py -q` | 142 passed |
 | `--check` verifies and never writes | `pytest tests/e2e/test_install_check.py -q` | 3 passed |
 | a matching install passes | `sh install.sh $(mktemp -d) --check` | exit 0 |

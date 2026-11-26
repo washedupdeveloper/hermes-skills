@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
 side_effects: [none]
+scope_answers: ["where a symbol lives as path and line"]
+scope_triggers: [locate code path and line, find where a function lives]
+scope_out: [reviewing a diff (caveman-review), writing the final reply (reply)]
 ---
 
 # caveman-explore

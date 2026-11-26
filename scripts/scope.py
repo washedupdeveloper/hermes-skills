@@ -130,6 +130,54 @@ def check_domain_contracts(repo, skills, contract, result) -> None:
                             f"`Not here` names `{name}`, which is not a catalog skill")
 
 
+SCOPE_KEYS = ("scope_answers", "scope_triggers", "scope_out")
+
+
+def check_scope_fields(skills, parsed, contract, result, repo, parse_list) -> None:
+    """A skill that states its scope states all three parts of it.
+
+    Answers say what question the skill settles; triggers say when to reach for it;
+    exclusions say what it is not. Two of the three is a half-answer: a trigger with no
+    answer routes a reader to a page that never states its claim, and an exclusion with
+    no trigger excludes nothing.
+
+    `scope_required` is false while the catalog is being populated; the moment it turns
+    true, a skill with none of the three fails.
+    """
+    required = bool(contract.get("scope_required"))
+    for path in skills:
+        fields, _ = parsed[path]
+        lists = {key: parse_list(fields.get(key) or "") for key in SCOPE_KEYS}
+        declared = [key for key, value in lists.items() if value]
+
+        if not declared:
+            if required:
+                result.fail(path.relative_to(repo),
+                            "declares no scope; add `scope_answers`, `scope_triggers` "
+                            "and `scope_out`")
+            continue
+
+        missing = [key for key in SCOPE_KEYS if not lists[key]]
+        if missing:
+            result.fail(path.relative_to(repo),
+                        f"declares {', '.join(declared)} but not {', '.join(missing)}; "
+                        "a scope is answers, triggers and exclusions together")
+            continue
+
+        if len(lists["scope_answers"]) > 3:
+            result.fail(path.relative_to(repo),
+                        f"`scope_answers` has {len(lists['scope_answers'])} entries; "
+                        "three is the most a skill settles")
+        for answer in lists["scope_answers"]:
+            if not 3 <= len(answer) <= 160:
+                result.fail(path.relative_to(repo),
+                            f"`scope_answers` entry {answer[:40]!r} is {len(answer)} chars; "
+                            "keep it between 3 and 160")
+        if len(lists["scope_out"]) > 5:
+            result.fail(path.relative_to(repo),
+                        f"`scope_out` has {len(lists['scope_out'])} entries; five is the most")
+
+
 def check_triggers(skills, parsed, contract, result, repo) -> None:
     """A trigger phrase belongs to exactly one skill."""
     owner: dict[str, Path] = {}
@@ -253,6 +301,7 @@ def check_scope(skills, parsed, contract, repo, result, parse_list) -> None:
         return  # a v2 contract predates these rules
     check_writes(skills, parsed, contract, repo, result, parse_list)
     check_domain_contracts(repo, skills, contract, result)
+    check_scope_fields(skills, parsed, contract, result, repo, parse_list)
     check_triggers(skills, parsed, contract, result, repo)
     check_portability(skills, parsed, contract, repo, result)
     check_runtime(skills, parsed, contract, repo, result)

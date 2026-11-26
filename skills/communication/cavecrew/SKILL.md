@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to delegate a subtask and get a compressed return"]
+scope_triggers: [delegate a subtask, compressed subagent return]
+scope_out: [writing the final reply (reply), reviewing a diff (caveman-review)]
 ---
 
 # cavecrew
