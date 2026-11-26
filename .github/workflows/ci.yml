@@ -94,10 +94,12 @@ jobs:
           persist-credentials: false
       - run: python3 scripts/claim-audit.py
 
-  # Optional: the maintainer checks that need Nix — the formatter, the eval-tier assertions,
-  # and the same validate.py under a pinned interpreter.
+  # The maintainer checks that need Nix: the formatter, the eval-tier assertions, and the
+  # same validate.py under a pinned interpreter. It is called "needs Nix", not "optional":
+  # the run goes red when it fails, and a check named optional that is not optional is a
+  # label that teaches the reader to ignore a red X.
   nix-gate:
-    name: nix gate (optional)
+    name: nix gate (needs Nix)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
