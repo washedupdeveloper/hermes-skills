@@ -65,15 +65,11 @@ in
         # `no:cacheprovider`: the tree is a store copy, and pytest's cache would only
         # produce a permission warning.
         #
-        # `--deselect` names the one test this check cannot run: it asks an installed
-        # `hermes` binary to list the skills, and a store copy inside the sandbox has
-        # no such binary. Left in, it skips -- and a skip in the gate is a pass that
-        # measured nothing. Run it on a host that has Hermes installed:
-        #   python -m pytest tests/e2e/test_shipped_code.py::test_a_host_loader_accepts_every_shipped_skill
-        #
-        # `HERMES_SKILLS_STRICT_SKIPS=1` turns any other skip into a failure.
-        HERMES_SKILLS_STRICT_SKIPS=1 python -m pytest tests/ -q -p no:cacheprovider \
-          --deselect tests/e2e/test_shipped_code.py::test_a_host_loader_accepts_every_shipped_skill
+        # `HERMES_SKILLS_STRICT_SKIPS=1` turns any skip into a failure: a test that
+        # cannot run is a failure, not a pass. The host-side check moved out of pytest
+        # to `scripts/host_loader_check.py`, where it can be run on a machine that has
+        # Hermes installed.
+        HERMES_SKILLS_STRICT_SKIPS=1 python -m pytest tests/ -q -p no:cacheprovider
         touch $out
       '';
 

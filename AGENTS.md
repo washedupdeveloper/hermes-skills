@@ -86,6 +86,13 @@ Every non-trivial work item, task assignment, status update and handoff is an Op
 Use the `openspec` skill for the loop. The CLI is a package of this flake —
 `nix run .#openspec -- <command>` — so the version is the one `flake.lock` pins.
 
+**Spec first, test second, both before the code.** A change states what the system must
+do as requirements with scenarios; each scenario becomes a test whose name states it; each
+task names the command that proves it. A requirement without a test is a wish, and a task
+without an evidence command is unproven. A test that cannot run here is a failure, not a
+skip: the gate sets `HERMES_SKILLS_STRICT_SKIPS=1`, and a host-side check belongs in
+`scripts/`, not in pytest.
+
 **Done means archived.** A change with every task ticked is finished; archive it in the same
 commit as the last task. The `openspec` CI job fails on a finished change left open, so the
 record cannot drift from the tree.

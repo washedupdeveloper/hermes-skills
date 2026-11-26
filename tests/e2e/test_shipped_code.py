@@ -69,29 +69,3 @@ def test_the_self_test_check_is_not_vacuous():
         except AssertionError:
             return
         raise AssertionError("a deliberately broken script passed the check")
-
-
-def test_a_host_loader_accepts_every_shipped_skill():
-    """Optional evidence: only an installed host can prove its own loader.
-
-    A `return` here would be a pass that measured nothing — the rule this repository
-    applies to every other skip. The gate proves the tree; this proves one host reads it.
-    """
-    hermes = shutil.which("hermes")
-    if not hermes:
-        pytest.skip("no host binary on PATH; nothing to measure")
-    r = subprocess.run([hermes, "skills", "list"], capture_output=True, text=True,
-                       stdin=subprocess.DEVNULL, timeout=120)
-    if r.returncode != 0:
-        return
-    rows = re.findall(r"\u2502\s*([^\u2502]+?)\s*\u2502", r.stdout)
-    cells = [c.strip().rstrip("\u2026") for c in rows]
-    catalog = []
-    for p in SKILLS.rglob("SKILL.md"):
-        if any(f"/{x}/" in p.as_posix() for x in ("references", "templates", "assets", "scripts")):
-            continue
-        if re.search(r"^environments:", p.read_text(encoding="utf-8").split("---", 2)[1], re.M):
-            continue  # scoped to one environment; the loader is right to omit it here
-        catalog.append(p.parent.name)
-    missing = [n for n in catalog if not any(c and n.startswith(c) for c in cells)]
-    assert not missing, f"loader did not list: {missing}"
