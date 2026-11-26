@@ -114,3 +114,15 @@ points outside this library, or is a copy that no longer matches is a problem.
 
 - **WHEN** an entry exists but resolves outside this library
 - **THEN** `--check` exits 1 and reports it as foreign
+
+#### Scenario: A copy no longer matches
+
+- **WHEN** an entry is a copy whose contents differ from this library
+- **THEN** `--check` exits 1 and reports it as stale
+
+#### Scenario: A link and a copy both count as installed
+
+- **WHEN** the target reads this library through links on one host and through copies on
+  another
+- **THEN** `--check` exits 0 on both, because what matters is that the target reads this
+  library, not how it got there

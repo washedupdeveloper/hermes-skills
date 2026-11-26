@@ -87,10 +87,13 @@ if [ -n "$check" ]; then
         problems=$((problems + 1))
       fi
     elif [ -d "$dest" ]; then
-      if [ "$mode" = "copy" ] && diff -r -q -- "$skill_dir" "$dest" >/dev/null 2>&1; then
+      # A copy is a valid install too: MSYS `ln -s` falls back to copying, and a host
+      # that will not follow links out of its tree uses --copy deliberately. What
+      # matters is that the target reads this library, not how it got there.
+      if diff -r -q -- "$skill_dir" "$dest" >/dev/null 2>&1; then
         ok=$((ok + 1))
       else
-        echo "  stale    $dest (a directory, not a link to this library)"
+        echo "  stale    $dest (a copy that no longer matches this library)"
         problems=$((problems + 1))
       fi
     elif [ -e "$dest" ]; then
