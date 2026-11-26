@@ -1,7 +1,7 @@
 ---
 name: openspec
 description: "Use when a repo has an openspec/ directory."
-version: 1.1.2
+version: 1.2.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -93,6 +93,14 @@ method.
   `openspec/specs/<capability>/spec.md` requirement before writing the delta for it — the delta
   is a replacement, not a patch. Same rule for the heading: it must match the current spec's
   text exactly or the delta reads as an addition and the old requirement survives beside it.
+- **Done is archived, and `validate` cannot see the difference.** All tasks ticked means
+  the change is finished; finish it with `archive <name> --yes` in the same commit as the
+  last task. `validate --strict` checks a delta's shape and passes a fully ticked change
+  that has sat in `changes/` for weeks — three did exactly that in one repository, at
+  41/41, 11/11 and 16/16, long after their work merged. Put the state under the gate
+  rather than in a convention: a job step or test that fails on any non-archive change
+  whose `tasks.md` has no unticked box. The check is vacuous when nothing is open, which
+  is the state a healthy repository is in most of the time.
 - **A task is a commit.** `tasks.md` checkboxes are the plan. Tick one when its code and test
   land, and let the commit body name the tasks it closes.
 - **Validate without Node when the host has none.** A container, sandbox or agent runtime that
@@ -105,6 +113,14 @@ method.
   with Why / What Changes / Capabilities / Impact, a `# Tasks` checklist, and one
   `specs/<capability>/spec.md` per capability. A directory holding only `.openspec.yaml` is an
   empty change, not a scaffold.
+- **The CLI comes from the project's own pin.** `npx -y @fission-ai/openspec@<ver>` runs
+  for the moment and leaves a second copy in `~/.npm` that no lockfile describes — the
+  next run may resolve differently and the version in the gate stops being the version in
+  the review. If the repo has a flake, add `apps.openspec` backed by `pkgs.openspec` and
+  call `nix run .#openspec -- …` from both CI and the developer's shell; the CLI is then
+  a flake output like any other tool the repository depends on. `pkgs.openspec` trails the
+  npm release (1.13.x against 1.15.0 when this was written) and validates current changes
+  correctly, so pinning is not a capability loss.
 - **The repo is the gate.** `openspec validate <name> --strict` runs in the repo's CI, not only
   by hand. A repo whose CI lacks it gets that step before its first change; the job block to
   append is `templates/ci-job.yml`, with the repository's own checkout pin.
@@ -128,6 +144,11 @@ When the owner asks for OpenSpec as the communication medium, use the change as 
   the task IDs it covers. Chat is a short pointer to the artifact, never the only brief.
 - A subagent brief names the change and task IDs and does not add a competing prose brief.
 - A subagent returns the same IDs, the files it changed and the evidence commands it ran.
+- A **decision** is a row in `design.md`: the option taken, the options rejected, and what
+  would falsify the choice. A decision recorded only in chat did not happen.
+- A **verdict** is a row in `tasks.md`: the claim, the command that settles it, and the
+  result. "Done" without an evidence command is unproven, and an unproven claim is not
+  finished work.
 - Pure refactors and dependency bumps use `skip_specs: true` when behavior does not change.
 - The full route → profile → run → evidence loop is `references/agent-delivery.md`;
   the task-prompt skeleton is `templates/agent-task-prompt.md`. Keep `tasks.md` owned by
