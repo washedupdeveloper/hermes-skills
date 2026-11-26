@@ -83,8 +83,21 @@ Every non-trivial work item, task assignment, status update and handoff is an Op
 - Chat is a short pointer to the change, never the only record of the work.
 - Pure refactors and dependency bumps use `skip_specs: true` when behavior does not change.
 
-Use the `openspec` skill for the loop: `openspec instructions`, `openspec validate --strict`, and
-`openspec archive`. The CLI is pinned to 1.15.0 in CI.
+Use the `openspec` skill for the loop. The CLI is a package of this flake —
+`nix run .#openspec -- <command>` — so the version is the one `flake.lock` pins.
+
+**Done means archived.** A change with every task ticked is finished; archive it in the same
+commit as the last task. The `openspec` CI job fails on a finished change left open, so the
+record cannot drift from the tree.
+
+The same rule governs how work is reported:
+
+- A **decision** is a row in the change's `design.md`: the option taken, the options
+  rejected, and what would falsify the choice.
+- A **verdict** on the work is a row in `tasks.md`: the claim, the command that settles it,
+  and the result. "Done" without an evidence command is unproven.
+- A **presentation** to the owner is rendered from the change, not restated in chat. Chat
+  carries the decision table and a pointer to the artifact.
 
 ## Dependency maintenance
 

@@ -184,28 +184,6 @@ written list does not show.
 - **WHEN** a workflow that uses a matrix expression contains `include:`
 - **THEN** the check fails, because the values it would add are not in the file and cannot be read
 
-### Requirement: The installer is one the gate understands
-
-A line that names the CLI SHALL use an installer the gate parses — `npm`, `npx` or `nix`. Any other
-installer SHALL fail the check, naming the file and the line.
-
-#### Scenario: An adopted installer
-
-- **WHEN** a line reads `npm install -g @fission-ai/openspec@1.15.0`, or runs it through
-  `nix shell … -c npx`
-- **THEN** the check accepts the line and the version rule reads its spec
-
-#### Scenario: A foreign installer
-
-- **WHEN** a line reads `pnpm add -g @fission-ai/openspec@1.15.0`, `bun add -g`, or
-  `yarn global add`
-- **THEN** the check fails and names the line, because the version rule cannot read it
-
-#### Scenario: An installer with no package at all
-
-- **WHEN** a line pipes an archive into a shell, `curl … | sh`
-- **THEN** the check fails: there is no package spec and no version for any rule to read
-
 ### Requirement: A run's cost is a number, not an inference
 
 A workflow run SHALL publish how long each of its jobs took, in the run itself, without requiring
@@ -251,3 +229,63 @@ SHALL be replaced by a pointer to the list, directory or API that answers the qu
 
 - **WHEN** the stated number is drifted by one
 - **THEN** a test asserts the comparison rejects it, because a check never observed to fail is a guess
+
+### Requirement: The CLI runs through the flake app
+
+A line that invokes the spec CLI SHALL name `nix run .#openspec`. An `npx` or `npm install`
+invocation SHALL fail the check wherever it sits, naming the file and the line.
+
+`nix run` resolves the CLI through `flake.lock`, so the version is pinned once and the tool is
+offline after the first fetch. `npx` resolves it from the network at run time, which is a second
+pin that nothing records.
+
+#### Scenario: A line uses the flake app
+
+- **WHEN** a line reads `nix run .#openspec -- validate --all --strict`
+- **THEN** the check accepts it
+
+#### Scenario: A line falls back to a package manager
+
+- **WHEN** a line reads `npx -y @fission-ai/openspec@1.15.0 validate`, `npm install -g`,
+  `pnpm add -g`, or the bare `openspec validate` where the binary would have to be on PATH
+- **THEN** the check fails, naming the file and the line
+
+#### Scenario: Prose names the form it forbids
+
+- **WHEN** a sentence reads "`npx` and `npm install -g` are what this replaces"
+- **THEN** the check passes: the rule measures invocations, not mentions
+
+### Requirement: The flake provides the version the repository documents
+
+`pkgs.openspec.version` SHALL equal `pins.openspecCli`. A nixpkgs bump that changes the CLI
+SHALL fail the gate rather than silently changing the tool that validates the specs.
+
+#### Scenario: nixpkgs ships a different version
+
+- **WHEN** `pkgs.openspec.version` is not the value in `pins.openspecCli`
+- **THEN** `nix flake check` fails, naming both values
+
+### Requirement: A skill provisions its tools through Nix
+
+A fenced command in a skill SHALL NOT install a tool at run time: `pip`, `python -m pip`, `uv`,
+`pipx`, `npm -g`, `npx`, `pnpm`, `yarn`, `bun`, `cargo`, `go`, `gem`, the system package
+managers and `curl … | sh` all resolve outside the declaration. The line SHALL name
+`nix shell nixpkgs#<tool> -c …`, `nix run`, or an app of a flake instead.
+
+A line that must install something SHALL carry `# nix-provision: <reason>`. The marker without a
+reason SHALL NOT satisfy the rule.
+
+#### Scenario: A skill installs a module
+
+- **WHEN** a fenced line reads `pip install websockets`
+- **THEN** the gate fails, naming the file and the line
+
+#### Scenario: The artifact under test
+
+- **WHEN** the line reads `uv pip install --no-index …` with `# nix-provision: the wheel under test`
+- **THEN** the check accepts it, and a bare `# nix-provision:` is rejected
+
+#### Scenario: A comment names an attack
+
+- **WHEN** an injection example appears as a comment line in a fenced block
+- **THEN** the check passes: a comment installs nothing

@@ -133,6 +133,26 @@ jobs:
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31
       # The CLI is a package of this flake, so the version is the one `flake.lock` pins.
       - run: nix run .#openspec -- validate --all --strict
+      # `validate --strict` checks a delta's shape, never whether the work is recorded as
+      # done: a change with every task ticked validates perfectly and stays open. Three
+      # such changes sat in the council repository after their work merged, which is the
+      # record drifting from the tree it describes.
+      - name: no finished change is left open
+        run: |
+          set -euo pipefail
+          status=0
+          for dir in openspec/changes/*/; do
+            [ -d "$dir" ] || continue
+            case "$dir" in */archive/) continue ;; esac
+            tasks="$dir/tasks.md"
+            [ -f "$tasks" ] || continue
+            grep -qE '^[[:space:]]*- \[[ xX]\]' "$tasks" || continue
+            if ! grep -qE '^[[:space:]]*- \[ \]' "$tasks"; then
+              echo "::error file=$tasks::every task is ticked but the change is not archived"
+              status=1
+            fi
+          done
+          exit $status
 
   # What each job took, so a gate nobody measures cannot quietly become slow.
   cost:
