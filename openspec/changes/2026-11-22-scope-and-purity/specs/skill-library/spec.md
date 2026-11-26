@@ -15,6 +15,17 @@ and MUST open with the POSIX root preamble when `writes` is not `none`.
 - **WHEN** `writes` contains `/home/...` or any path outside the contract's roots
 - **THEN** the gate fails and prints the allowed roots
 
+#### Scenario: A skill installs a systemd user unit
+
+- **WHEN** a skill tells the reader to write a unit into the user's config directory
+- **THEN** it declares `writes: [$XDG_CONFIG]`, opens with the redirectable preamble
+  (`: "${SKILL_XDG_CONFIG:=${XDG_CONFIG:-$HOME/.config}}"`), and names the exact file
+
+#### Scenario: The root is allowed but the reader cannot redirect it
+
+- **WHEN** a skill declares `$XDG_CONFIG` without the preamble
+- **THEN** the gate fails and names the missing preamble
+
 ### Requirement: Persistence is project-local
 
 A skill MUST NOT persist project information outside the project. `$HERMES_HOME`

@@ -59,6 +59,7 @@
     ],
     "declared": [
       "$HERMES_HOME",
+      "$XDG_CONFIG",
       "$SYSTEM"
     ]
   },

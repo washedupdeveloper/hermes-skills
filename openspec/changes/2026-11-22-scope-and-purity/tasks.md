@@ -25,8 +25,11 @@
 - [ ] 9. Populate `scope_answers`, `scope_triggers` and `scope_out`, then make
   them required.
 - [ ] 10. Write `scripts/routing-score.py` and record its score.
-- [ ] 11. Declare the true `side_effects` for the 11 skills that spawn something
-  and add their `**Heads-up.**` paragraphs.
+- [x] 11. Declare the true `side_effects` and `**Heads-up.**` paragraphs. The premise
+  said eleven skills; audited against the tree, thirteen mention a spawning command and
+  ten of those document or check rather than act. Three instruct an effect:
+  `hermes-remote-backend` [systemd, port], `hermes-wsl-backend` [systemd, port,
+  background-process], `nixos-clan-flake` [container].
 - [x] 12. Add `install.sh --check`: verify an existing install (present, pointing here,
   not stale) and exit 1 on any problem, without writing.
 - [ ] 13. Archive this change once 8-12 are done.
@@ -56,6 +59,8 @@ run against this tree on that date, not a restatement of the original tick.
 | all seven domains carry `CATEGORY.md` | `ls skills/*/CATEGORY.md \| wc -l` | 7 |
 | the scope rules are one module in the gate | `grep -c "from scope import" scripts/validate.py` | 1 |
 | the gate accepts the tree | `python scripts/validate.py` | `validate: 0 violation(s)` |
+| every effect-instruction is declared | `python scripts/validate.py` | 0 violations |
+| `$XDG_CONFIG` is allowed and redirectable | `pytest tests/unit/test_validate.py -q` | 142 passed |
 | `--check` verifies and never writes | `pytest tests/e2e/test_install_check.py -q` | 3 passed |
 | a matching install passes | `sh install.sh $(mktemp -d) --check` | exit 0 |
 | a missing or foreign entry fails | the two negative scenarios in that file | exit 1, named |

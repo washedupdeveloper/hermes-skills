@@ -1,7 +1,7 @@
 ---
 name: hermes-wsl-backend
 description: "Use when running Hermes or commands inside a WSL2 distro."
-version: 1.3.3
+version: 1.4.0
 author: Storm, Hermes Agent
 license: MIT
 platforms: [linux, windows]
@@ -11,13 +11,18 @@ metadata:
   hermes:
     tags: [hermes, wsl, wsl2, backend, serve, gateway, systemd, desktop, remote]
     related_skills: [hermes-profile-fleet, hermes-project-handoff, nixos-clan-flake]
-writes: [none]
+writes: [$XDG_CONFIG]
+leaves: one systemd user unit
 side_effects: [systemd, port, background-process]
 ---
 
 # hermes-wsl-backend
 
 **Heads-up.** The steps below enable a systemd **user** unit inside the distro (so it survives a shell exit), listen on a local port, and start long jobs with `setsid nohup`. All of it lives outside the project directory.
+
+```bash
+: "${SKILL_XDG_CONFIG:=${XDG_CONFIG:-$HOME/.config}}"
+```
 
 Run the Hermes **backend** inside a WSL2 distro and attach the desktop app as a
 client, so agent work executes in Linux and never crosses the Windows code-integrity
@@ -383,7 +388,8 @@ having been issued.
 
 4. **Clear a stale managed marker** if `hermes config set` is refused — see Pitfalls.
 
-5. **Write the systemd user unit and enable linger.**
+5. **Write the systemd user unit and enable linger.** Save it to
+   `$SKILL_XDG_CONFIG/systemd/user/hermes-serve.service`.
    ```ini
    [Unit]
    Description=Hermes backend (loopback)

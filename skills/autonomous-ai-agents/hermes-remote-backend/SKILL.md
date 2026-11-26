@@ -1,7 +1,7 @@
 ---
 name: hermes-remote-backend
 description: "Use when running Hermes on a remote host or in WSL."
-version: 1.4.0
+version: 1.5.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -11,13 +11,18 @@ metadata:
   hermes:
     tags: [hermes, serve, backend, remote, wsl, desktop, gateway, websocket]
     related_skills: [hermes-agent, hermes-profile-fleet, nixos-clan-flake]
-writes: [none]
+writes: [$XDG_CONFIG]
+leaves: one systemd user unit
 side_effects: [systemd, port]
 ---
 
 # hermes-remote-backend
 
 **Heads-up.** Section 5 installs a systemd **user** unit and enables linger, so the backend keeps running after the shell that started it exits. It listens on `127.0.0.1:9119` on the host you run it on; nothing is written inside the project.
+
+```bash
+: "${SKILL_XDG_CONFIG:=${XDG_CONFIG:-$HOME/.config}}"
+```
 
 **Runtime.** Podman; `docker` is the accepted substitute — the policy and the differences that bite are in `docs/runtime.md`.
 
@@ -195,8 +200,8 @@ RestartSec=5
 WantedBy=default.target
 ```
 
-`sudo loginctl enable-linger <user>`, then `systemctl --user enable --now
-hermes-serve.service`.
+Save the unit as `$SKILL_XDG_CONFIG/systemd/user/hermes-serve.service`, then
+`sudo loginctl enable-linger <user>` and `systemctl --user enable --now hermes-serve.service`.
 
 `hermes serve --status` lists the running backend processes and `hermes serve
 --stop` stops them — how to restart the server without hunting a PID or guessing

