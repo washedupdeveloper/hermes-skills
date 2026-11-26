@@ -13,6 +13,9 @@ metadata:
     related_skills: [defensive-patterns, oss-forensics, git-history-sanitisation]
 writes: [none]
 side_effects: [none]
+scope_answers: ["what a CI workflow may do with its token and triggers"]
+scope_triggers: [ci workflow permissions, editing a github action]
+scope_out: [hashing a workflow's dependencies (oss-forensics), writing the flake checks (nix-flake-checks)]
 ---
 
 # Workflow security

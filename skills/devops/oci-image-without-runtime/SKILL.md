@@ -12,6 +12,9 @@ metadata:
     related_skills: [nix-flake-packaging, hermes-remote-backend]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to build a container image that runs with no runtime inside"]
+scope_triggers: [container with no runtime, oci image without a shell]
+scope_out: [packaging the app as a nix package (nix-flake-packaging), declaring the host service (nix-declarative-config)]
 ---
 
 # Running an OCI image without a container runtime

@@ -12,6 +12,9 @@ metadata:
     related_skills: [nixos-clan-flake, verify-and-stop]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to leave no state behind after a run"]
+scope_triggers: [clean up after a run, leave no state behind]
+scope_out: [declaring services in nix (nix-declarative-config), supervising a container (hermes-s6-container-supervision)]
 ---
 
 # ephemeral-cleanup

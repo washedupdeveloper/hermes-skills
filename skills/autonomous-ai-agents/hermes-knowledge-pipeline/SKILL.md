@@ -14,6 +14,9 @@ metadata:
     related_skills: [llm-wiki, obsidian, hermes-project-handoff]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to capture, distil and index a Hermes knowledge base"]
+scope_triggers: [build a knowledge base pipeline, capture and index context]
+scope_out: [structuring an Obsidian vault (obsidian), the project handoff (hermes-project-handoff)]
 ---
 
 # Hermes Knowledge Pipeline

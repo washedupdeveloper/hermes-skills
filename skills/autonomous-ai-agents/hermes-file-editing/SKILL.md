@@ -13,6 +13,9 @@ metadata:
     related_skills: [hermes-agent]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to write a file Hermes refused to overwrite"]
+scope_triggers: [hermes refuses a write, patch a file instead of rewriting]
+scope_out: [terminal tool failures (hermes-terminal-backend), editing inside WSL from Windows (hermes-wsl-backend)]
 ---
 
 # hermes-file-editing

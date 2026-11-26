@@ -16,6 +16,9 @@ metadata:
       - hermes-wsl-backend
 writes: [none]
 side_effects: [none]
+scope_answers: ["why a WireGuard peer cannot be reached"]
+scope_triggers: [wireguard peer unreachable, mesh handshake fails]
+scope_out: [configuring the host firewall declaratively (nix-declarative-config), auditing what a run left behind (ephemeral-cleanup)]
 ---
 
 # WireGuard mesh triage

@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/addyosmani/agent-skills (security-and-hardening, MIT)
 writes: [none]
 side_effects: [none]
+scope_answers: ["where a web app is weak against the OWASP checklist"]
+scope_triggers: [harden a web application, owasp checklist pass]
+scope_out: [reviewing a CI workflow (workflow-security), triaging a dependency compromise (oss-forensics)]
 ---
 
 # web-app-security

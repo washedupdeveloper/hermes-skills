@@ -13,6 +13,9 @@ metadata:
     related_skills: [project-kickoff-planning]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to write a Hermes Bot's persona, capabilities and rubric"]
+scope_triggers: [author a hermes bot, bot persona and rubric]
+scope_out: [scheduling the bot's runs (hermes-kanban-orchestration), writing a skill for it (hermes-agent-skill-authoring)]
 ---
 
 # Authoring Hermes Bots

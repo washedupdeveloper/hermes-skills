@@ -12,6 +12,9 @@ metadata:
     related_skills: [nixos-clan-flake, deterministic-quality-gates]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to expose a repo's scripts as Nix apps and packages"]
+scope_triggers: [package a script as a nix app, expose packages from a flake]
+scope_out: [checks and assertions (nix-flake-checks), images that run with no runtime (oci-image-without-runtime)]
 ---
 
 # nix-flake-packaging

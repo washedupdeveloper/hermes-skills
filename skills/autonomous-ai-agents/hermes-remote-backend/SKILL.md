@@ -14,6 +14,9 @@ metadata:
 writes: [$XDG_CONFIG]
 leaves: one systemd user unit
 side_effects: [systemd, port]
+scope_answers: ["how to run the Hermes backend on a remote host as a user service"]
+scope_triggers: [run hermes on a remote host, backend as a systemd user unit]
+scope_out: [running inside WSL (hermes-wsl-backend), the terminal tool failing (hermes-terminal-backend)]
 ---
 
 # hermes-remote-backend

@@ -13,6 +13,9 @@ metadata:
     related_skills: [hermes-wsl-backend, nix-flake-packaging, hermes-bot-authoring]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to run a durable multi-agent kanban pipeline"]
+scope_triggers: [multi-agent kanban pipeline, durable orchestration across agents]
+scope_out: [spawning one background job (hermes-process-operations), authoring the agents themselves (hermes-bot-authoring)]
 ---
 
 # hermes-kanban-orchestration

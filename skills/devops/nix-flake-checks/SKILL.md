@@ -12,6 +12,9 @@ metadata:
     related_skills: [nix-flake-packaging, deterministic-quality-gates, cross-platform-test-portability]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a flake's checks and eval assertions should be written"]
+scope_triggers: [write flake checks, flake eval assertion]
+scope_out: [exposing packages (nix-flake-packaging), module options (nix-declarative-config)]
 ---
 
 # Writing a flake's checks
@@ -50,6 +53,18 @@ files passes. Assert the input set is non-empty (`assert specs`), and add a nega
 control: reintroduce the defect in a scratch copy, confirm the check fails, and read what it
 printed. A check never observed to fail is a guess.
 
+**A tier listed by hand can shrink without a red check; derive it and fail evaluation.**
+Three `e2e-*` checks written out in one attrset, plus a workflow asserting their names from
+outside, catch deletion but not drift: a new `tests/e2e/<name>/` directory nobody wires in is
+a test no one runs, and nothing notices. Derive the set from the directory
+(`builtins.readDir tests/e2e`), compare it with the attribute names, and `throw` naming the
+unwired directory. Two mechanics make or break the guard: `nix eval … --apply 'cs:
+builtins.attrNames cs'` does **not** force the values, so the `throw` never fires — prove it
+by building the attribute (`nix eval --raw .#checks.<system>.<name>.drvPath`), and re-prove
+it with the probe directory **staged**, because a flake only sees tracked files. Keep the
+outside-in workflow assertion too: it is the only half that catches the whole tier deleted,
+directories included.
+
 **A check must measure the artifact, not a stand-in for it.** A gate pinned to a proxy — a
 tokenizer, a similarity score, a corpus you wrote yourself — fails on correct inputs and passes
 incorrect ones, and every failure then costs a manual adjudication to prove the gate wrong. Feed
@@ -79,7 +94,13 @@ report written by the check, or split the host-only tests into their own check a
 gate ran them; never let the build's green stand for a test it did not run. `nix log
 .#checks.<system>.<name>` shows what actually executed, skips included. A test that needs user
 namespaces (`bwrap`) is the same shape: the binary can be present while the namespace is
-unavailable, so gate on the test having run, not on `shutil.which("bwrap")`.
+unavailable, so gate on the test having run, not on `shutil.which("bwrap")`. And a probe
+must name an executable that exists **inside** the sandbox: `bwrap --unshare-all … /bin/true`
+succeeds in a checkout and fails in the build environment, which has no `/bin`, so the
+capability probe answered "unavailable" in every gate run while passing on the workstation
+— and the three proofs it guarded never executed. Name a path the store guarantees
+(`sys.executable`, `${pkgs.coreutils}/bin/true`), and make the probe's failure say which
+capability is missing rather than just exit 1.
 
 **Regex builtins are stack-bound — never run one over a whole file.**
 `lib.hasInfix a b` is `builtins.match ".*<a>.*" b`, and `builtins.match`, `lib.match` and
@@ -177,19 +198,42 @@ the runner already continues past a failure, and the report is assembled in inpu
 (`ThreadPoolExecutor.map` preserves it). Expose the width as a flag (`--jobs`, 0 = one per
 core) so it is policy rather than a constant.
 
-**Pooling isolates scheduling, not state — give each item its own temp root.** pytest
-numbers and prunes its basetemp under `TMPDIR/pytest-of-<user>/pytest-N`, and
-`_pytest/pathlib.py:cleanup_numbered_dir` leaves an unclosed scandir iterator. Two pooled
-items sharing a `TMPDIR` therefore delete each other's numbered directories mid-scan, which
-surfaces as `ResourceWarning: unclosed scandir iterator` and, under `filterwarnings =
-["error"]`, as a failed test that has nothing to do with the code under test. Measured: one
-failure in six rounds of four concurrent runs on a shared root, none in ten rounds with
-private roots. Give every item its own `TMPDIR`, `TMP` and `TEMP`, plus `-p no:cacheprovider`
-for the cache file. A gate that fails once in five is worse than one that fails always — the
-failure carries no information. Apply this to **every** pooled subprocess that runs pytest,
-not only the one that flaked: a campaign of 72 suites has 72 chances per run, and there the
-symptom is worse than a red check — a suite that dies on another item's cleanup reads as a
-mutant that SURVIVED, which is a reported defect in the suite.
+**Pooling isolates scheduling, not state — give each item its own temp root, and give pytest
+its own basetemp.** pytest builds and prunes `TMPDIR/pytest-of-<user>/pytest-N` whenever no
+basetemp is given, and `_pytest/pathlib.py:cleanup_numbered_dir` leaves an unclosed scandir
+iterator. Two pooled items sharing a `TMPDIR` therefore delete each other's numbered
+directories mid-scan, which surfaces as `ResourceWarning: unclosed scandir iterator` and,
+under `filterwarnings = ["error"]`, as a failed test that has nothing to do with the code
+under test. Two moves, and they are layers rather than alternatives:
+
+- **`--basetemp=<private dir>` on every pytest invocation.** When a basetemp is given,
+  `TempPathFactory.getbasetemp` returns before `make_numbered_dir_with_cleanup` is ever
+  called, so the defective path does not run at all. Measured: four workers sharing one
+  `TMPDIR`, a basetemp per worker — ten rounds, zero failures, and no `pytest-of-*`
+  directory created. This is the fix; the rest is isolation.
+- **`TMPDIR`, `TMP` and `TEMP` private per item, plus `-p no:cacheprovider`.** Measured
+  against the same shared root: one failure in six rounds of four concurrent runs. Private
+  roots removed that symptom but left the underlying contention: with the scandir handle
+  closed on the consumer side, a shared root still failed as `OSError: [Errno 39] Directory
+  not empty`, two items deleting each other's `garbage-*` directories, 2 in 10 rounds.
+
+A gate that fails once in five is worse than one that fails always — the failure carries no
+information. Apply this to **every** pooled subprocess that runs pytest, not only the one that
+flaked: a campaign of 72 suites has 72 chances per run, and there the symptom is worse than a
+red check — a suite that dies on another item's cleanup reads as a mutant that SURVIVED,
+which is a reported defect in the suite.
+
+**Never patch a dependency to fix a flake; leave the code path instead.** A patch against a
+test runner or a library is maintenance the user redoes on every bump, and it stops being the
+fix the moment upstream rewrites the function. Prefer the configuration that never enters the
+defective path — a given basetemp rather than a patched `find_prefixed` — and keep a test that
+holds the configuration in place, so the workaround cannot be quietly dropped. Before bumping
+to collect a fix, read the published source at the tag: a closed issue and an open pull
+request are not a release, and the function can be unchanged in the newest version *and* on
+the default branch. "No released fix" is a reason to avoid the path, never a reason to carry
+a patch. When the defect is tracked, record the upstream state and a one-line repro beside the
+workaround — see `references/reproducing-ci-failures.md` for separating a flaky item from
+shared state.
 
 **Tier the gate so a typo fails in seconds and the expensive check never starts.** Order
 by cost, not importance: lint and types answer in milliseconds, the suite in tens of
@@ -250,8 +294,18 @@ nix flake check --keep-going          # every group reports, not just the first
   staged tree back over the repo reverts the formatting you already applied, and the failure then
   names files you never touched.
 - **Read the failure from an annotation when CI cannot be read otherwise.** On a runner the job
-  log may require a token; the `github` skill carries the step that publishes the failing tail
+  log may require a token; the  `github` skill carries the step that publishes the failing tail
   as a check annotation (its CI-troubleshooting reference), which is readable anonymously.
+- **Measure a cold gate in a throwaway store, and prove it was cold.** `nix flake check
+  --store "local?root=/tmp/cold"` builds into an empty store, so the run is what a fresh
+  machine does: substitution from the substituters plus every local build. Verify it was not
+  short-circuited by hardlinks (a different inode than `/nix/store`, and `copying path …
+  from https://…` lines naming the cache), and split the phases at the first `building '`
+  line — everything before it is fetch. Measured: 6.4 GB substituted, 167 s of builds and
+  three VM tests, 200 s total against a 120-minute timeout. Report the bytes as well as the
+  seconds, because the next machine's bandwidth is the one variable you cannot measure from
+  here. Clean up with `chmod -R u+w` first: store paths are 0555, so `rm -rf` alone fails
+  with thousands of `Permission denied` lines.
 
 ## Pitfalls
 

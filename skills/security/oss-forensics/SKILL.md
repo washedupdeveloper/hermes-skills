@@ -18,6 +18,9 @@ metadata:
     related_skills: []
 writes: [none]
 side_effects: [none]
+scope_answers: ["whether a dependency or its supply chain is compromised"]
+scope_triggers: [compromised dependency, suspicious package release]
+scope_out: [whether the CVE reaches the host (cve-exposure-triage), hardening the app itself (web-app-security)]
 ---
 
 # OSS Security Forensics

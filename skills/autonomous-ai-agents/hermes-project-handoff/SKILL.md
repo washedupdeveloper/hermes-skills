@@ -13,6 +13,9 @@ metadata:
     related_skills: [hermes-bot-authoring, project-kickoff-planning]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to move a Hermes project and its profiles to another machine"]
+scope_triggers: [move a project to another machine, hand off a hermes project]
+scope_out: [installing a profile fleet (hermes-profile-fleet), the session handoff to another agent (handoff)]
 ---
 
 # Hermes Project Handoff

@@ -14,6 +14,9 @@ metadata:
 writes: [$XDG_CONFIG]
 leaves: one systemd user unit
 side_effects: [systemd, port, background-process]
+scope_answers: ["how to run Hermes and its commands inside a WSL2 distro"]
+scope_triggers: [run hermes inside wsl, wsl distro commands from windows]
+scope_out: [a remote host instead of WSL (hermes-remote-backend), shell quoting failures (hermes-terminal-backend)]
 ---
 
 # hermes-wsl-backend

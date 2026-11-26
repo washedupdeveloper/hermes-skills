@@ -13,6 +13,9 @@ metadata:
     related_skills: [hermes-agent, hermes-terminal-backend]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to spawn and supervise a background job or subprocess"]
+scope_triggers: [spawn a background job, supervise a hermes subprocess]
+scope_out: [kanban-level orchestration (hermes-kanban-orchestration), cleaning up afterwards (ephemeral-cleanup)]
 ---
 
 # Hermes process operations
@@ -193,5 +196,19 @@ the problem, then propose the narrowest thing that addresses it.
   is parsed as a different mount and fails or mounts the wrong thing.
 - **Testing a sandbox with a binary that only prints.** A print-only stub proves the child
   starts, not that writes are contained. Have the fake write to `$HOME` and `/tmp`, then
-  assert both host paths are absent; skip the test only when `bwrap` is genuinely
-  unavailable, and assert the test ran in the gate.
+  assert both host paths are absent; when `bwrap` is absent the test **fails naming it** —
+  it does not skip, because a skip exits 0 and the gate then reports a containment proof
+  that never ran.
+- **A signal test that cannot deliver the signal proves nothing.** A job started as a
+  background child of a non-interactive shell inherits `SIGINT` **ignored**, and a shell
+  cannot install a trap over an ignored disposition — so `kill -INT` takes the ignored path,
+  the trap never runs, and the result reads as "cleanup works" or "cleanup is broken"
+  depending on what you expected. `SIGTERM` is unaffected, which is why a TERM test passes
+  while the INT test looks flaky or unexplained. Reset the disposition before exec
+  (`python3 -c 'import os,signal; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execv("prog", ["prog"])'`)
+  and re-run before drawing any conclusion about the trap.
+- **`pgrep -f` counts the shell that contains the pattern.** `pgrep -fc "Runner.Listener"`
+  matches the `bash -lc '… Runner.Listener …'` wrapper and the harness around it, so it
+  reports two live processes when the count is zero — a phantom that survives every check you
+  write on top of it. Count with `ps -eo args | grep -F "<pattern>" | grep -v grep`, or read
+  the tool's own status output, and treat a count that disagrees with `ps` as a self-match.

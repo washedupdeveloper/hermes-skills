@@ -14,6 +14,9 @@ metadata:
     related_skills: [hermes-agent, hermes-profile-fleet]
 writes: [none]
 side_effects: [container]
+scope_answers: ["how s6-overlay supervises Hermes inside a container"]
+scope_triggers: [s6 overlay supervision, container entrypoint for hermes]
+scope_out: [building the image itself (oci-image-without-runtime), host services (nix-declarative-config)]
 ---
 
 # Hermes s6-overlay Container Supervision

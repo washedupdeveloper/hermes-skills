@@ -12,6 +12,9 @@ metadata:
     related_skills: [oss-forensics, github, web-app-security]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to remove a secret or a bad commit before publishing"]
+scope_triggers: [secret in git history, rewrite a branch before publishing]
+scope_out: [deciding what to keep at all (artifact-retention-audit), reviewing the change (caveman-review)]
 ---
 
 # Sanitising a git history before publishing

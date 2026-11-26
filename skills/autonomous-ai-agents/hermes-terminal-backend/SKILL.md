@@ -13,6 +13,9 @@ metadata:
     related_skills: [hermes-agent, nix-declarative-config, hermes-profile-fleet]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to recover when the file or terminal tools fail"]
+scope_triggers: [terminal tool fails, file tool refuses]
+scope_out: [a refused write specifically (hermes-file-editing), problems specific to WSL (hermes-wsl-backend)]
 ---
 
 # Hermes terminal backend (container sandbox)

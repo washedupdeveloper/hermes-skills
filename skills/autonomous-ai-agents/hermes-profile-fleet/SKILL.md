@@ -13,6 +13,9 @@ metadata:
     related_skills: [hermes-agent]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to install and package a fleet of Hermes profiles"]
+scope_triggers: [install a profile fleet, package profiles portably]
+scope_out: [moving a finished project (hermes-project-handoff), declaring it in nix (nix-declarative-config)]
 ---
 
 # hermes-profile-fleet

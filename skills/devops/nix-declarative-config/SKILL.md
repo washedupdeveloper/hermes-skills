@@ -12,6 +12,9 @@ metadata:
     related_skills: [nixos-clan-flake, hermes-agent, hermes-profile-fleet]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a Nix module should declare an option or an override"]
+scope_triggers: [edit a nix module, declare an option or override]
+scope_out: [writing flake checks (nix-flake-checks), packaging scripts as apps (nix-flake-packaging)]
 ---
 
 # Declarative Nix configuration (this user)
