@@ -76,28 +76,28 @@ Hermes that is `/reload-skills` in the CLI or a restart of the app.
 ```
 skills/
 ├── autonomous-ai-agents/  hermes-bot-authoring  hermes-file-editing  hermes-kanban-orchestration
-│                         hermes-knowledge-pipeline  hermes-process-operations  hermes-profile-fleet
-│                         hermes-project-handoff  hermes-remote-backend  hermes-terminal-backend
-│                         hermes-wsl-backend
+│                          hermes-knowledge-pipeline  hermes-process-operations  hermes-profile-fleet
+│                          hermes-project-handoff  hermes-remote-backend  hermes-terminal-backend
+│                          hermes-wsl-backend
+├── build/  nix-flake-checks  nix-flake-packaging  oci-image-without-runtime  release-versioning
 ├── communication/  cavecrew  caveman  caveman-compress  caveman-explore  caveman-review
-│                  reply  ultracave
+│                   reply  ultracave
 ├── devops/  ephemeral-cleanup  hermes-s6-container-supervision  nix-declarative-config
-│           nix-flake-checks  nix-flake-packaging  oci-image-without-runtime  wireguard-mesh-triage
+│            wireguard-mesh-triage
 ├── docs/  api-docs  readme-for-users  writing-for-agents
 ├── note-taking/  obsidian-bases
 ├── productivity/  wait-what
 ├── security/  cve-exposure-triage  git-history-sanitisation  oss-forensics  web-app-security
-│             workflow-security
+│              workflow-security
 └── software-development/  agent-harness-design  browser-extension-review  codebase-design
-                          critical-verdict  cross-platform-correctness  cross-platform-test-portability
-                          defensive-patterns  deterministic-quality-gates  domain-modeling
-                          failure-semantics  grill-me  grill-with-docs  grilling  handoff
-                          improve-codebase-architecture  issue-triage  model-routing  nixos-clan-flake
-                          openspec  postmortem  pr-description  project-kickoff-planning
-                          release-versioning  request-refactor-plan  retro  skill-library-curation
-                          state-machine-audit  surgical-patch  technology-selection  to-spec
-                          to-tickets  two-axis-review  verify-and-stop  wayfinder  wizard
-                          zoom-out
+                           critical-verdict  cross-platform-correctness  cross-platform-test-portability
+                           defensive-patterns  deterministic-quality-gates  domain-modeling
+                           failure-semantics  grill-me  grill-with-docs  grilling  handoff
+                           improve-codebase-architecture  issue-triage  model-routing  nixos-clan-flake
+                           openspec  postmortem  pr-description  project-kickoff-planning
+                           request-refactor-plan  retro  skill-library-curation  state-machine-audit
+                           surgical-patch  technology-selection  to-spec  to-tickets  two-axis-review
+                           verify-and-stop  wayfinder  wizard  zoom-out
 ```
 
 70 `SKILL.md` across 70 skills — 69 load on Windows; `hermes-s6-container-supervision` declares

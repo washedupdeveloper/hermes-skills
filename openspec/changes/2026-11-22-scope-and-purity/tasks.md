@@ -20,8 +20,11 @@
 
 ## Open
 
-- [ ] 8. Move seven domains to ten: add `build`, rename the rest, update the
-  README layout tree and the contract in one commit per domain.
+- [ ] 8. Move seven domains to ten, one commit per domain. **Partial:** `docs` is a
+  domain (7 -> 8, `820cc6d`), with the README tree regenerated from the filesystem. `build`
+  and `testing` are proposed in `design.md` with their evidence and the alternatives
+  rejected; the two remaining single-skill domains (`note-taking`, `productivity`) have a
+  question their skill cannot answer, and the design states the two ways out.
 - [ ] 9. Populate `scope_answers`, `scope_triggers` and `scope_out`, then make them
   required. **Partial:** the fields, the rule and its four controls are in
   (`scope_required: false`); nine skills carry a scope — `communication` (7),
@@ -68,6 +71,7 @@ run against this tree on that date, not a restatement of the original tick.
 | every effect-instruction is declared | `python scripts/validate.py` | 0 violations |
 | a scope is all three parts, or a failure | `pytest tests/unit/test_validate.py -q -k scope` | 7 passed |
 | a named task selects exactly one skill | `python3 scripts/routing-score.py --strict` | 74/74, floor 100% |
+| a domain move is routing-neutral | the same score after `820cc6d` | 74/74 unchanged |
 | the scorer can fail | `pytest tests/unit/test_routing.py -q` | 5 passed |
 | the catalog carries a scope where populated | `grep -l scope_answers $(find skills -name SKILL.md) \| wc -l` | 9 of 70 |
 | `$XDG_CONFIG` is allowed and redirectable | `pytest tests/unit/test_validate.py -q` | 142 passed |

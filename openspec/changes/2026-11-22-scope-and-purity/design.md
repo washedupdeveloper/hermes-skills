@@ -34,3 +34,48 @@ and 5 `npm install -g`. Those mentions are mostly *instructions to the reader*, 
 effects the gate performs, and the contract's rule is about what a skill does when it
 runs. Separating the two needs a rule, not a find-and-replace; that is why it is still
 open and why it is stated here rather than guessed at.
+
+## Taxonomy: seven domains to ten
+
+Task 8 moves the catalog from seven domains to ten, one commit per domain. `docs` moved
+first (`820cc6d`); this is the decision for the other two.
+
+The evidence for moving anything at all:
+
+| measurement | value |
+|---|---|
+| `software-development` share of the catalog | 39 of 70 |
+| `note-taking`, `productivity` | 1 skill each |
+| routing after the `docs` move | 74/74, floor 100% — the taxonomy is routing-neutral |
+| the test each domain is held to | its `CATEGORY.md` question, which its own skills must answer |
+
+### Proposed
+
+| domain | skills | question it states |
+|---|---|---|
+| `build` | `nix-flake-checks`, `nix-flake-packaging`, `oci-image-without-runtime`, `release-versioning` | how does this repository turn its source into an artifact? |
+| `testing` | `cross-platform-test-portability`, `deterministic-quality-gates`, `verify-and-stop` | how do you know the artifact works, on every platform it claims? |
+
+Both sets answer their question without borrowing from `devops` (runtime and host
+services) or `software-development` (design, review, planning). `nix-declarative-config`
+stays in `devops`: it declares a host, not an artifact.
+
+### Rejected
+
+| option | why not |
+|---|---|
+| merge the thin domains into one `workflow` domain | hides the real defect: `note-taking` asks how to structure a knowledge base, and its only skill answers how Bases views and filters work. Merging keeps the mismatch and adds a home for nothing |
+| split by language or framework (`python`, `nix`) | no such axis exists in the catalog; several skills span both |
+| leave seven and rely on triggers | triggers route per skill, so the score cannot see that one domain holds 39 skills — the taxonomy problem is invisible to the measure that would justify the move |
+
+### Still open after these two
+
+`note-taking` and `productivity` remain one skill each, and their `CATEGORY.md` questions
+describe jobs their skill does not do. Two ways out, and this change does not pick one:
+
+1. **Rewrite the questions** to match the skill (`note-taking`: how does an Obsidian Base
+   express a query?), leaving the domains small but honest.
+2. **Move the skills** to a domain whose question they answer, and delete the empty one.
+
+Either is a one-commit change. What is not acceptable is leaving a question that its own
+skills cannot answer, because that is the same defect the routing measure exists to catch.
