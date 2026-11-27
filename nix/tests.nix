@@ -321,8 +321,15 @@ let
     "openspec/"
     "nix/"
     "tests/"
-    # The nix domain skills teach the pattern this rule enforces; naming it there is the point.
-    "skills/devops/nix-"
+  ];
+
+  # The nix-flake skills teach the pattern this rule enforces; naming the app there is the
+  # point. Matched on the skill's own name, not its directory: this was `skills/devops/nix-`
+  # and the taxonomy move to `skills/build/` turned the gate red for a reason that had
+  # nothing to do with the rule.
+  exemptSkillNames = [
+    "nix-flake-checks"
+    "nix-flake-packaging"
   ];
 
   # The flake defines the app; it does not invoke it.
@@ -337,6 +344,7 @@ let
         !(lib.elem (rel p) adoptedRelPaths)
         && !(lib.elem (rel p) exemptFiles)
         && !(lib.any (pre: lib.hasPrefix pre (rel p)) exemptPrefixes)
+        && !(lib.any (name: lib.hasInfix "/${name}/" (rel p)) exemptSkillNames)
       )
       (
         builtins.filter (
