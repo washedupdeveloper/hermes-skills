@@ -1,5 +1,7 @@
 # productivity
 
-**Question.** How do I turn a document or message into the action it implies?
+**Question.** How do I restate a message in plain English so the claim it actually makes
+is clear?
 
-**Not here.** `reply` — writing the answer rather than extracting the action. `to-tickets` — splitting a plan into tickets, which is delivery.
+**Not here.** `reply` — writing the answer rather than restating the question.
+`to-tickets` — splitting a plan into tickets, which is delivery.

@@ -71,14 +71,23 @@ stays in `devops`: it declares a host, not an artifact.
 | split by language or framework (`python`, `nix`) | no such axis exists in the catalog; several skills span both |
 | leave seven and rely on triggers | triggers route per skill, so the score cannot see that one domain holds 39 skills — the taxonomy problem is invisible to the measure that would justify the move |
 
-### Still open after these two
+### The two single-skill domains: the questions were rewritten
 
-`note-taking` and `productivity` remain one skill each, and their `CATEGORY.md` questions
-describe jobs their skill does not do. Two ways out, and this change does not pick one:
+`note-taking` and `productivity` each hold one skill, and each stated a question its skill
+does not answer. Decided by the owner on 2026-11-26: **rewrite the questions**, do not move
+the skills.
 
-1. **Rewrite the questions** to match the skill (`note-taking`: how does an Obsidian Base
-   express a query?), leaving the domains small but honest.
-2. **Move the skills** to a domain whose question they answer, and delete the empty one.
+| domain | question before | question after |
+|---|---|---|
+| `note-taking` | how do I structure a knowledge base so a person and an agent both read it? | how does an Obsidian Base express a query — its view, its filter, its formula? |
+| `productivity` | how do I turn a document or message into the action it implies? | how do I restate a message so the claim it actually makes is clear? |
 
-Either is a one-commit change. What is not acceptable is leaving a question that its own
-skills cannot answer, because that is the same defect the routing measure exists to catch.
+Rejected: moving `obsidian-bases` into `docs` and `wait-what` into `communication`, which
+would leave two domains empty. A domain with one skill that answers its question is a
+small domain; a domain with a question its skill cannot answer is a lie the catalog tells
+about itself. The second is worse, and the routing measure cannot see either — it scores
+prompts, not questions.
+
+The cost is on the record: two domains are now named for a job narrower than their name
+suggests. Renaming them (`obsidian-bases` under `note-taking`, `wait-what` under
+`productivity`) is a separate decision about names, not about scope.

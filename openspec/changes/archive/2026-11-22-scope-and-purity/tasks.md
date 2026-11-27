@@ -20,17 +20,16 @@
 
 ## Open
 
-- [x] 8. Move seven domains to ten, one commit per domain. `docs` (3, `820cc6d`), `build`
-  (4, `e996b08`), `testing` (3, this commit). Routing held at 74/74 through all three, which
-  is the proof the move is behaviour-neutral. `note-taking` and `productivity` remain one
-  skill each with a question their skill cannot answer; `design.md` states the two ways out
-  and does not pick one.
-- [ ] 9. Populate `scope_answers`, `scope_triggers` and `scope_out`, then make them
-  required. **Partial:** the fields, the rule and its four controls are in
-  (`scope_required: false`); nine skills carry a scope — `communication` (7),
-  `note-taking` (1), `productivity` (1). The remaining 61 are unpopulated, so the switch
-  stays off, and it cannot be turned on until they are. Which fields a long skill needs is
-  a judgement per skill, not a mechanical fill.
+- [x] 8. Move seven domains to ten, one commit per domain: `docs` (3, `820cc6d`), `build`
+  (4, `e996b08`), `testing` (3, `9622178`). Routing held at 74/74 through all three, which
+  is the proof the move is behaviour-neutral. The two single-skill domains kept their
+  skills and had their questions rewritten to match them, by the owner's decision.
+- [x] 9. Populate `scope_answers`, `scope_triggers` and `scope_out`, then make them
+  required. 70 of 70 skills carry all three, `scope_required` is true, and the catalog
+  reports 140 normalised trigger phrases with no duplicate. The rule is all three or a
+  failure, an answer is 3-160 characters, and an exclusion that names a skill must name
+  one that exists (local or `external_skills`) -- that last rule found two ghosts the day
+  it was written.
 - [x] 10. Write `scripts/routing-score.py` and record its score. 74/74 (100%) over a
   corpus of 74 prompts, floor 1.0 in `library/routing.json`, and the gate runs it with
   `--strict`: a tie, a miss, or a score below the floor fails the build.
@@ -41,7 +40,7 @@
   background-process], `nixos-clan-flake` [container].
 - [x] 12. Add `install.sh --check`: verify an existing install (present, pointing here,
   not stale) and exit 1 on any problem, without writing.
-- [ ] 13. Archive this change once 8-12 are done.
+- [x] 13. Archive this change once 8-12 are done.
 
 ## Found while running the gate
 

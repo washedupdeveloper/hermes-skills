@@ -70,9 +70,9 @@ def test_the_milestone_agrees_with_the_tree():
 def test_a_drifted_number_is_caught():
     """The negative control: bump one figure and the comparison must notice."""
     real = DOC.read_text(encoding="utf-8")
-    assert "**23 requirements across four capabilities**" in real, "the checked sentence moved"
-    drifted = real.replace("**23 requirements across four capabilities**",
-                           "**24 requirements across four capabilities**", 1)
+    assert "**32 requirements across four capabilities**" in real, "the checked sentence moved"
+    drifted = real.replace("**32 requirements across four capabilities**",
+                           "**33 requirements across four capabilities**", 1)
     assert mismatches(drifted), "a document stating 22 requirements was accepted"
 
 

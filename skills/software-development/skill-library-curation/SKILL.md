@@ -672,7 +672,16 @@ partition is visible. A skill has exactly one home.
 - **Every domain ships a `CATEGORY.md`**: its trigger ("use these when…"), its boundary, and a
   "not here — use X" list whose targets the gate resolves. The loader shows the directory name
   and a host-generated blurb; nothing in the tree authors that blurb, so the domain's real
-  contract has to live beside the skills.
+  contract has to live beside the skills. Write those targets in **skill** terms: a backticked
+  *domain* name is read as a skill name and fails as an unresolved reference.
+- **A move is the only test of whether a rule is keyed to identity or to location.** Move one
+  domain per commit and re-measure routing after each: a number that holds proves the scope
+  fields travel with the skill and were never keyed to the directory, while a drop names the
+  field that was. The same operation exposes every path-shaped rule in the tree — an exemption,
+  an allowlist, a scan that skips `skills/<domain>/<name>` — and those go stale in silence when
+  the directory moves, so grep the old prefix before pushing and key each rule to the skill's
+  own name. Budget one gate run for it: the failures are immediate and specific, which is why
+  a reorganisation is worth doing as the deliberate test it is.
 - **Choose the map from data, not from taste.** Dump the catalog, histogram it by category, and
   cluster by question. `scripts/domain-audit.py <skills-root>` prints the histogram, every
   description past the window, the top overlapping description pairs and the cross-name

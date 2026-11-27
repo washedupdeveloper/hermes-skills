@@ -34,8 +34,8 @@ Reaching it was not the end. Changes have landed since, and the list of them is
 a real defect: assertions that caught only the spellings they were written around, rules whose
 derivations could not tell a right tree from a wrong one, prose stating figures no clone could settle.
 
-The contract is **23 requirements across four capabilities** — `agent-collaboration` (3),
-`dependency-maintenance` (2), `gate-integrity` (13) and `skill-library` (5) — measured by **17
+The contract is **32 requirements across four capabilities** — `agent-collaboration` (3),
+`dependency-maintenance` (2), `gate-integrity` (13) and `skill-library` (14) — measured by **17
 mutants**. `openspec validate --all --strict` holds the specs;
 `tests/unit/test_milestone_doc.py` holds these two figures, deriving both from the tree so this
 paragraph fails the gate the moment it drifts.

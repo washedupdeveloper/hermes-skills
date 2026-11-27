@@ -65,6 +65,15 @@ it with the probe directory **staged**, because a flake only sees tracked files.
 outside-in workflow assertion too: it is the only half that catches the whole tier deleted,
 directories included.
 
+**An exemption keyed to a directory un-exempts whatever moves out of it.** A scan that
+names the CLI app exempted the two skills that teach the pattern by path prefix
+(`skills/devops/nix-`); a taxonomy move to `skills/build/` silently un-exempted both, and
+the gate went red over a rule those skills are supposed to satisfy. Key allowlists to the
+skill's own name (`lib.hasInfix "/nix-flake-checks/" (rel p)`), never to its parent
+directory, and treat any directory reorganisation as a test of every path-shaped rule: the
+ones keyed to identity survive, the ones keyed to location fail. Budget one gate run for
+it — the failure is immediate and specific, which is the point.
+
 **A check must measure the artifact, not a stand-in for it.** A gate pinned to a proxy — a
 tokenizer, a similarity score, a corpus you wrote yourself — fails on correct inputs and passes
 incorrect ones, and every failure then costs a manual adjudication to prove the gate wrong. Feed
