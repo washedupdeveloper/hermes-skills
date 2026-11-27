@@ -20,11 +20,11 @@
 
 ## Open
 
-- [ ] 8. Move seven domains to ten, one commit per domain. **Partial:** `docs` is a
-  domain (7 -> 8, `820cc6d`), with the README tree regenerated from the filesystem. `build`
-  and `testing` are proposed in `design.md` with their evidence and the alternatives
-  rejected; the two remaining single-skill domains (`note-taking`, `productivity`) have a
-  question their skill cannot answer, and the design states the two ways out.
+- [x] 8. Move seven domains to ten, one commit per domain. `docs` (3, `820cc6d`), `build`
+  (4, `e996b08`), `testing` (3, this commit). Routing held at 74/74 through all three, which
+  is the proof the move is behaviour-neutral. `note-taking` and `productivity` remain one
+  skill each with a question their skill cannot answer; `design.md` states the two ways out
+  and does not pick one.
 - [ ] 9. Populate `scope_answers`, `scope_triggers` and `scope_out`, then make them
   required. **Partial:** the fields, the rule and its four controls are in
   (`scope_required: false`); nine skills carry a scope — `communication` (7),

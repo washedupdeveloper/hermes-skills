@@ -49,7 +49,10 @@ The evidence for moving anything at all:
 | routing after the `docs` move | 74/74, floor 100% — the taxonomy is routing-neutral |
 | the test each domain is held to | its `CATEGORY.md` question, which its own skills must answer |
 
-### Proposed
+### Implemented
+
+`docs` (3), `build` (4) and `testing` (3) each carry a commit; the catalog now has ten
+domains and routing is unchanged at 74/74 after every move.
 
 | domain | skills | question it states |
 |---|---|---|
