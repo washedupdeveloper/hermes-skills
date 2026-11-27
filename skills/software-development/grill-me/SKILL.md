@@ -13,6 +13,9 @@ metadata:
     related_skills: [grilling, grill-with-docs]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to grill the user outside a repo"]
+scope_triggers: [grill me, challenge the idea without a repo]
+scope_out: [grilling a repo plan (grill-with-docs), the spec it produces (to-spec)]
 ---
 
 # grill-me

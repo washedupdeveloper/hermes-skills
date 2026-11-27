@@ -12,6 +12,9 @@ metadata:
     related_skills: [grounded-citations, requesting-code-review, deterministic-quality-gates]
 writes: [none]
 side_effects: [none]
+scope_answers: ["whether an idea or artifact is sound"]
+scope_triggers: [judge viability or soundness, critical verdict on a plan]
+scope_out: [interviewing the plan (grilling), reviewing the diff (two-axis-review)]
 ---
 
 # critical-verdict

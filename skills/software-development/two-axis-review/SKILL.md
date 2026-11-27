@@ -13,6 +13,9 @@ metadata:
     related_skills: [requesting-code-review, to-spec, verify-and-stop]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a branch scores on standards and spec"]
+scope_triggers: [review a branch on two axes, standards and spec review]
+scope_out: [the one-line diff review (caveman-review), proving acceptance (verify-and-stop)]
 ---
 
 # Two-axis review

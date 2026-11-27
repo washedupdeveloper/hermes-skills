@@ -13,6 +13,9 @@ metadata:
     related_skills: [grilling, domain-modeling, grill-me]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to grill a repo plan and write the decisions down"]
+scope_triggers: [grill a repo plan, record decisions while grilling]
+scope_out: [grilling outside a repo (grill-me), the general interview (grilling)]
 ---
 
 # grill-with-docs

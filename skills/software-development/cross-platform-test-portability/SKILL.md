@@ -12,6 +12,9 @@ metadata:
     related_skills: [deterministic-quality-gates, surgical-patch, verify-and-stop]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a test suite passes on all three platforms"]
+scope_triggers: [tests must pass on every platform, portable test suite]
+scope_out: [application code correctness (cross-platform-correctness), the CI matrix itself (workflow-security)]
 ---
 
 # Making a test suite pass on every OS
@@ -144,6 +147,15 @@ wherever the suite runs instead of only on the OS that lacks it. Recipe:
 ordinary test, and it is the difference between a guard you believe and a guard nobody
 has run.
 
+**A symlink is a copy on Windows, so "points at" is not a portable assertion.** MSYS
+`ln -s` falls back to copying when it cannot create a link, and `os.symlink` needs
+Developer Mode or elevation. A verifier that resolves links in a loop therefore reports
+every entry as broken on Windows while the install is perfectly good. Assert what the
+caller needs — "the target reads this directory" — and accept either shape: `samefile`
+when the entry is a link, a recursive content compare when it is a directory. A test that
+selects `p.is_symlink()` entries finds an empty list there and fails on an index error
+that names nothing useful.
+
 **Guard on the capability, not the OS name.** `os.name != "nt"` names the platform when
 what the test needs is a *facility*. Ask the interpreter instead —
 `importlib.util.find_spec("pwd") is not None` — because the two come apart: a module can
@@ -192,6 +204,11 @@ comment rather than leaving the impression of coverage.
   on a list order the locale happened to produce.
 - **A file-mode assertion.** `chmod` and the executable bit mean little on Windows, so
   a test that asserts a mode, or depends on one, is POSIX-only.
+- **`shutil.copytree` preserves the source's mode, including read-only.** Copying a
+  fixture out of a Nix store path or any `0444` file yields a copy the test cannot edit,
+  and the failure arrives as `PermissionError` on the *assertion's* fixture rather than
+  as anything to do with the code. Pass `copy_function=shutil.copyfile` (which does not
+  preserve the mode) or `chmod` the copy after creating it.
 - **Assuming `python3` exists.** Windows has `python`; NixOS has neither name. Resolve
   the interpreter the way the host provides it.
 - **Treating a sweep hit as a finding.** A category grep is high recall and low

@@ -13,6 +13,9 @@ metadata:
     related_skills: [defensive-patterns, agent-harness-design, postmortem]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how error types codes and recovery should be designed"]
+scope_triggers: [design error types, error codes and recovery]
+scope_out: [hardening inputs (defensive-patterns), the postmortem after it fails (postmortem)]
 ---
 
 # Failure semantics

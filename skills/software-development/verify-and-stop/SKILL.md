@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
 side_effects: [none]
+scope_answers: ["whether acceptance is actually proven"]
+scope_triggers: [prove acceptance, audit another agent's work]
+scope_out: [the review of the branch (two-axis-review), the postmortem (postmortem)]
 ---
 
 # verify-and-stop
@@ -128,6 +131,17 @@ tool, the tool's defaults and the user's config are silently part of the argumen
   exclude the tool's own state directory, and assert the result covers every changed
   path. The same shape applies to any `git diff`-fed scorer: staged-but-uncommitted and
   untracked are two more inputs the command does not include by default.
+- **A build that copies from git sees only tracked files.** `nix build` and
+  `nix flake check` on a dirty tree copy the working tree through git's file list, so a
+  file that is not staged is absent from the build. The symptom is either a false green
+  (a test you just wrote never ran, and the count does not move) or an error about a file
+  you can plainly see (`no such file` from a link check, a missing module). Stage first —
+  `git add <path>` or `git add -N <path>` for an existing file — and re-run before
+  reading either result. Measured three times in one session: a new test file, a new doc
+  linked from an index, and a new flake module were each invisible to the gate while
+  present on disk. Treat "the check cannot see my file" as a staging problem, not a code
+  problem, and prove the file was included by watching the count move or the check name
+  appear.
 - **Pin the command that produces the evidence, not just the consumer.** `diff.dstPrefix`,
   `diff.noprefix`, `color.ui=always`, `diff.external` and a configured pager each rewrite
   the patch: a parser keyed on `+++ b/<path>` then fails to match every file and reports
@@ -576,6 +590,10 @@ a probe you write from the requirement text and run against their tree.
 
 The design of a with/without comparison, and how to read a delta smaller than the noise:
 `references/controlled-comparison.md`.
+
+Measuring whether a build fits a time budget on a machine that has never built it — an
+empty store, proving it was cold, and splitting substitution from build time:
+`references/measuring-a-cold-build.md`.
 
 ## Stop condition
 

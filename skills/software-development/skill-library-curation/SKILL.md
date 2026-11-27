@@ -12,6 +12,9 @@ metadata:
     related_skills: [hermes-agent-skill-authoring, writing-for-agents]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how the skill library is sourced and de-duplicated"]
+scope_triggers: [curate the skill library, skill overlap and conflicts]
+scope_out: [writing one skill (writing-for-agents), authoring a hermes skill (hermes-agent-skill-authoring)]
 ---
 
 # Skill Library Curation

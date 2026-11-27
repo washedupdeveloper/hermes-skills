@@ -13,6 +13,9 @@ metadata:
     related_skills: [grill-me, grill-with-docs, domain-modeling]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to interview a plan relentlessly"]
+scope_triggers: [interview a plan, relentless questioning]
+scope_out: [the verdict on it (critical-verdict), grilling with repo docs (grill-with-docs)]
 ---
 
 # grilling

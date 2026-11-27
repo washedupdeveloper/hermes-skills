@@ -13,6 +13,9 @@ metadata:
     related_skills: [grill-me, to-spec, to-tickets, codebase-design]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to scope a refactor before starting"]
+scope_triggers: [plan a refactor, scope a refactor first]
+scope_out: [judging module shape (codebase-design), the smallest fix instead (surgical-patch)]
 ---
 
 # Request Refactor Plan

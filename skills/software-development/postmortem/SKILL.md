@@ -13,6 +13,9 @@ metadata:
     source: DeepSeek Harness (deepseek-ai/deepseek-harness) docs/postmortem, distilled
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to write a postmortem after an incident"]
+scope_triggers: [write a postmortem, after an incident]
+scope_out: [the error design that failed (failure-semantics), the retro of the session (retro)]
 ---
 
 # postmortem

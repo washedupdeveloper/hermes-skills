@@ -13,6 +13,9 @@ metadata:
     related_skills: [writing-for-agents, domain-modeling, two-axis-review]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to document a public API declaration"]
+scope_triggers: [document a public api, api doc block]
+scope_out: [the README for users (readme-for-users), the PR body (pr-description)]
 ---
 
 # API documentation

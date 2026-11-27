@@ -13,6 +13,9 @@ metadata:
     related_skills: [to-spec, domain-modeling]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to compact a session for another agent"]
+scope_triggers: [hand a session to another agent, compact the context]
+scope_out: [moving a project between machines (hermes-project-handoff), the retro of the session (retro)]
 ---
 
 # handoff

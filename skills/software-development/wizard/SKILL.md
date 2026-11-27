@@ -13,6 +13,9 @@ metadata:
     related_skills: [handoff]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to generate a wizard for human-only steps"]
+scope_triggers: [wizard for human steps, steps only a human can do]
+scope_out: [planning the work (project-kickoff-planning), verifying it (verify-and-stop)]
 ---
 
 # wizard

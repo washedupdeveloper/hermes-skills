@@ -11,6 +11,9 @@ metadata:
     tags: [planning, kickoff, greenfield, research, milestones, interview, scaffold]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to plan a new project from scratch"]
+scope_triggers: [plan a new project, kickoff research and milestones]
+scope_out: [choosing the stack (technology-selection), splitting the plan (to-tickets)]
 ---
 
 # Project Kickoff Planning

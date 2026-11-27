@@ -13,6 +13,9 @@ metadata:
     related_skills: [github, grilling, domain-modeling, to-tickets]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how an issue becomes an agent-ready brief"]
+scope_triggers: [triage an issue, issue to brief]
+scope_out: [splitting a plan into tickets (to-tickets), the pr body (pr-description)]
 ---
 
 # Issue triage

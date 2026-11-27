@@ -13,6 +13,9 @@ metadata:
     related_skills: [to-tickets, domain-modeling, grill-me]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a conversation becomes a written spec"]
+scope_triggers: [turn talk into a spec, write the spec]
+scope_out: [authoring an openspec change (openspec), splitting into tickets (to-tickets)]
 ---
 
 # to-spec

@@ -13,6 +13,9 @@ metadata:
     source: distilled from a full CLI/run-engine state-machine audit
 writes: [none]
 side_effects: [none]
+scope_answers: ["whether a state machine retries or concurrency is sound"]
+scope_triggers: [audit a state machine, retry and concurrency bugs]
+scope_out: [error semantics (failure-semantics), a bug fix (surgical-patch)]
 ---
 
 # State Machine Audit

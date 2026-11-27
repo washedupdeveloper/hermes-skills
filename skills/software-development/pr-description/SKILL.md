@@ -13,6 +13,9 @@ metadata:
     related_skills: [github, two-axis-review, verify-and-stop, release-versioning]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to write a PR body as evidence"]
+scope_triggers: [write a pull request body, pr description with evidence]
+scope_out: [reviewing the branch (two-axis-review), the release note (release-versioning)]
 ---
 
 # Pull request description

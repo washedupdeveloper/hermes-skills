@@ -13,6 +13,9 @@ metadata:
     related_skills: [writing-for-agents, systematic-debugging]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to improve the agent's setup after a session"]
+scope_triggers: [retro a session, improve the agent setup]
+scope_out: [a postmortem for an incident (postmortem), curating the skill library (skill-library-curation)]
 ---
 
 # retro

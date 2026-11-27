@@ -178,6 +178,26 @@ def check_scope_fields(skills, parsed, contract, result, repo, parse_list) -> No
                         f"`scope_out` has {len(lists['scope_out'])} entries; five is the most")
 
 
+def check_exclusions(skills, parsed, contract, result, repo, parse_list) -> None:
+    """An exclusion that names a skill names one that exists.
+
+    `scope_out` earns its place by pointing at the sibling that does the other job. A
+    name that resolves to nothing -- because the skill was never written, or was renamed
+    and the exclusion was not updated -- reads as guidance and is a dead end. Local
+    skills and the contract's `external_skills` both resolve; anything else fails.
+    """
+    local = {path.parent.name for path in skills}
+    external = set(contract.get("external_skills") or ())
+    for path in skills:
+        fields, _ = parsed[path]
+        for entry in parse_list(fields.get("scope_out") or ""):
+            for name in re.findall(r"\(([a-z0-9-]+)\)", entry):
+                if name not in local and name not in external:
+                    result.fail(path.relative_to(repo),
+                                f"`scope_out` names `{name}`, which is neither a skill here "
+                                "nor in the contract's external_skills")
+
+
 def check_triggers(skills, parsed, contract, result, repo) -> None:
     """A trigger phrase belongs to exactly one skill."""
     owner: dict[str, Path] = {}
@@ -302,6 +322,7 @@ def check_scope(skills, parsed, contract, repo, result, parse_list) -> None:
     check_writes(skills, parsed, contract, repo, result, parse_list)
     check_domain_contracts(repo, skills, contract, result)
     check_scope_fields(skills, parsed, contract, result, repo, parse_list)
+    check_exclusions(skills, parsed, contract, result, repo, parse_list)
     check_triggers(skills, parsed, contract, result, repo)
     check_portability(skills, parsed, contract, repo, result)
     check_runtime(skills, parsed, contract, repo, result)

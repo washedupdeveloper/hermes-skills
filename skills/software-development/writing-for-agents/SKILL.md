@@ -13,6 +13,9 @@ metadata:
     related_skills: [retro, hermes-agent-skill-authoring]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to write documents agents read"]
+scope_triggers: [write a skill or agents file, docs for agents]
+scope_out: [the user readme (readme-for-users), curating the library (skill-library-curation)]
 ---
 
 # writing-for-agents

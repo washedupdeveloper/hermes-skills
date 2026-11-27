@@ -13,6 +13,9 @@ metadata:
     related_skills: [codebase-design, zoom-out, request-refactor-plan]
 writes: [none]
 side_effects: [none]
+scope_answers: ["where the shallow modules are"]
+scope_triggers: [find shallow modules, propose deep refactors]
+scope_out: [designing one module (codebase-design), mapping callers (zoom-out)]
 ---
 
 # Improve Codebase Architecture

@@ -13,6 +13,9 @@ metadata:
     related_skills: [grilling, grill-me, to-spec]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a glossary or ADR set is sharpened"]
+scope_triggers: [sharpen a glossary, write an adr set]
+scope_out: [turning talk into a spec (to-spec), deciding the stack (technology-selection)]
 ---
 
 # domain-modeling

@@ -13,6 +13,9 @@ metadata:
     related_skills: [improve-codebase-architecture, domain-modeling, request-refactor-plan]
 writes: [none]
 side_effects: [none]
+scope_answers: ["what shape a module should have"]
+scope_triggers: [design module shape, judge a refactor]
+scope_out: [finding shallow modules (improve-codebase-architecture), mapping a lost codebase (zoom-out)]
 ---
 
 # Codebase Design

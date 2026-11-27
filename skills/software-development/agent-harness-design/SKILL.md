@@ -12,6 +12,9 @@ metadata:
     related_skills: [deterministic-quality-gates, writing-for-agents, hermes-agent, defensive-patterns, postmortem]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a harness seam tool or registry should be shaped"]
+scope_triggers: [change a harness seam, add a tool to the registry]
+scope_out: [the modules it calls (codebase-design), the review of the change (two-axis-review)]
 ---
 
 # agent-harness-design

@@ -12,6 +12,9 @@ metadata:
     related_skills: [project-kickoff-planning, to-spec, domain-modeling]
 writes: [none]
 side_effects: [none]
+scope_answers: ["which stack or platform to choose"]
+scope_triggers: [choose a stack, platform or model choice]
+scope_out: [the model for code (model-routing), the spec it serves (to-spec)]
 ---
 
 # Technology Selection

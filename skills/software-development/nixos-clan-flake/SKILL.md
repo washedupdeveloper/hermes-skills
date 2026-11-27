@@ -12,6 +12,9 @@ metadata:
     related_skills: [systematic-debugging, requesting-code-review]
 writes: [none]
 side_effects: [container]
+scope_answers: ["how a NixOS or Clan flake is worked over WSL"]
+scope_triggers: [nixos clan flake over wsl, clan machine configuration]
+scope_out: [module options (nix-declarative-config), flake checks (nix-flake-checks)]
 ---
 
 # nixos-clan-flake

@@ -450,7 +450,7 @@ SCOPED = (
     'writes: [none]\n'
     'scope_answers: ["what the skill settles"]\n'
     'scope_triggers: ["settle this thing"]\n'
-    'scope_out: ["other things (other-skill)"]'
+    'scope_out: ["other things (github)"]'
 )
 
 
@@ -489,3 +489,24 @@ def test_scope_required_flips_the_rule():
         (repo / "library" / "contract.json").write_text(json.dumps(contract), encoding="utf-8")
         out = check(repo)
         assert any("declares no scope" in v for v in out), out
+
+def test_an_exclusion_naming_a_ghost_skill_fails():
+    """`scope_out` earns its place by pointing at a real sibling; a ghost is a dead end."""
+    with tempfile.TemporaryDirectory() as d:
+        front = ('writes: [none]\n'
+                 'scope_answers: ["what it settles"]\n'
+                 'scope_triggers: ["settle this thing"]\n'
+                 'scope_out: ["other things (ghost-skill)"]')
+        out = check(scope_repo(d, front=front))
+        assert any("ghost-skill" in v for v in out), out
+
+
+def test_an_exclusion_naming_an_external_skill_passes():
+    """The contract's external_skills resolve too -- `github` is not in this tree."""
+    with tempfile.TemporaryDirectory() as d:
+        front = ('writes: [none]\n'
+                 'scope_answers: ["what it settles"]\n'
+                 'scope_triggers: ["settle this thing"]\n'
+                 'scope_out: ["opening a pull request (github)"]')
+        out = check(scope_repo(d, front=front))
+        assert not any("scope_out" in v for v in out), out

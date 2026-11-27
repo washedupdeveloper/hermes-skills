@@ -12,6 +12,9 @@ metadata:
     related_skills: [defensive-patterns, critical-verdict, web-app-security]
 writes: [none]
 side_effects: [none]
+scope_answers: ["what a WebExtension background script may do"]
+scope_triggers: [review a browser extension, webextension background script]
+scope_out: [a web app's own hardening (web-app-security), the workflow that ships it (workflow-security)]
 ---
 
 # browser-extension-review

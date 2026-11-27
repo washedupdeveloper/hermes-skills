@@ -12,6 +12,9 @@ metadata:
     related_skills: [nixos-clan-flake, deterministic-quality-gates]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how code stays correct on Windows macOS and Linux"]
+scope_triggers: [code must run on all three platforms, windows macos linux differences]
+scope_out: [making the tests portable (cross-platform-test-portability), hardening input handling (defensive-patterns)]
 ---
 
 # cross-platform-correctness

@@ -13,6 +13,9 @@ metadata:
     related_skills: [codebase-design, domain-modeling]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to map modules and callers when lost"]
+scope_triggers: [lost in the code, map modules and callers]
+scope_out: [redesigning the modules (codebase-design), finding shallow ones (improve-codebase-architecture)]
 ---
 
 # Zoom Out

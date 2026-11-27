@@ -12,6 +12,9 @@ metadata:
     related_skills: [github, verify-and-stop, deterministic-quality-gates, nix-declarative-config]
 writes: [none]
 side_effects: [none]
+scope_answers: ["what version a release should carry"]
+scope_triggers: [cut a release, semver decision]
+scope_out: [the changelog's claims (pr-description), the gate before it (two-axis-review)]
 ---
 
 # Versioning and releasing

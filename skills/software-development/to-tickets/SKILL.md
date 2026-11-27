@@ -13,6 +13,9 @@ metadata:
     related_skills: [to-spec, wayfinder, handoff]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a plan becomes tracer-bullet tickets"]
+scope_triggers: [split a plan into tickets, tracer bullet tickets]
+scope_out: [writing the spec (to-spec), triaging one issue (issue-triage)]
 ---
 
 # to-tickets

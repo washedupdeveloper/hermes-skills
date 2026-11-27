@@ -12,6 +12,9 @@ metadata:
     related_skills: [writing-for-agents, release-versioning, handoff]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to write a README for people using the tool"]
+scope_triggers: [rewrite a readme, readme for users]
+scope_out: [api reference docs (api-docs), docs agents read (writing-for-agents)]
 ---
 
 # readme-for-users

@@ -13,6 +13,9 @@ metadata:
     source: DeepSeek Harness (deepseek-ai/deepseek-harness) docs/defensive-patterns, distilled
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to harden input subprocess CLI and authz"]
+scope_triggers: [harden input handling, subprocess and cli hardening]
+scope_out: [the web app checklist (web-app-security), error types and recovery (failure-semantics)]
 ---
 
 # defensive-patterns

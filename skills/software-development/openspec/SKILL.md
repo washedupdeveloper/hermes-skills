@@ -1,7 +1,7 @@
 ---
 name: openspec
 description: "Use when a repo has an openspec/ directory."
-version: 1.2.1
+version: 1.3.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -12,6 +12,9 @@ metadata:
     related_skills: [to-spec, to-tickets]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a change is authored and archived"]
+scope_triggers: [spec driven change, openspec change and archive]
+scope_out: [writing the spec from a chat (to-spec), splitting into tickets (to-tickets)]
 ---
 
 # OpenSpec
@@ -103,6 +106,12 @@ method.
   is the state a healthy repository is in most of the time.
 - **A task is a commit.** `tasks.md` checkboxes are the plan. Tick one when its code and test
   land, and let the commit body name the tasks it closes.
+- **`tasks.md` ends with `## Evidence`, one row per ticked task.** Columns are claim / command /
+  result, and the command is one you actually ran — a tick with no command behind it is the
+  difference between "finished" and "I think it is finished". Write the row when you tick the
+  task, not at archive time, because the run you are describing is gone by then. A repository
+  can gate this by asserting the section exists on every open change; where a change predates
+  the convention, grandfather it explicitly rather than backfilling rows you cannot re-run.
 - **Validate without Node when the host has none.** A container, sandbox or agent runtime that
   ships no Node still has to check a change before presenting it as a handover:
   `references/shape-check-without-the-cli.md` encodes the CLI's own structural rules, treats an
@@ -129,6 +138,14 @@ method.
   List the directory and read the matching `proposal.md` and `tasks.md` first; creating a second
   change for the same behavior splits the record and loses the evidence already collected. If it
   exists, validate it and continue from its tasks instead of restarting.
+- **A resumed change is re-audited, not replayed.** A change written before the harness moved
+  has stale premises, so before working its open tasks check each one against the tree: "every
+  skill declares X" is a grep, "the flag is missing" is a grep, and a task naming a mechanism
+  that no longer exists (a pin file, a helper, a convention that was renamed) is corrected
+  rather than obeyed. Then rebuild the record — a `design.md` if the change predates it, an
+  `## Evidence` table whose commands you ran today, and every count in the tasks (eleven
+  skills, four capabilities) re-measured. Tick marks are claims about a past tree; only the
+  re-run makes them claims about this one.
 - **A superseded claim inside an unarchived change is stale evidence, not history.** An open
   change's `tasks.md` evidence table records what was true when it was written; when a later
   change reverses one of those facts (a gate that drops a system, a flag that disappears), the

@@ -13,6 +13,9 @@ metadata:
     related_skills: [grill-me, domain-modeling, to-spec, to-tickets]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how to chart work too big for one session"]
+scope_triggers: [work too big for one session, chart a decision map]
+scope_out: [splitting into tickets (to-tickets), the kickoff plan (project-kickoff-planning)]
 ---
 
 # wayfinder

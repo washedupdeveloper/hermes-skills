@@ -12,6 +12,9 @@ metadata:
     related_skills: [technology-selection, verify-and-stop, critical-verdict]
 writes: [none]
 side_effects: [none]
+scope_answers: ["which model stack to use for code"]
+scope_triggers: [pick a model stack, which model for this task]
+scope_out: [choosing the platform (technology-selection), the cost of the gate (deterministic-quality-gates)]
 ---
 
 # Model routing selector

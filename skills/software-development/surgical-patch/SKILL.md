@@ -13,6 +13,9 @@ metadata:
     source: https://github.com/JuliusBrussee/caveman @ d262ab3882952a59312ff3537cd86d894523c5ab
 writes: [none]
 side_effects: [none]
+scope_answers: ["where the narrowest fix belongs"]
+scope_triggers: [fix a bug narrowly, smallest correct patch]
+scope_out: [the refactor it implies (request-refactor-plan), the root cause hunt (systematic-debugging)]
 ---
 
 # surgical-patch

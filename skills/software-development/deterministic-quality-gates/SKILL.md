@@ -12,6 +12,9 @@ metadata:
     related_skills: [requesting-code-review, systematic-debugging]
 writes: [none]
 side_effects: [none]
+scope_answers: ["how a scoring gate is built and calibrated"]
+scope_triggers: [build a scoring gate, calibrate a deterministic gate]
+scope_out: [the checks a flake runs (nix-flake-checks), the two-axis review (two-axis-review)]
 ---
 
 # deterministic-quality-gates
@@ -1071,6 +1074,19 @@ happened to mention first.
   `0` every lane exercised and passing, `3` **incomplete** naming the lanes never exercised, `1` a
   lane ran and failed — and make a lane that *is* present but fails a `1`, not a `3`: "could not
   run here" and "ran and broke" are different facts, and the second is the one being hidden.
+  **In a gate that certifies, a skip must FAIL by default, and the only way past is a permit
+  the owner writes.** Counting skips beside passes still ships a green run over an unmeasured
+  case; a session hook that turns any skip into a non-zero exit, plus a small permit file
+  naming node id -> reason, makes the exception visible and owned. Nothing is permitted
+  implicitly: no marker, no platform, no timeout. Grep for `pytest.skip` **and** `skipif` when
+  auditing — markers hide in plain sight as decorators, and converting them to
+  `assert <requirement>, "what is missing"` turns a silent hole into a named failure. The usual
+  cause of a proof that never ran is a **probe naming a binary that exists on the developer's
+  machine and not in the environment the proof runs in**: an availability probe using
+  `/bin/true` answered "feature unavailable" inside a hermetic build sandbox, so three proofs
+  skipped in every gate run since they were written while passing locally. A capability probe
+  must name an executable guaranteed present in BOTH (`sys.executable`), and its failure
+  message must say which capability is missing, not just exit 1.
 - **A collection error read as "0 failures".** A suite that aborts at collection
   reports nothing, and nothing looks like a pass in a summary line. Treat a collection
   error as zero coverage, not as a clean run — the code that ships is validated by
