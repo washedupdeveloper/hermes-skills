@@ -1,7 +1,8 @@
 # Milestone v3 — scope, purity and domain contracts
 
-**Status: open.** Contract `skill-contract/v3`. Rows 1-5 are enforced by the gate
-today; row 6 needs the taxonomy move.
+**Status: closed.** Contract `skill-contract/v3`. Every row below is enforced by the
+gate; the change that carried them is archived at
+`openspec/changes/archive/2026-11-22-scope-and-purity`.
 
 | Claim | Settled by |
 |---|---|
@@ -40,13 +41,21 @@ The rule is not "no system paths". It is **no project state outside the project*
 System paths may be read, cited, or be the subject of a skill; they may not hold
 persisted project state.
 
-## Open items
+## What closed this milestone
 
-- The taxonomy move (7 domains to 10) has not started; `build` is not yet in
-  `library/contract.json`'s `categories`.
-- 11 skills spawn something (systemd, containers, `nix profile add`, global npm)
-  while declaring `side_effects: [none]`. Declaring them truthfully is the next
-  backfill, and each needs its `**Heads-up.**` paragraph.
-- `scope_answers`, `scope_triggers` and `scope_out` are specified but neither
-  required nor populated.
-- The routing measure scores a prompt that names a task. It does not claim that a vague prompt routes: "the build is broken" names no task, and matching nothing is the correct answer for it.
+| item | how it closed |
+|---|---|
+| the taxonomy move, 7 domains to 10 | `docs`, `build` and `testing` added, one commit each; routing held at 74/74 through every move |
+| skills that spawn while declaring `[none]` | audited: thirteen mention a spawning command, ten document or check rather than act, three instruct one, and all three now declare it with a `**Heads-up.**` |
+| `scope_answers` / `scope_triggers` / `scope_out` | populated for all 70 skills and made required (`scope_required: true`); 140 trigger phrases, no duplicate |
+| the routing measure | built, `scripts/routing-score.py`, 74/74 against a floor of 100%, and run by `nix flake check` |
+
+## What the routing measure does not claim
+
+It scores a prompt that **names a task**. A vague prompt routes to nothing, and that is the
+correct answer: "the build is broken" names no task, so no skill should claim it.
+
+Two single-skill domains (`note-taking`, `productivity`) kept their skills and had their
+`CATEGORY.md` questions rewritten to match what the skill does, by the owner's decision. A
+domain with one honest skill is a small domain; a domain whose question its own skill
+cannot answer is a lie the catalog tells about itself.
