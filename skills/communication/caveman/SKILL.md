@@ -14,7 +14,7 @@ metadata:
 writes: [none]
 side_effects: [none]
 scope_answers: ["how to answer briefly without losing the claim"]
-scope_triggers: [asked to be brief, terse answer no filler]
+scope_triggers: [be brief, terse answer]
 scope_out: [compression to fragments (ultracave), writing the final reply (reply)]
 ---
 

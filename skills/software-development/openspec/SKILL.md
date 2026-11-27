@@ -1,7 +1,7 @@
 ---
 name: openspec
 description: "Use when a repo has an openspec/ directory."
-version: 1.3.0
+version: 1.3.1
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -75,6 +75,11 @@ method.
 - **A requirement is observable.** Each one carries at least one scenario of `WHEN` / `THEN` /
   `AND`. No implementation nouns, no file paths, no "use X". The scenario heading takes exactly
   four `#`s (`#### Scenario:`); at the wrong level the validator ignores it without complaint.
+  The requirement's own sentence must also contain `SHALL` or `MUST` — a requirement phrased
+  descriptively ("A skill that states its scope states all three") reads perfectly and still
+  fails: `validate --strict` prints `should contain SHALL or MUST` and exits non-zero. Write
+  the sentence as `... MUST state all three` before adding the scenarios, because the check
+  reads the prose above them, not the scenarios.
 - **A scenario names a path.** Every branch that can return before the guarded call needs its
   own scenario. Measured on one task: a spec that covered only the request path let `--dry-run`
   compose and print a refused base, and the implementing agent stopped exactly at the spec's

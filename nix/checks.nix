@@ -50,6 +50,19 @@ in
         touch $out
       '';
 
+  # The routing claim: a prompt that names a task selects exactly one skill.
+  # `--strict` fails on a tie, a miss, or a score below library/routing.json's floor.
+  routing =
+    pkgs.runCommand "check-routing"
+      {
+        nativeBuildInputs = [ python ];
+      }
+      ''
+        cd ${srcWritable}
+        python3 scripts/routing-score.py --strict
+        touch $out
+      '';
+
   # The Python suite: shipped code under test, and the negative controls that prove the
   # gate's rules fire.
   tests =

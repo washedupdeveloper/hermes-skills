@@ -28,7 +28,9 @@
   `note-taking` (1), `productivity` (1). The remaining 61 are unpopulated, so the switch
   stays off, and it cannot be turned on until they are. Which fields a long skill needs is
   a judgement per skill, not a mechanical fill.
-- [ ] 10. Write `scripts/routing-score.py` and record its score.
+- [x] 10. Write `scripts/routing-score.py` and record its score. 74/74 (100%) over a
+  corpus of 74 prompts, floor 1.0 in `library/routing.json`, and the gate runs it with
+  `--strict`: a tie, a miss, or a score below the floor fails the build.
 - [x] 11. Declare the true `side_effects` and `**Heads-up.**` paragraphs. The premise
   said eleven skills; audited against the tree, thirteen mention a spawning command and
   ten of those document or check rather than act. Three instruct an effect:
@@ -65,6 +67,8 @@ run against this tree on that date, not a restatement of the original tick.
 | the gate accepts the tree | `python scripts/validate.py` | `validate: 0 violation(s)` |
 | every effect-instruction is declared | `python scripts/validate.py` | 0 violations |
 | a scope is all three parts, or a failure | `pytest tests/unit/test_validate.py -q -k scope` | 7 passed |
+| a named task selects exactly one skill | `python3 scripts/routing-score.py --strict` | 74/74, floor 100% |
+| the scorer can fail | `pytest tests/unit/test_routing.py -q` | 5 passed |
 | the catalog carries a scope where populated | `grep -l scope_answers $(find skills -name SKILL.md) \| wc -l` | 9 of 70 |
 | `$XDG_CONFIG` is allowed and redirectable | `pytest tests/unit/test_validate.py -q` | 142 passed |
 | `--check` verifies and never writes | `pytest tests/e2e/test_install_check.py -q` | 3 passed |

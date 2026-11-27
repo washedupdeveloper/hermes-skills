@@ -1,7 +1,7 @@
 ---
 name: nix-flake-checks
 description: "Use when writing a flake's checks or eval assertions."
-version: 1.3.1
+version: 1.3.2
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -279,6 +279,12 @@ nix flake check --keep-going          # every group reports, not just the first
   what you are about to commit. A new file fails as `ERROR: file or directory not found:
   tests/<new>.py` while it sits on disk — read that as untracked, not missing, and `git add`
   it; only then does the failing check say anything about the change.
+- **The same fact has a second face: a local gate hashes the worktree, CI hashes the commit.**
+  A check that is red on your machine and green in CI is usually a file outside your commit —
+  an untracked reference, an uncommitted line-ending normalisation, a scratch artifact someone
+  else left. Read `git status` before editing code to satisfy it: "fixing" the tree to please
+  a check that never saw your commit is how a real defect gets papered over, and re-running
+  after `git add` is the one experiment that separates the two cases.
 - **Gate on the exit code, never on the tail of the output.** `nix flake check 2>&1 | tail -3`
   returns `tail`'s status, which is 0, so a red gate still reaches the `git commit` after it — that
   is how a tree with an unformatted file gets pushed with a green-looking log. Use

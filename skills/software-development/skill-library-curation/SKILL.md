@@ -1,7 +1,7 @@
 ---
 name: skill-library-curation
 description: "Curate the skill library: sourcing, overlap, conflicts."
-version: 1.11.1
+version: 1.11.2
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -678,6 +678,40 @@ partition is visible. A skill has exactly one home.
   description past the window, the top overlapping description pairs and the cross-name
   mentions. A 0.25 Jaccard cut over 2,415 pairs surfaced three real conflicts and about four
   lexical false positives — so **similarity is a report and trigger collision is the gate**.
+
+## Skill scope is the same partition, one level down
+
+A domain answers "which question does this group own". Each skill needs that statement for
+itself, or the catalog routes on `description` alone and two skills compete for one phrase.
+
+- **Three fields, all or none.** `scope_answers` (the question the page settles; at most
+  three entries, each short enough to route on), `scope_triggers` (how a reader or router
+  arrives) and `scope_out` (the siblings that do the adjacent job, at most five). A trigger
+  with no answer routes a reader to a page that never states its claim; an exclusion with no
+  trigger excludes nothing. Fail a skill that declares one or two of the three.
+- **A trigger phrase has exactly one owner.** Normalise before comparing — lowercase, keep
+  alphanumerics, collapse whitespace — and ignore very short phrases, which collide on
+  stopwords rather than on subject.
+- **An exclusion names a skill that exists.** Resolve against the catalog *and* the
+  contract's external list. A name that resolves to nothing reads as guidance and is a dead
+  end: it is the `related_skills` dead-reference rule applied to prose. Prove it with two
+  controls — a ghost name fails, an external name passes.
+- **Populate first, require second.** A required field cannot be introduced across a whole
+  catalog in one pass: either the values are fabricated to satisfy the gate or the gate is
+  red for every skill not yet reached. Carry a contract switch (one boolean), populate domain
+  by domain, and flip it only when the count reads N/N — then a skill added without a scope
+  fails. Report the partial state as a count, never as done.
+- **Derive, never template.** Take the answer from the skill's own description and body, the
+  triggers from the words a reader would arrive with, the exclusions from the sibling that
+  does the adjacent job. A templated answer is the same sentence in seventy files and routes
+  nothing.
+- **Read the counts as the verdict.** N skills with N distinct answers, and every normalised
+  trigger unique, is the claim. Duplicates mean two skills answer one question and neither
+  can be selected reliably — that is a merge, not a wording fix.
+- **A thin domain with a broad question is the tell for a re-cut.** A domain whose `CATEGORY.md`
+  asks something its one skill cannot answer (a knowledge-base question answered by a single
+  views-and-formulas skill) is misfiled, and the scope fields make it visible: the answer you
+  can honestly write does not match the question above it. Fix the partition, not the wording.
 
 ## Host scope is a label, not a directory
 

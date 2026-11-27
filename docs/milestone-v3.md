@@ -1,7 +1,7 @@
 # Milestone v3 — scope, purity and domain contracts
 
-**Status: open.** Contract `skill-contract/v3`. Rows 1-4 are enforced by the gate
-today; rows 5-6 need the taxonomy move and the routing measure.
+**Status: open.** Contract `skill-contract/v3`. Rows 1-5 are enforced by the gate
+today; row 6 needs the taxonomy move.
 
 | Claim | Settled by |
 |---|---|
@@ -10,7 +10,7 @@ today; rows 5-6 need the taxonomy move and the routing measure.
 | every domain states its question and what belongs elsewhere | the same gate, over `skills/*/CATEGORY.md` |
 | no two skills claim the same trigger phrase | the same gate, once `scope_triggers` is populated |
 | a new skill always has a home | the procedure: add the domain to `library/contract.json`, write its `CATEGORY.md`, add the README row — the gate fails an undeclared category |
-| a prompt that names a task selects exactly one skill | `python3 scripts/routing-score.py` (not built yet) |
+| a prompt that names a task selects exactly one skill | `python3 scripts/routing-score.py --strict` — 74/74 (100%), floor 1.0 in `library/routing.json` |
 
 ## What is deliberately not a claim
 
@@ -49,4 +49,4 @@ persisted project state.
   backfill, and each needs its `**Heads-up.**` paragraph.
 - `scope_answers`, `scope_triggers` and `scope_out` are specified but neither
   required nor populated.
-- The routing measure does not exist yet.
+- The routing measure scores a prompt that names a task. It does not claim that a vague prompt routes: "the build is broken" names no task, and matching nothing is the correct answer for it.

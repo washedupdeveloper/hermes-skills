@@ -1,0 +1,74 @@
+{"prompt": "review this diff and give me one line per finding", "expect": "caveman-review"}
+{"prompt": "review the branch on two axes", "expect": "two-axis-review"}
+{"prompt": "grill me on this plan", "expect": "grill-me"}
+{"prompt": "grill this repo plan and record the decisions", "expect": "grill-with-docs"}
+{"prompt": "interview this plan relentlessly", "expect": "grilling"}
+{"prompt": "judge whether this idea is sound", "expect": "critical-verdict"}
+{"prompt": "hermes refused my write to this file", "expect": "hermes-file-editing"}
+{"prompt": "the terminal tool is failing", "expect": "hermes-terminal-backend"}
+{"prompt": "package these scripts as nix apps", "expect": "nix-flake-packaging"}
+{"prompt": "write the flake checks", "expect": "nix-flake-checks"}
+{"prompt": "declare a new option in the nix module", "expect": "nix-declarative-config"}
+{"prompt": "the wireguard peer is unreachable", "expect": "wireguard-mesh-triage"}
+{"prompt": "is this cve actually exposed on this machine", "expect": "cve-exposure-triage"}
+{"prompt": "a secret got into git history", "expect": "git-history-sanitisation"}
+{"prompt": "was this dependency compromised", "expect": "oss-forensics"}
+{"prompt": "harden this web application", "expect": "web-app-security"}
+{"prompt": "this ci workflow has too many permissions", "expect": "workflow-security"}
+{"prompt": "clean up after this run and leave no state behind", "expect": "ephemeral-cleanup"}
+{"prompt": "build an oci image with no runtime inside", "expect": "oci-image-without-runtime"}
+{"prompt": "how does s6 overlay supervise the container", "expect": "hermes-s6-container-supervision"}
+{"prompt": "hand this session to another agent", "expect": "handoff"}
+{"prompt": "move this project to another machine", "expect": "hermes-project-handoff"}
+{"prompt": "run the hermes backend on a remote host", "expect": "hermes-remote-backend"}
+{"prompt": "run this command inside the wsl distro", "expect": "hermes-wsl-backend"}
+{"prompt": "spawn a background job and supervise it", "expect": "hermes-process-operations"}
+{"prompt": "plan a new project from scratch", "expect": "project-kickoff-planning"}
+{"prompt": "split this plan into tracer bullet tickets", "expect": "to-tickets"}
+{"prompt": "turn this conversation into a spec", "expect": "to-spec"}
+{"prompt": "cut a release and decide the version", "expect": "release-versioning"}
+{"prompt": "write the pull request body as evidence", "expect": "pr-description"}
+{"prompt": "judge the module shape of this refactor", "expect": "codebase-design"}
+{"prompt": "find the shallow modules in this codebase", "expect": "improve-codebase-architecture"}
+{"prompt": "fix this bug with the smallest patch", "expect": "surgical-patch"}
+{"prompt": "audit this state machine and its retries", "expect": "state-machine-audit"}
+{"prompt": "design the error codes and recovery", "expect": "failure-semantics"}
+{"prompt": "choose a stack for this project", "expect": "technology-selection"}
+{"prompt": "which model should I use for this code", "expect": "model-routing"}
+{"prompt": "write a retro of this session", "expect": "retro"}
+{"prompt": "write the postmortem for this incident", "expect": "postmortem"}
+{"prompt": "curate the skill library for overlaps", "expect": "skill-library-curation"}
+{"prompt": "write documentation agents will read", "expect": "writing-for-agents"}
+{"prompt": "rewrite the readme for users", "expect": "readme-for-users"}
+{"prompt": "document this public api declaration", "expect": "api-docs"}
+{"prompt": "review this browser extension background script", "expect": "browser-extension-review"}
+{"prompt": "make this code work on windows and macos", "expect": "cross-platform-correctness"}
+{"prompt": "make the tests portable across platforms", "expect": "cross-platform-test-portability"}
+{"prompt": "harden the subprocess and cli handling", "expect": "defensive-patterns"}
+{"prompt": "build a deterministic scoring gate", "expect": "deterministic-quality-gates"}
+{"prompt": "audit another agents work and prove acceptance", "expect": "verify-and-stop"}
+{"prompt": "map the modules and callers because i am lost in the code", "expect": "zoom-out"}
+{"prompt": "chart work too big for one session", "expect": "wayfinder"}
+{"prompt": "generate a wizard for steps only a human can do", "expect": "wizard"}
+{"prompt": "triage this issue into a brief", "expect": "issue-triage"}
+{"prompt": "shrink this memory file to fewer tokens", "expect": "caveman-compress"}
+{"prompt": "locate where this function lives", "expect": "caveman-explore"}
+{"prompt": "be brief and terse in your answer", "expect": "caveman"}
+{"prompt": "maximum compression to fragments", "expect": "ultracave"}
+{"prompt": "write the final reply to the user", "expect": "reply"}
+{"prompt": "delegate this subtask and compress the return", "expect": "cavecrew"}
+{"prompt": "explain that again in plain english", "expect": "wait-what"}
+{"prompt": "author a hermes bot persona and rubric", "expect": "hermes-bot-authoring"}
+{"prompt": "build a multi agent kanban pipeline", "expect": "hermes-kanban-orchestration"}
+{"prompt": "build a knowledge base capture and index pipeline", "expect": "hermes-knowledge-pipeline"}
+{"prompt": "install a fleet of hermes profiles", "expect": "hermes-profile-fleet"}
+{"prompt": "author an openspec change and archive it", "expect": "openspec"}
+{"prompt": "fix a flaky test suite", "expect": "cross-platform-test-portability"}
+{"prompt": "works on linux but fails on windows and macos", "expect": "cross-platform-correctness"}
+{"prompt": "which model stack is cheapest for code", "expect": "model-routing"}
+{"prompt": "write the changelog entry for this release", "expect": "release-versioning"}
+{"prompt": "review a pull request", "expect": "caveman-review"}
+{"prompt": "the s6 service will not start", "expect": "hermes-s6-container-supervision"}
+{"prompt": "systemd unit keeps restarting after logout", "expect": "hermes-remote-backend"}
+{"prompt": "wsl cannot reach the windows host", "expect": "hermes-wsl-backend"}
+{"prompt": "background process dies when the shell exits", "expect": "hermes-process-operations"}

@@ -14,7 +14,7 @@ metadata:
 writes: [none]
 side_effects: [none]
 scope_answers: ["how to spawn and supervise a background job or subprocess"]
-scope_triggers: [spawn a background job, supervise a hermes subprocess]
+scope_triggers: [spawn a background job, supervise a hermes subprocess, background process dies]
 scope_out: [kanban-level orchestration (hermes-kanban-orchestration), cleaning up afterwards (ephemeral-cleanup)]
 ---
 

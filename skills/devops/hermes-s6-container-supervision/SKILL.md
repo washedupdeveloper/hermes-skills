@@ -15,7 +15,7 @@ metadata:
 writes: [none]
 side_effects: [container]
 scope_answers: ["how s6-overlay supervises Hermes inside a container"]
-scope_triggers: [s6 overlay supervision, container entrypoint for hermes]
+scope_triggers: [s6 overlay supervision, container entrypoint for hermes, s6 service will not start]
 scope_out: [building the image itself (oci-image-without-runtime), host services (nix-declarative-config)]
 ---
 

@@ -1,0 +1,4 @@
+{
+  "floor": 1.0,
+  "note": "Correct routing over library/routing.jsonl. Raised only with the corpus it was measured on: 74 prompts, one per skill word, plus the adjacent pairs that used to tie."
+}
