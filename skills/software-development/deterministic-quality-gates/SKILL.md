@@ -115,6 +115,21 @@ against a known-good input before trusting a red result: a relative-link check t
 tests the raw target reports every anchored link broken, because the fragment is not
 part of the path. When a check fails, the first hypothesis is the check.
 
+**A lexical scorer measures vocabulary, so make abstention a legal verdict.** Matching a
+prompt against a catalog of descriptions is a scoring model, and the naive form — token
+overlap, best score wins — measures how many words two texts share, not whether one routes
+to the other. Measured on a 74-prompt corpus, three changes took it from 91% to 100%, and a
+fourth kept it honest: stem the suffixes that make two words of one (`tests`/`test`,
+`running`/`run`); weight tokens by rarity, because a verb carried by half the catalog
+("write", "review") decides ties between skills it says nothing about; treat an exact tie as
+**ambiguous**, never let dictionary order pick a winner. Then the design rule: a prompt that
+names no task must match **nothing**. A router that always returns some skill cannot be
+wrong, only differently wrong, and its perfect score carries no information — put the
+abstention case in the corpus (`"what is the weather in oslo"` → `none`) beside the routing
+cases, and say in the docs what the measure does not claim. A crude stemmer needs one guard
+of its own: stripping a trailing `s` turns `process` into `proces` and `analysis` into
+`analysi`, so exempt `ss`/`us`/`is` endings and re-run the corpus after any tokeniser change.
+
 **Bound everything the gate executes.** A gate with an unbounded child process hangs
 forever, and a hung gate is indistinguishable from a slow one — the run never reports
 at all. Pass an explicit timeout to every subprocess a gate spawns. When the cap fires
@@ -203,7 +218,9 @@ a real invocation in each accepted position must still fail.
 freshness bound or cost divisor buried in code is an unversioned policy: the user cannot vary it, the run cannot
 record what it used, and a later comparison silently mixes two policies. Expose it as a flag, config key or
 environment variable, echo the effective value into the run artifact (`policy` block), and test that a non-default
-value changes the result. Guards that do not express a decision — a minimum row count that refuses a truncated
+value changes the result. Prove the parameter with the flag itself: a test that edits the file the measurement
+reads to force the failure passes on a tree it just changed, and cannot run at all where the tree is a read-only
+store copy — pass the value on the command line instead. Guards that do not express a decision — a minimum row count that refuses a truncated
 page, a unit-sanity cap, display formatting — stay fixed but must be named and documented as guards.
 
 **An exemption needs two controls, not one.** A control proving something is *allowed*

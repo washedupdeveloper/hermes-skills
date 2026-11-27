@@ -199,6 +199,19 @@ comment rather than leaving the impression of coverage.
   `references/reproducing-host-conditions.md`.
 - **Case-insensitive filesystems.** Two files differing only in case coexist on Linux
   and collide on macOS/Windows — and on Windows the collision is silent at write time.
+- **`.gitattributes` normalises on COMMIT, not on disk — so a tree written by another
+  process keeps arriving CRLF.** An editor, an unattended writer, or a mount boundary puts
+  CRLF back into the worktree minutes after you normalise it, `git config core.autocrlf`
+  reads `false` while it happens, and the check that rejects CRLF goes red on files your
+  change never touched. Two mechanics decide how much time this costs. `git add` **refuses
+  the whole add** (`fatal: CRLF would be replaced by LF in <file>`) when a dirty file is
+  CRLF, so one flake blocks staging every file you did edit — normalise first, then add.
+  And a flake sees only **tracked** content, so a brand-new file left untracked is
+  invisible to `nix flake check` and to any sweep built on `git ls-files`; sweep
+  `git ls-files --others --exclude-standard` too, and stage before concluding a check is
+  broken. Tell the two causes apart with `git show HEAD:<file> | grep -c $'\r'`: zero in
+  HEAD and non-zero in the worktree is a writer, not a checkout, and re-normalising will
+  not hold until the writer stops.
 - **Locale-dependent ordering.** `sorted()` on `str` and `locale.strxfrm` both move
   with the host's collation. Assert on a set, or sort with an explicit key, rather than
   on a list order the locale happened to produce.
