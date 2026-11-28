@@ -1,7 +1,7 @@
 ---
 name: deterministic-quality-gates
 description: "Use when building or calibrating a scoring gate."
-version: 1.8.0
+version: 1.9.0
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -778,6 +778,15 @@ mutation you just made looks like it changed nothing — measured twice in one s
 nearly dismissing a working check as vacuous and once hiding a CLI exit code behind a
 `| tail -1`. Capture `rc=$?` on the line after the bare command, or redirect to a file and
 read the exit code from the file, and never from a pipeline.
+**`grep -q` in a pipeline is the same trap firing on the SUCCESS path, which is what makes it
+so expensive.** With `set -o pipefail`, `cmd | grep -q PATTERN` returns non-zero the moment
+grep matches: grep stops reading, the writer takes SIGPIPE, and the pipeline reports 141. The
+check therefore reads as "did not match" at the exact moment it matched — a harness written
+that way reported six failures against a gate that was working, and the natural response is
+to go looking for six defects. Capture the output and match with `case "$out" in *PAT*)`, or
+write it to a file and grep the file. Same family, same silence: a helper that `tail -1`s its
+producer can only ever match the last line, so every assertion about an earlier line fails
+while looking like a real verdict.
 **A check body with several commands has the same mask without a pipe.** `run-a; run-b;
 touch $out` exits 0 when `run-a` fails, because the *last* command succeeded, and a build
 system that judges the check by the derivation's exit code sees a pass. Start every check
@@ -838,6 +847,48 @@ reported as `falsifies no claim` — split it into one claim per node. Read fail
 whole run reports "falsifies no claim" while the mapping is the only thing broken. Fail on an
 uncovered mutation as well as on a survivor: a breakage no claim depends on is decoration, and
 adding a claim for it is cheaper than deleting the mutation only if the rule is real.
+
+**Audit the registry by planting, not by counting.** `N/N claims hold` is a statement about the
+claims the registry contains, never about the rules the tree enforces — a property can have a test,
+be run by the gate on every commit, and still be outside the registry, so the count is honest and
+the coverage is not. Find out which claims actually bind by breaking the thing each one names and
+reading which id turns red: remove a documented flag, delete an exempt path, corrupt a config key,
+and check that the failure names the claim you expected. Measured: deleting a documented CLI flag
+turned `every-flag-is-documented` red as it should, while deleting the *other* tool's flag turned
+nothing red at all — its test existed and the gate ran it, but no claim named it, so the registry
+under-reported what it protects. A planting that catches nothing is either a gap in the registry
+(add the claim) or a gap in the rule (add the check), and the two look identical from a green run.
+Pair this with the mutation campaign rather than replacing it: mutations prove the suite has teeth,
+planting proves the registry knows what the suite is holding.
+
+**Batch independent checks by target file before optimising their work.** A registry of
+hundreds of claims that each run one test node pays one interpreter startup per claim, and
+that startup is the entire cost — measured: 21.4 s for 265 claims, of which roughly a second
+apiece was pytest booting to run one node. Group the claims whose commands differ in nothing
+but the node id and run one process per file: 251 processes became 45 and the step fell to
+14.8 s, same nodes, same assertions, same verdicts. Three properties make it safe rather than
+merely faster — group on the file **and every other argument**, or a batch silently drops a
+flag one member passed; read outcomes from the machine-readable report, so a failure is still
+that node's failure and a skipped node still fails as unproven; and fall back to the
+single-claim path for any node the report omits, so an unreadable report costs time and never
+a claim. What batching must not do is decide *which* tests run: selection changes what a
+failure means, which is why a fail-fast or subset-based mutation campaign is a different and
+weaker instrument rather than the same one made faster.
+
+**A verdict cache is sound only when its key covers the whole experiment.** A campaign whose
+unit is "run the entire suite under this mutation" can have any verdict changed by an edit
+anywhere in the source or test tree, so a cache keyed on the mutated file alone replays a
+result this tree may no longer produce. Hash the whole source tree, the whole test tree, the
+claim registry, the tool itself and the interpreter: a hit is then a byte-identical
+experiment and any change re-scores. Measured on a 72-mutant campaign: 326 s to **1.2 s** on
+an unchanged tree with all 72 still caught. Three mechanics make it trustworthy rather than
+merely fast. Skip the baseline suite only when the cache answered **every** selected unit,
+because a tree identical to the one that produced those verdicts cannot have turned the
+suite red. Treat a cache-write failure as a printed note, never a failure — a read-only
+source tree is normal (a build sandbox, a read-only CI mount), and the cache is an
+optimisation. Pass `--no-cache` from the build system's own check: it already caches the
+whole derivation, and its sandbox cannot write. Pin it with a test that a changed digest
+re-scores everything, or the cache is indistinguishable from a gate that stopped running.
 
 **A differential asserts differences, not equality.** When a rewrite replaces a version with
 published results, take the old verdicts as the oracle and write down every expected difference
@@ -1028,6 +1079,19 @@ happened to mention first.
 - **Reading a plateau off the sweep.** A sweep over observed scores cannot see the
   interior of the gap between classes; the plateau it reports is an artifact of
   rounding. Compute the separating interval from the labels.
+- **A number that is too good is a harness failure until proven otherwise.** A full suite
+  that measures 75 ms, a type check that finishes in 0.15 s, a cold build that beats the warm
+  one — each is the shape of a measurement that never ran: the interpreter was absent from
+  `PATH`, a helper returned the tail of an error line, the loop timed `command not found`.
+  Print the command's own output beside the number once, and treat any result that
+  contradicts a known cost by an order of magnitude as a broken harness rather than a
+  discovery. Measured twice in one session — a "full suite in 75 ms" was `python: command
+  not found`, and a "0.15 s mypy" was a wrapper that had already failed. The same discipline
+  kills a whole class of optimisation ideas before they are designed: measure the marginal
+  cost in the shape the production path pays it. A 35 ms import looked like the cause of a
+  27 s subprocess-heavy suite until the denominator was checked — an interpreter starts in
+  18 ms and importing the project adds ~1 ms, so the idea was wrong by two orders of
+  magnitude, and the suite's real cost was the work, one spawn per test.
 - **A baseline from a single timing sample.** Cold-start outliers can be 3× the
   warm value. Take several samples and use the median; the mean is dragged by
   exactly the outliers you are trying to exclude.

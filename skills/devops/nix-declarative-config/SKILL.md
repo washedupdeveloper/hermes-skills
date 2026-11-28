@@ -67,6 +67,39 @@ When the three disagree, the earlier wins. Apply this deliberately; a conflict i
 - **Name a module under `modules/` after the input it integrates** — `git-hooks.nix`, `treefmt.nix`, `caveman-skills.nix`, `hermes.nix`. When a local name collides with a file upstream documents at a fixed path, rename the *local* one: upstream's documented path is a convention you would be fighting, and yours is the one out of step. Two files sharing a basename across different module systems reads as a mistake even when it is not.
 - **Presenting a set of changes to the user:** give a tree of the affected paths with a status marker per file, a short explanation per section, and an explicit list of what was left untouched. They want the shape of the change and the reasoning, not a replay of the commands.
 
+## Serving the store as a binary cache
+
+**A cache replays narinfo; it does not sign what it did not build.** That one fact decides the
+design, and getting it wrong produces a cache that serves happily and is rejected by every
+client — or, worse, a `require-sigs = false` that makes the rejection go away by removing the
+check. Two designs actually work: the **server** signs what it serves (harmonia with
+`signKeyPaths`, one key covering both locally built and upstream-substituted paths), or the
+**daemon** signs at build time (`nix.settings.secret-key-files`, covering only paths this
+machine builds). Prefer the first — one key, one trust statement, and no second key to
+rotate. `nix-serve` can do neither: it has no signing option, which is why an unsigned local
+build comes back with no `Sig:` at all.
+
+- **Bind to an address that is a decision, not a default.** Loopback for one machine; the mesh
+  address when peers should share it, so the URL works from the host and from every peer
+  unchanged. `0.0.0.0` is the wrong default on WSL specifically, because `nixos-wsl` disables
+the firewall and nothing narrows it afterwards.
+- **`services.harmonia.cache.*`, not `services.harmonia.*`.** Current nixpkgs renamed the
+  older spelling, and a repo with an evaluation-warning gate will fail on the deprecation
+  message rather than on anything you meant to change. Bind with `cache.settings.bind`.
+- **Clients compose with `extra-substituters` / `extra-trusted-public-keys`.** The plain
+  `substituters` **replaces** the list, so whichever module assigns last wins and the others
+  disappear silently. Keep `https://cache.nixos.org` in the list as the fallback: a mesh or
+  service outage is then a slow build rather than a failed one.
+- **What it buys is narrow, and must be measured rather than assumed.** Only derivations the
+  serving host has already realised. `nix flake check --store local?root=…` builds *inside*
+  that store, so a cold run of a tree the host never built pays the full price with or without
+  a cache — measured, 328 s cold with the cache against ~294 s warm without it, zero benefit.
+  The same cache refilled an already-built store in 23 s against 245 s. Never report a cache
+  as a speedup without naming which of those two cases you measured.
+
+Mechanism, the accept/reject substitution test, the signing traps and the cleanup rules:
+`references/binary-cache.md`.
+
 ## Procedure: provision an upstream directory into an app config dir
 
 1. Identify the upstream artifact directory — the dir whose *children* the app loads (e.g. one subdirectory per skill, each containing `SKILL.md`).

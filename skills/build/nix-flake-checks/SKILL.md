@@ -1,7 +1,7 @@
 ---
 name: nix-flake-checks
 description: "Use when writing a flake's checks or eval assertions."
-version: 1.3.2
+version: 1.5.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -200,6 +200,38 @@ locally, because its copy had no config. Config travels with the code or the che
 the only levers left are more cores or less work. Say which one you are buying;
 "parallelise more" against a gate at 87% of its ceiling is a non-answer.
 
+**A subset may prove a catch; only the whole suite may prove a miss.** The only cheap
+subset that is sound by construction is one the registry already declares: for each mutant,
+run the tests of the claims that name it as their falsifier. Measured on a 72-mutant
+campaign, every mutant is named by one to three claims, 1.11 on average — 12 s across
+twelve workers against 258 s for the whole suite, with all 72 decided by their falsifier and
+none falling back. Two mechanics make or break it: run **every** falsifier node, because a
+fail-fast subset records only the first broken claim and a mutant named by three then
+reports two as `falsifier did not break it`; and never conclude a *miss* from a subset — a
+pass falls back to the whole suite, which then decides. Any selection that is guessed (an
+import graph, a coverage map, a `-k` pattern) decides what a mutant broke without running
+the test that would have caught it, and lands the same failure.
+
+**Split one suite into N checks, balanced from a junit report.** Nix schedules derivations,
+not shell jobs, so three partitions of 9.5 s beat one process of 28.5 s on the same tree.
+Balance them by measured per-file cost (greedy packing gave 9.48/9.48/9.48), keep the
+aggregate name (`tests = <aggregate of the partitions>`) so one name still means "the whole
+suite passed", and guard the split at evaluation time: partitions as data plus an assertion
+that they name every `tests/**/test_*.py` exactly once. That assertion is not ceremony — it
+caught two real bugs while landing the change, a junit classname flattened into a path that
+does not exist and a `conftest.py` counted as a test. Two mechanics for the first: resolve a
+junit `classname` by stripping trailing dotted components until a file exists on disk
+(class-based tests report `tests.test_x.Class`, which no path mapping turns into a file), and
+filter the tree on `test_*.py` rather than `*.py`. Splitting is fail-safe in one
+direction only: a test that passes alone but needs another file's side effect turns red, so
+a split can never turn red into green.
+
+**Make the expensive check depend on the cheap proof instead of repeating it.** A campaign
+that runs the suite as its own baseline pays for the same proof twice per tree. Hand it the
+partition checks as build inputs (`overrideAttrs` adding them to `nativeBuildInputs`) and a
+flag that states the assumption (`--no-baseline`): Nix refuses to build the campaign when a
+partition fails, which is the same guarantee in a stronger place — measured, 44 s to 15 s.
+
 **A serial loop of subprocesses is startup-bound; pool it.** 263 claims each spawning an
 interpreter cost 185 s, almost none of it work: the same registry across one worker per
 core took 28 s. Same sound lever as a mutant pool — each item is an independent process,
@@ -270,7 +302,9 @@ flake is undiagnosable by construction.
 fix them together — stopping at the first makes you fix one, wait, and find the next.
 
 Depth — the measurement recipe, the ranked levers, and the sharding design that keeps the
-union exhaustive by construction: `references/gate-performance.md`. Rebuilding the exact
+union exhaustive by construction: `references/gate-performance.md`. Whether a binary cache
+is worth wiring up at all, and the signing model that decides it:
+`references/binary-cache.md`. Rebuilding the exact
 artifact a CI failure came from, and separating a flaky item from shared state:
 `references/reproducing-ci-failures.md`.
 
@@ -329,6 +363,11 @@ nix flake check --keep-going          # every group reports, not just the first
   a wrong tree fails at *evaluation* (`nix eval .#checks.<system>.<group>.drvPath`). Verify eval
   tiers with `nix eval`, never with a green build, and do not read the constant drv hash as
   "nothing changed".
+- **A flake's `let` usually has no `lib`.** Using `lib.fileset` or `lib.sort` in a new
+  binding fails evaluation with `undefined variable 'lib'`, and the fix is one line —
+  `inherit (nixpkgs) lib;` in that `let`. Write it that way from the start: `lib = nixpkgs.lib;`
+  is equivalent and trips `statix` W4 ("better written with `inherit`"), which the repo's own
+  lint check then reports as a check failure rather than a style note.
 - `nix flake check --rebuild` is not a flag — `--rebuild` belongs to `nix build`.
 - `lib.runTests` returns a list of failures, not a boolean. Wrap it
   (`if failures == [ ] then pkgs.runCommand "check-<group>" {} "touch $out" else throwTestFailures`)

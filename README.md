@@ -179,10 +179,9 @@ trade-off. An ADR is a paragraph, not a document.
 |---|---|
 | [0001](docs/adr/0001-reference-not-symlink.md) | Reference the repo, never a copy or symlink |
 | [0002](docs/adr/0002-voice-in-soul-not-skill.md) | The voice lives in the system prompt, not a skill |
-| [0004](docs/adr/0004-adopt-dsh-harness-rules.md) | Adopt four harness rules from DeepSeek Harness, reject its framework |
-| [0005](docs/adr/0005-pin-workflow-actions-to-commits.md) | Pin workflow actions and installs to commits |
-| [0006](docs/adr/0006-dsh-second-pass.md) | The second pass: bug classes, incident classes, request logging |
-| [0007](docs/adr/0007-dsh-third-pass.md) | The third pass: the codebase, the record, and what stayed prose |
+| [0004](docs/adr/0004-adopt-dsh-harness-rules.md) | Four harness rules from DeepSeek Harness, and its framework refused |
+| [0005](docs/adr/0005-pin-workflow-actions-to-commits.md) | Workflow actions, runner images and installs pinned to commits |
+| [0006](docs/adr/0006-dsh-second-pass.md) | What a second reading added, and what it refused |
 | [0008](docs/adr/0008-openspec-as-the-spec-container.md) | OpenSpec as the spec container, per repository |
 | [0009](docs/adr/0009-generic-project.md) | A generic library: the gate is Python, the host is a label |
 

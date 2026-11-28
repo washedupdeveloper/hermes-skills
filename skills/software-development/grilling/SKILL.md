@@ -1,7 +1,7 @@
 ---
 name: grilling
 description: "Use when a plan or idea needs a relentless interview."
-version: 1.0.0
+version: 1.1.0
 author: "Matt Pocock (mattpocock/skills, grilling) + Hermes Agent"
 license: MIT
 platforms: [linux, macos, windows]
@@ -61,6 +61,30 @@ from the environment, find it yourself with `search_files`, `read_file`,
 exploration. Never ask the user for something you could look up. Do not block the
 whole round on an exploration: only the questions downstream of it wait; ask the
 rest now.
+
+**A design question whose viability is a measurement is not yet a question.** When
+the recommendation rests on a number nobody has taken — will the subset actually
+catch these cases, how often does the fallback fire, what does the current thing
+cost — take that measurement before the round and put it *in* the question. The
+same proposal is a different conversation at 2% and at 20×, and asking the user to
+decide on an unmeasured premise spends a round on something that may be worthless.
+If the measurement kills the idea, say so and withdraw it; that is a better
+outcome than a well-run interview about a bad option.
+
+## 1-3-1, when it is asked for
+
+Some users want the proposal before the interview: **one problem, three options,
+one recommendation**. It is the shape that makes a decision legible in one screen.
+
+- One **problem** in a sentence, with the number that makes it a problem.
+- Exactly **three** viable options, each naming its kind — instrument, objective or
+  workaround — and its cost. A dominated option is named as dominated and left off
+  the menu.
+- One **recommendation**, with the reason in a line.
+
+The 1-3-1 picks the *direction*; the round that follows picks the *details* of the
+chosen direction, which the 1-3-1 cannot settle. Run both, in that order, and do not
+let the 1-3-1 stand in for the questions it leaves open.
 
 ## Grilling an implementation
 
@@ -138,6 +162,10 @@ Do not act until the user confirms shared understanding.
     and leave it out; a menu with a known-bad choice costs a round and makes the
     recommendation look unconsidered. Options are viable alternatives, not a
     completeness display.
+12. **Asking about a premise you could have measured.** A round built on "this
+    should be faster" or "the subset should catch it" spends the user's attention
+    on an assumption. Measure the decisive number first; if it invalidates the
+    idea, say so and drop it. A question is for a choice between viable things.
 
 ## Verification
 

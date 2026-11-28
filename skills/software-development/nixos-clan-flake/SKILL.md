@@ -239,6 +239,34 @@ enumerate every match and read each one's verdict. The same class of trap:
 `builtins.toString /some/path` returns the path **unchanged** rather than copying it
 into the store, so it cannot be used to inspect what a build would actually see.
 
+**Never probe a daemon with `--help`.** A server that ignores unknown flags does not print
+usage, it *starts*: `nix run nixpkgs#harmonia -- --help` bound `[::]:5000` and sat there until
+the timeout killed it (`rc=124`), which reads as a hang and teaches nothing about the flags.
+Read the option names from the package's own source
+(`nix build --no-link --print-out-paths nixpkgs#<pkg>.src`) or from the NixOS module under
+`$(nix eval --raw nixpkgs#path)/nixos/modules/`, and take a service's accepted settings from
+its `mkOption` defaults. That is also how you learn a service is socket-activated, so an
+`inactive` unit with a live listener is correct rather than broken.
+
+**An option nixpkgs RENAMED fails the repo's warning gate, not your intent.** A tree with an
+evaluation-warning check (`test_no_nixpkgs_warning_is_emitted` and friends) goes red on
+`The option 'services.harmonia.enable' … has been renamed to 'services.harmonia.cache.enable'`
+before anything you meant to change is evaluated — and it arrives as `trace: FAIL` inside a
+check derivation, not as an evaluation error, so it reads like a test defect. Grep the pinned
+module for the option path before writing the block
+(`grep -n 'mkOption' $(nix eval --raw nixpkgs#path)/nixos/modules/services/<area>/<svc>.nix`),
+and note that moving a service block moves its sub-options with it: `.enable` and
+`.cache.settings` cannot both be the right spelling.
+
+**`pkill -f <pattern>` kills the shell that runs it, because that shell's own command line
+contains the pattern.** A cleanup like `pkill -f "nix-serve"; rm -f /tmp/secret` dies at the
+first command: the `rm` never runs, a plaintext key survives, and the only signal is exit
+status `15` with no message. Match the **executable** instead (`pkill -x nix-serve`, or
+`pkill -f '^[^ ]*nix-serve'`), and keep the destructive step in a separate invocation so a
+kill cannot swallow it. Count survivors with
+`ps -eo args | grep -F <name> | grep -v grep | wc -l` — `pgrep -fc` matches its own command
+line and reports one too many.
+
 **`patch`/`write_file` cannot write to a `//wsl.localhost/...` path.** Stage the new
 file in the scratch dir and copy it in, stripping CR:
 
@@ -516,6 +544,29 @@ symlink markers, recipient↔key agreement, the orphaned-escrow check that catch
 recovery path which recovers nothing, and the at-rest boundary it does not cover — a
 machine's age key is a plaintext file on that machine's disk, so disk encryption is a
 separate decision: `references/sops-store-coherence.md`.
+
+**Put a secret into the clan store from a script, and prove the round-trip.** Both setters
+take the value on **stdin**, so neither needs a terminal: pipe the generated value in, and
+clan writes it sops-encrypted and commits the result itself.
+
+```bash
+rev=$(grep -A14 '"clan-core"' flake.lock | grep -m1 -o '"rev": "[0-9a-f]*"' | cut -d'"' -f4)
+clan=$(nix build --no-link --print-out-paths "git+https://git.clan.lol/clan/clan-core?rev=$rev")/bin/clan
+printf '%s' "$SECRET" | "$clan" secrets set <name> --machine <machine>
+printf '%s' "$SECRET" | "$clan" vars set <machine> <generator>/<file>
+```
+
+- **The flake need not expose `clan`.** `nix run .#clan` fails with `attribute 'clan.type'
+does not exist` on a flake that carries clan-core as an input but no `apps.clan`; build the
+CLI from the rev in `flake.lock` instead, which is also the only version whose behaviour
+matches the config being edited.
+- **`vars set` requires the generator to be declared first** — the flake must evaluate with
+  it, so the module carrying the `clan.core.vars.generators.<name>` block lands before the
+  value does. `secrets set` has no such prerequisite.
+- **Verify without printing the value**: `diff <("$clan" secrets get <name>) <plaintext>` and
+  report only that it matched, per the secret-handling rule above. Then delete the plaintext
+  copy in the same breath — a key left in `/tmp` after a successful store is a disclosure that
+  outlives the reason for it.
 
 **Confirm scope before a consequential change.** Rotating a credential, changing a
 host key, or deleting state has an operational tail: a device or a client needs to

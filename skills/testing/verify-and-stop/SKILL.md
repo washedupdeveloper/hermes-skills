@@ -1,7 +1,7 @@
 ---
 name: verify-and-stop
 description: Use when proving acceptance or auditing another's work.
-version: 1.10.1
+version: 1.12.0
 author: JuliusBrussee/caveman, adapted by user
 license: MIT
 platforms: [linux, macos, windows]
@@ -323,6 +323,11 @@ of describing the screen. A screenshot you did not keep is not evidence; a path 
   the set (`nix eval .#checks.<system> --apply builtins.attrNames`) and force one
   (`nix build --no-link --rebuild .#checks.<system>.<name>`) before calling it either. The
   evidence is the number it ran plus the reason it has that number.
+  **A gate that returns implausibly fast after an edit has measured a cache, not your change.**
+  A whole gate at 7 s where it normally takes minutes means the derivations were already built
+  from a tree whose inputs hash the same — so the run is evidence about the old tree. Force it
+  (`--rebuild`, a fresh store, a touched input) before quoting either the duration or the green,
+  and when the fast run and the slow one both pass, say which one you are quoting.
 - **An acceptance clause is proven by a command that something runs, and a harness that
   cannot express the clause is a blocker rather than an excuse.** A test can exist, pass,
   and be invoked by nobody: an attribute deliberately kept out of the main gate (a VM test
@@ -491,9 +496,23 @@ shapes it takes, and all three report success:
   outcome is the one you wanted.
 - **A check that greps for the rule instead of calling it.** A text search (`search_files`, or
   `grep` inside a shell script) for `if state == "refuted"` is a claim about where the code lives:
-  it fails on a refactor that moved the rule, and it passes on a comment that quotes it. Call the
+  it fails on a refactor that moved the rule, and it passes on a comment that quotes it.  Call the
   function with one input per branch and assert the outputs; keep text search for "this string
   exists nowhere", which is a fact about the tree.
+- **A plant-and-reject harness fails in the safe direction, which is the direction nobody checks.**
+  When the harness reports "the gate accepted the violation", the reader investigates the gate; when
+  it reports "the gate rejected it", the reader moves on — so a harness that lies toward *rejected*
+  reports a working gate as broken and wastes a run, and a harness that lies toward *accepted* hides
+  a gate with no teeth. Two mechanics produce both lies, and neither is in the gate:
+  `out=$(cmd | tail -1)` keeps only the summary line, so a `grep` for the violation's own message
+  never matches although the violation printed above it; and `cmd | grep -q pattern` under
+  `set -o pipefail` returns **141** when `grep` matches and exits early, because the writer takes
+  SIGPIPE — so `if cmd | grep -q pat; then ok; else bad; fi` takes the `bad` branch on a match.
+  Capture the whole output into a variable and match with a shell case, which has neither failure
+  mode: `out=$("$gate" 2>&1); case "$out" in *"$message"*) ok ;; *) bad ;; esac`. Then confirm the
+  plant actually changed the file (`grep -c` before and after) — a plant that did not apply proves
+  the baseline again, and reads exactly like a gate with no teeth.
+  `scripts/plant-and-reject.sh` is the harness with these mechanics already in place.
   **A whole-file substring check cannot see a stale line, and a doc is where this hides.** A
   presence test over the file's vocabulary (`"claims" in text and "cap" in text`) passes on a
   section that still states the old formula, because the words appear elsewhere in the document.
@@ -594,6 +613,10 @@ The design of a with/without comparison, and how to read a delta smaller than th
 Measuring whether a build fits a time budget on a machine that has never built it — an
 empty store, proving it was cold, and splitting substitution from build time:
 `references/measuring-a-cold-build.md`.
+
+Cutting the cost of a gate that runs one expensive check per case — declared subsets, the
+fallback that keeps them honest, what a verdict cache may key on, and why a cache cannot
+help a new commit: `references/gate-speed-without-weakening.md`.
 
 ## Stop condition
 

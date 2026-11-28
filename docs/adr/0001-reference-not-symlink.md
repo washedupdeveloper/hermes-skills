@@ -1,23 +1,15 @@
-# Reference the repo through `skills.external_dirs`, never a copy or a symlink
+# Load this repo by reference, never by symlink or copy
 
-Hermes loads this repo's skills by **reference** — `skills.external_dirs` points at
-`skills/` and nothing is derived from it. The obvious alternatives were a **symlink**
-(`$HERMES_HOME/skills/<name>` → here) and a **copy script**, and both are wrong for
-the same reason.
+**Decision.** Hermes reads `skills/` through `skills.external_dirs`. Nothing is symlinked
+into `$HERMES_HOME/skills`, nothing is copied.
 
-A symlink does not *prevent* a write, it **redirects** it. Hermes patches an existing
-skill in place, wherever it is found, and that includes skills under `external_dirs`
-— so a background write aimed at "the live library" would land *through* the link,
-into this repo. That is the original problem, now disguised as a normal library
-write. Nix uses a symlink for the live profile path, but its protection is that the
-**store is read-only**, not that the link is a link; copying the symlink without the
-read-only target copies the appearance and none of the property.
+**Why.** `external_dirs` is a read path, not a permission boundary: Hermes patches a skill
+wherever it finds it, so a write aimed at "the live library" lands *through* a symlink into
+this repo. Nix's profile symlink is safe because the store is read-only, not because it is
+a link.
 
-A copy script is the anti-pattern this repo already deleted once: imperative, so it
-drifts; and it re-creates shadowing, because a real directory in the local skills root
-**outranks** `external_dirs` silently.
+**Cost accepted.** The mount cannot protect the tree. Git is the boundary: an unattended
+write shows in `git status` and reverts with `git checkout`.
 
-The consequence, which is the part worth remembering: **the mount is not a
-permission boundary.** `external_dirs` makes this tree *readable*, not *protected*.
-The gate is git — the repo is tracked, so any unattended write is visible in
-`git status` and reverts with `git checkout`.
+**Rejected.** A copy script — imperative, drifts, and a real directory in the local skills
+root outranks `external_dirs` silently.

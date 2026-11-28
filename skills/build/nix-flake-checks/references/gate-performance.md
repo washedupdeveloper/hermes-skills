@@ -29,6 +29,18 @@ Run the harness outside the checkout. A measurement that builds in-tree leaves `
 and `*.egg-info/`, and any check that scans the tree then fails on your own artifacts —
 measured, two claims went red from a wheel left behind by an earlier timing run.
 
+**Derive a per-item cost from one item, not from the aggregate.** Wall time divided by
+items is a scheduling figure, not a cost: 258 s × 12 workers ÷ 72 mutants suggested 43 s
+per mutant, and the single mutant timed in the tool's own shape took 26.7 s. The gap was
+pool efficiency, and optimising against the wrong number aims at the scheduler instead of
+the work. Time one item directly, then multiply.
+
+**A timing harness must not corrupt its own measurement.** Two shapes cost a run each:
+`run | tail -1` followed by a `grep` for the message searches only the last line, so a
+failing gate reads as passing; and `grep -q` under `set -o pipefail` reports the pipeline
+as failed (SIGPIPE, 141) exactly when it matched. Capture the output once into a variable
+and match with `case`/`[[ … == *msg* ]]` instead of piping into `grep -q`.
+
 ## The ceiling
 
 Wall-clock floor = total work ÷ cores. 72 mutants × 31 s = 2,232 core-seconds: 186 s on
@@ -123,6 +135,34 @@ ten rounds, zero failures, and no `pytest-of-*` directory created at all.
   than removing it, so re-run the same experiment after a fix and check that the *shape* is
   gone, not just the message.
 
+## Levers that reduce work without narrowing what is proven
+
+Three levers cut actual work rather than rearranging it. Each is sound for a reason statable
+in one sentence, and each has a specific way of going wrong.
+
+**Decide each item by what the registry already declares.** For a mutant, the claims that
+name it as falsifier are the only ones its verdict can settle; their tests are 1.11 nodes on
+average and decided all 72 mutants in 12 s against 258 s for the whole suite. The asymmetry
+is the guarantee: a failure in the subset is a real failure, so a catch needs no inference;
+a pass proves nothing, so the full suite runs. Three ways it goes wrong, all observed:
+fail-fast over the subset records only the first broken claim, so a mutant named by three
+claims reports two as "falsifier did not break it"; a subset that concludes a *miss* is a
+weaker gate wearing a faster number; and a guessed subset (import graph, coverage map, `-k`)
+is the same mistake with no registry behind it.
+
+**Cache a verdict keyed to everything that can change it.** The campaign's unit is "run the
+whole suite under this mutation", so an edit anywhere in `src/` or `tests/` can change any
+verdict — the key is the two trees, the registry, the tool and the interpreter, never the
+mutated file alone. Measured: an identical tree went 326 s to 1.2 s, and a changed one
+re-scored everything, which is the point. A cache that cannot be written (a read-only
+sandbox) prints and continues; pass `--no-cache` in the derivation rather than relying on
+that guard, because Nix already caches the whole check.
+
+**Split the suite and let Nix schedule it.** The aggregate name, the evaluation-time
+coverage assertion and the one-directional failure mode are what make it a speed-up rather
+than a quiet reduction in coverage; the skill carries the rule and the two bugs the
+assertion caught while it was being landed.
+
 ## What not to do
 
 - **Fail-fast inside the full gate.** `--keep-going` is why independent checks give every
@@ -131,5 +171,9 @@ ten rounds, zero failures, and no `pytest-of-*` directory created at all.
 - **Select tests by filename or `-k` pattern.** A test that never executes the mutated
   region cannot distinguish a mutant, and neither can a selector that guesses from a path.
   It narrows what can be noticed while still reporting a full verdict.
+- **Let a subset conclude a miss.** A subset may prove a catch — a real test failed — and
+  nothing else. A pass is not evidence about the rest of the suite, so it falls back to the
+  full run; the moment a subset decides a survivor, the campaign is measuring the subset and
+  reporting a verdict about the suite.
 - **Cut mutants or tests to save time.** That is not a speed-up, it is a weaker gate with a
   faster clock.

@@ -1,7 +1,7 @@
 ---
 name: openspec
 description: "Use when a repo has an openspec/ directory."
-version: 1.3.1
+version: 1.3.2
 author: user, Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -109,6 +109,17 @@ method.
   rather than in a convention: a job step or test that fails on any non-archive change
   whose `tasks.md` has no unticked box. The check is vacuous when nothing is open, which
   is the state a healthy repository is in most of the time.
+- **Archiving moves every number that describes the capability, including the ones in tests.**
+  `archive` applies the delta to `openspec/specs/<capability>/spec.md`, so a repository that
+  quotes a requirement count — a milestone doc, a README table, a status line — is now wrong, and
+  so is any test that pins the old figure beside it. Measured: a capability went from 5
+  requirements to 14 and the tree from 23 to 32 across four capabilities, and the doc and its
+  test's control strings were both stale in the same commit that archived the change. Re-derive
+  the count from `openspec/specs/` in the same commit, grep the tree for the old figure (it is
+  usually in more than one place), and update the control the test asserts *with* the figure —
+  a test that hardcodes a count it does not read from the specs is a third copy to keep in step.
+  The same pass covers prose: a milestone's "open items" and status line describe the state
+  before the archive, and reading them afterwards tells you the work is unfinished.
 - **A task is a commit.** `tasks.md` checkboxes are the plan. Tick one when its code and test
   land, and let the commit body name the tasks it closes.
 - **`tasks.md` ends with `## Evidence`, one row per ticked task.** Columns are claim / command /
